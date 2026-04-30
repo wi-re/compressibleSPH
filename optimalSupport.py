@@ -66,6 +66,7 @@ def evaluateOptimalSupport(
 
         rhos.append(iterState.densities)
         supports.append(iterState.supports)
+        # print(f'Iteration: {i} | Support: {h_new.min()} | {h_new.max()} | {h_new.mean()} | Ratio: {h_ratio.min()} | {h_ratio.max()} | {h_ratio.mean()}')
         if (h_ratio - 1).abs().max() < hThreshold:
             # print('Stopping Early')
             break

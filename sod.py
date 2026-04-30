@@ -111,6 +111,10 @@ def buildSod1D(
     )
 
     rho_optimal, h_optimal, rhos_iter, supports_iter = evaluateOptimalSupport(particleState, config, supportScheme = SupportScheme.Gather)
+    particleState.supports = h_optimal
+
+    # rho_optimal = densities
+    # h_optimal = particleState.supports
 
     eosRho = rho_optimal if smoothIC else particleState.densities
     P_initial = torch.where(particleState.materials == 0, leftState.p, rightState.p)
@@ -118,6 +122,7 @@ def buildSod1D(
     u = 1 / (gamma - 1) * (P_initial / eosRho)
 
     if smoothIC:
+        particleState.densities = eosRho
         dx = particles_l.positions[1,0] - particles_l.positions[0,0]
         x = torch.where(particleState.positions[:,0] > 0., particleState.positions[:,0] - 0.5, particleState.positions[:,0] + 0.5)
         ramp = torch.exp(x/dx) / (1 + torch.exp(x/dx))
