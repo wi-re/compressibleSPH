@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compressibleSPH"
+version = "0.2.0"
+description = "GPU-accelerated SPH neighbor search and operators built with NVIDIA Warp and PyTorch"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["sph", "warp", "pytorch", "fluid-simulation", "neighbor-search", "crksph"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "torch",
+    "warp-lang",
+    "numpy",
+    "sphWarpCore",
+    "tomli; python_version < '3.11'"
+]
+
+[project.optional-dependencies]
+# ── Matplotlib (default) backend ────────────────────────────────────────
+plot-matplotlib = [
+    "matplotlib",
+    "ipympl",
+    "ipywidgets",
+]
+# kept for backward-compat; equivalent to plot-matplotlib
+notebooks = [
+    "matplotlib",
+    "ipympl",
+    "ipywidgets",
+]
+
+# ── PyVista / VTK backend ────────────────────────────────────────────────
+plot-pyvista = [
+    "pyvista",
+    "trame",         # optional but needed for trameview in notebooks
+]
+
+# ── Vispy / OpenGL backend ───────────────────────────────────────────────
+plot-vispy = [
+    "vispy",
+    "jupyter_rfb",   # optional inline support for notebooks
+]
+
+# ── Lightweight VTK file export (no pyvista/vispy required) ─────────────
+vtk-export = [
+    "pyevtk",
+]
+
+# ── Everything ───────────────────────────────────────────────────────────
+plot-all = [
+    "matplotlib",
+    "ipympl",
+    "ipywidgets",
+    "pyvista",
+    "trame",
+    "vispy",
+    "jupyter_rfb",
+    "pyevtk",
+]
+
+dev = [
+    "pytest",
+    "build",
+    "twine",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
