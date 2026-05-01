@@ -42,7 +42,8 @@ def computeDeltaShift_Func_i(
     useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
     useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
-    
+    correctionData: Any, # correctionData_1 or correctionData_2 or correctionData_3, containing all the optional correction terms and their usage flags
+
     # Dummy value to allow allocation
     outputValue: Any, # type: ignore
 
@@ -81,6 +82,15 @@ def computeDeltaShift_Func_i(
             kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
             useCRK, Ai, Bi, gradAi, gradBi
         )
+        # Alternative crk correction scheme for reference
+        # useCRK, Aj, Bj, gradAj, gradBj = getCRK_i(correctionData, i)
+        # gradw_ji = computeKernelGradientCRK(
+        #     xj, xi, 
+        #     hj, hi,
+        #     kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+        #     useCRK, Aj, Bj, gradAj, gradBj
+        # )
+        # gradw_ij = (gradw_ij - gradw_ji) * 0.5
         if useGradientRenormalization:
             gradw_ij = matmul(Li, gradw_ij)
 
@@ -177,6 +187,8 @@ def computeDeltaShift_Func_Adjacency(
             useGradHTerms, omega_i, correctionData.referenceOmegas,
             useVolume, Vi , correctionData.referenceVolumes,
             useCRK, Ai, Bi, gradA_i, gradB_i,
+            correctionData,
+            
 
             outputValue,
 
@@ -242,9 +254,15 @@ def computeDeltaShiftWarp(
     renormalizationState: Optional[Union[torch.Tensor,RenormalizationState]] = None,
 ):
     with record_function("warpSPH[CRKVolume]"):
-        with record_function("warpSPH[CRKVolume] - Preprocessing"):
-            # Preprocessing and input validation
-            args, device, dim = parseArguments(
+        outputSize  = queryParticles.positions.shape[0]
+        outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
+
+        return warpWrapper2(
+            launcher = launch_kernel,
+            kernel   = computeDeltaShift_Kernel,
+            outputSizes  = outputSize,
+            outputDtypes = outputDtype,
+            defaultStateArguments=(
                 queryParticles, operationProperties, domain,
                 queryVolumes, referenceVolumes,
                 adjacency,
@@ -252,18 +270,10 @@ def computeDeltaShiftWarp(
                 crkState,
                 gradHState,
                 renormalizationState,
-            )
-
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
-
-        with record_function("warpSPH[CRKVolume] - Kernel Execution"):
-            warp_result = warpWrapper(
-                launch_kernel, computeDeltaShift_Kernel, outputSize, outputDtype,
-                *args,
-
+            ),
+            additionalArguments=(
                 R, n, CFL, computeMach, c_max,
-                rho0, dx
-            )
+                rho0, dx,
+            ),
+        )
 
-    return warp_result

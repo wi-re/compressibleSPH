@@ -1,7 +1,7 @@
 import torch
 from typing import Dict, List, Tuple
 
-from .config import CaseConfig, ShapeSpec
+from .config import WaveCaseConfig, WaveShapeSpec
 from .utils.math import getPeriodicPositions
 from .utils.sdf import getSDF
 
@@ -174,7 +174,7 @@ def _sample_slit_obstacle(
     return torch.clamp(obstacle, min=0.0, max=1.0)
 
 
-def sample_shape_structured(particleState, config, shape: ShapeSpec):
+def sample_shape_structured(particleState, config, shape: WaveShapeSpec):
     kind = normalize_shape_kind(shape.kind)
     params = shape.params or {}
     offset = tuple(shape.position)
@@ -284,7 +284,7 @@ def sample_shape_structured(particleState, config, shape: ShapeSpec):
     raise ValueError(f"Unknown structured shape kind: {shape.kind}")
 
 
-def _legacy_to_shape_spec(entity, default_kind: str) -> ShapeSpec:
+def _legacy_to_shape_spec(entity, default_kind: str) -> WaveShapeSpec:
     shape_spec = getattr(entity, "shapeSpec", None)
     if shape_spec is not None:
         return shape_spec
@@ -309,10 +309,10 @@ def _legacy_to_shape_spec(entity, default_kind: str) -> ShapeSpec:
     if kind == "vesica":
         params["width"] = radius * 0.5
 
-    return ShapeSpec(kind=kind, position=position, params=params)
+    return WaveShapeSpec(kind=kind, position=position, params=params)
 
 
-def _default_obstacle_speed(case_config: CaseConfig, obstacle_index: int) -> float:
+def _default_obstacle_speed(case_config: WaveCaseConfig, obstacle_index: int) -> float:
     if isinstance(case_config.defaultObstacleSpeed, list):
         if len(case_config.defaultObstacleSpeed) == 0:
             return 0.5
@@ -323,7 +323,7 @@ def _default_obstacle_speed(case_config: CaseConfig, obstacle_index: int) -> flo
 def populate_source_obstacle_grids_structured(
     particleState,
     config,
-    case_config: CaseConfig,
+    case_config: WaveCaseConfig,
     u_source_grid: torch.Tensor,
     c_source_grid: torch.Tensor,
 ):
@@ -385,7 +385,7 @@ def populate_source_obstacle_grids_structured(
 
 
 # Backward-compatible names used in existing notebook code.
-def sampleShapeStructured(particleState, config, shape: ShapeSpec):
+def sampleShapeStructured(particleState, config, shape: WaveShapeSpec):
     return sample_shape_structured(particleState, config, shape)
 
 

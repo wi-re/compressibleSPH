@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
-from .config import CaseConfig, ShapeSpec, SimulationConfig, WaveBoundary, WaveSource
+from .config import WaveCaseConfig, WaveShapeSpec, SimulationConfig, WaveBoundary, WaveSource
 from .utils import buildDomainDescription
 from .utils.sampling import SamplingScheme
 from integrators import IntegrationSchemeType
@@ -26,8 +26,8 @@ def load_casefile(casefile: str) -> Dict[str, Any]:
         return tomllib.load(f)
 
 
-def _shape_spec_from_dict(item: Dict[str, Any]) -> ShapeSpec:
-    return ShapeSpec(
+def _shape_spec_from_dict(item: Dict[str, Any]) -> WaveShapeSpec:
+    return WaveShapeSpec(
         kind=item.get("kind", "sphere"),
         position=tuple(item.get("position", (0.0, 0.0))),
         rotation=float(item.get("rotation", 0.0)),
@@ -129,7 +129,7 @@ def build_configs_from_casefile(
     casefile: str,
     device: Optional[torch.device] = None,
     dtype: torch.dtype = torch.float32,
-) -> Tuple[SimulationConfig, CaseConfig]:
+) -> Tuple[SimulationConfig, WaveCaseConfig]:
     data = load_casefile(casefile)
 
     core = data.get("core", {})
@@ -190,7 +190,7 @@ def build_configs_from_casefile(
             )
         )
 
-    case_config = CaseConfig(
+    case_config = WaveCaseConfig(
         name=str(case.get("name", "defaultCase")),
         description=str(case.get("description", "Case loaded from TOML")),
         domainBox=bool(case.get("domain_box", False)),

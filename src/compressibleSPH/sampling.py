@@ -134,7 +134,7 @@ def sampleParticles(nx: int,config : SimulationConfig):
 
 
 
-from .systemv3 import computeDt, WaveSystemv3, WaveSystemStatev3
+from .systems.waveSystem import computeDt, WaveSystemv3, WaveSystemStatev3
 from .sample import smoothValuesWarp
 
 def finalizeWaveSystemSetup(
