@@ -17,12 +17,12 @@ def compressibleSPH_Monaghan(
     compParams: CompressibleSPHConfig,
     verbose = False,
 ):
-    currentSystem = system.initializeNewState()
+    currentSystem = system#.initializeNewState()
     currentState = currentSystem.state
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, SupportScheme.Gather, currentSystem.adjacency)
-    currentState.supports = h_optimal
-    currentState.densities = rho_optimal
+    # rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, SupportScheme.Gather, currentSystem.adjacency)
+    # currentState.supports = h_optimal
+    # currentState.densities = rho_optimal
 
     verletScale = 2 ** (1/config.dim)
     # verletScale = 1

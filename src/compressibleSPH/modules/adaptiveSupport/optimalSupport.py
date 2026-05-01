@@ -6,7 +6,8 @@ from compressibleSPH.utils.support import volumeToSupportHelper, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
 
 def computeH(rho, m, targetNeighbors, dim):
-    V = m / rho
+    safe_rho = torch.clamp(torch.nan_to_num(rho, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
+    V = m / safe_rho
     return volumeToSupportHelper(V, targetNeighbors, dim)
     return targetNeighbors / 2 * V
 
@@ -38,7 +39,7 @@ def evaluateOptimalSupport(
         hMin = particleState.supports.min()
         hMax = particleState.supports.max()
 
-        iterState = particleState.initializeNewState()
+        iterState = particleState#.initializeNewState()
         # adjacency = None
 
         for i in range(nIter):
@@ -87,7 +88,8 @@ def evaluateOptimalSupport(
 
                 h_prev = iterState.supports
 
-                F_ = F(h_prev, iterState.densities, iterState.masses, targetNeighbors = config.targetNeighbors, dim = config.dim)
+                safe_rho = torch.clamp(torch.nan_to_num(iterState.densities, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
+                F_ = F(h_prev, safe_rho, iterState.masses, targetNeighbors = config.targetNeighbors, dim = config.dim)
                 dFdh_ = computeOmegaWarp(iterState, 
                         OperationProperties(
                             kernel = config.kernel,
@@ -97,7 +99,11 @@ def evaluateOptimalSupport(
                         adjacency=adjacency)
                 # dFdh_ = computeOmegaDiffSPH(diffSPHState, kernel_, neighbors.get('noghost'), DiffSPHSupportScheme.Gather, config)
 
-                h_new = h_prev - F_ / (dFdh_ + 1e-6)
+                dFdh_safe = torch.nan_to_num(dFdh_, nan=0.0, posinf=0.0, neginf=0.0)
+                step = F_ / (dFdh_safe + 1e-6)
+                step = torch.nan_to_num(step, nan=0.0, posinf=0.0, neginf=0.0)
+                h_new = h_prev - step
+                h_new = torch.where(torch.isfinite(h_new), h_new, h_prev)
 
                 h_new = h_new.clamp(min = hMin * 0.25, max = hMax * 4.0)
                 hMin = h_new.min()
@@ -118,4 +124,4 @@ def evaluateOptimalSupport(
                     # print('Stopping Early')
                     break
 
-        return rhos[-1], supports[-1], adjacency, rhos, supports
+        return iterState.densities, iterState.supports, adjacency, rhos, supports
