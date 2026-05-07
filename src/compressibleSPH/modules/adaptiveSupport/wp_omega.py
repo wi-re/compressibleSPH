@@ -56,7 +56,7 @@ def computeOmega_Func_i(
         j  = wp.int32(offsetArray[jj])
         if opInt != 0:
             if not checkDirectionality_j(referenceKinds[j], opInt):
-                return out * 0.0
+                continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
         ##########################################################

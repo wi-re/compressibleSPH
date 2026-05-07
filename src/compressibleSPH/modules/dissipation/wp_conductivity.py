@@ -65,7 +65,7 @@ def computeConductivity_Func_i(
         j  = wp.int32(offsetArray[jj])
         if opInt != 0:
             if not checkDirectionality_j(referenceKinds[j], opInt):
-                return out * 0.0
+                continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
         ##########################################################
@@ -107,7 +107,7 @@ def computeConductivity_Func_i(
         mu_ij = ux_ij / (r_ij + 1e-14 * hi)
 
         laplacian_ij = wp.dot(
-            gradw_ij, x_ij / iPow((r_ij + 1e-14 * hi), 2)
+            gradw_ij, x_ij / (r_ij + 1e-14 * hi)
         )
 
         out += - 0.5*apparentVolume * pi * (u_j - u_i) * laplacian_ij

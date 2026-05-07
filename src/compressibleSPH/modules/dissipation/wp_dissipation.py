@@ -65,7 +65,7 @@ def computeThermalDissipation_Func_i(
         j  = wp.int32(offsetArray[jj])
         if opInt != 0:
             if not checkDirectionality_j(referenceKinds[j], opInt):
-                return out * 0.0
+                continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
         ##########################################################
@@ -113,7 +113,7 @@ def computeThermalDissipation_Func_i(
         
         fac = 1.0 / (r_ij + 1e-14 * hi)
 
-        out += - apparentVolume * pi * iPow(ux_ij, 2) * laplacian_ij * fac
+        out += - apparentVolume * pi * iPow(ux_ij, 2) * laplacian_ij #* fac
         
     return out
 
