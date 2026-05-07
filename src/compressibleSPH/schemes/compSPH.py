@@ -27,50 +27,20 @@ def compSPH_step(
     verbose = False,
 ):
 
-    currentSystem = system#.initializeNewState()
+    currentSystem = system#
     currentState = currentSystem.state
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, SupportScheme.Gather, currentSystem.adjacency)
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
 
-    verletScale = 2 ** (1/config.dim)
-    # verletScale = 1
+    verletScale = config.verletScale
 
     adjacency = buildVerletList(
         currentState, 
         config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric,
         priorNeighborhood = currentSystem.adjacency,
         verbose = False)
-
-    numNeighbors = adjacency.numNeighbors
-
-    # diffSPHDiffusionConfig = {    
-    # 'diffusion':{
-    #     'C_l': 1,
-    #     'C_q': 2,
-    #     'Cu_l': 1,
-    #     'Cu_q': 2,
-    #     'monaghanSwitch': True,
-    #     'viscosityTerm': 'Monaghan',
-    #     'correctXi': True,
-        
-    #     'viscosityFormulation': 'Monaghan1992',
-    #     'thermalConductivityFormulation': 'Monaghan1992',
-    #     'signalTerm': 'Price2019',
-    #     'K': 1.0,
-        
-    #     'thermalConductivity' : 0.5,
-    # },
-    # 'diffusionSwitch':{
-    #     # 'scheme': ViscositySwitch.NoneSwitch,
-    #     'limitXi': False,
-    # },
-    # 'domain': config.domain,
-    # 'kernel': KernelTypeDiffSPH.Wendland2,
-    # 'verbose': True,
-    # }
-
 
     currentState.densities = warpOperation(
         currentState,
@@ -91,40 +61,21 @@ def compSPH_step(
         gamma = compParams.gamma,
     )
 
-    omega = computeOmega(currentState, 
-            OperationProperties(
-                kernel = config.kernel,
-                supportMode = SupportScheme.Gather,
-            ),
-            domain = config.domain,
-            adjacency = adjacency
-    )
+    if compParams.adaptiveSupportCorrections:
+        omega = computeOmega(currentState, 
+                OperationProperties(
+                    kernel = config.kernel,
+                    supportMode = SupportScheme.Gather,
+                ),
+                domain = config.domain,
+                adjacency = adjacency
+        )
 
-    gradHState = GradHState(
-        queryOmegas = omega
-    )
-
-    # diffSPHState = CompState(
-    #     positions = currentState.positions,
-    #     velocities = currentState.velocities,
-    #     densities = currentState.densities,
-    #     supports = currentState.supports,
-    #     internalEnergies = currentState.internalEnergies,
-    #     totalEnergies = currentState.totalEnergies,
-    #     entropies = currentState.entropies,
-    #     soundspeeds= currentState.soundspeeds,
-    #     masses = currentState.masses,
-    #     kinds = currentState.kinds,
-    #     materials = currentState.materials,
-    #     UIDs = currentState.UIDs,
-    #     pressures = currentState.pressures,
-    #     omega = gradHState.queryOmegas,
-    # )
-
-    # wrappedKernel = getSPHKernelv2(KernelTypeDiffSPH.Wendland2)
-    # verletScale = 1
-    # neighborhood, neighbors = evaluateNeighborhood(diffSPHState, config.domain, KernelTypeDiffSPH.Wendland2, verletScale = verletScale, mode = SupportScheme.SuperSymmetric, priorNeighborhood=None)
-
+        gradHState = GradHState(
+            queryOmegas = omega
+        )
+    else:
+        gradHState = None
 
     dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
         queryParticles = currentState,
@@ -144,27 +95,6 @@ def compSPH_step(
         adjacency = adjacency,
         gradHState = gradHState
     )
-    # dvdt = computePressureForceSymmetric(
-    #     currentState,
-    #     config,
-    #     supportScheme = SupportScheme.KernelMeanSymmetric,
-    #     adjacency = adjacency,
-    #     gradH = gradHState
-    # )
-    diffusionParams = compParams.diffusionParams
-    # dvdt += computeViscosity(
-    #     currentState,
-    #     # queryVelocities=currentState.velocities,
-    #     operationProperties = OperationProperties(
-    #         kernel = config.kernel,
-    #         supportMode = SupportScheme.KernelMeanSymmetric,
-    #     ),
-    #     domain = config.domain,
-    #     adjacency = adjacency,
-    #     viscosityParams = diffusionParams,
-    # )
-    
-    # dvdt, currentState.ap_ij, currentState.av_ij = compSPH_acceleration(diffSPHState, wrappedKernel, neighbors.get('noghost'), SupportScheme.SuperSymmetric, diffSPHDiffusionConfig)
 
     dudt = computeCompSPHdudtWarp(
         queryParticles = currentState,
@@ -185,41 +115,7 @@ def compSPH_step(
         gradHState = gradHState
     )
 
-    
-    # dudt = computeDudtMonaghan(
-    #     currentState,
-    #     config,
-    #     supportScheme = SupportScheme.KernelMeanSymmetric,
-    #     adjacency = adjacency,
-    #     gradH = gradHState
-    # )
-    # dudt += computeConductivity(
-    #     currentState,
-    #     # queryVelocities=currentState.velocities,
-    #     operationProperties = OperationProperties(
-    #         kernel = config.kernel,
-    #         supportMode = SupportScheme.KernelMeanSymmetric,
-    #     ),
-    #     domain = config.domain,
-    #     adjacency = adjacency,
-    #     conductivityParams = diffusionParams,
-    # )
-    # dudt += computeThermalDissipation(
-    #     currentState,
-    #     # queryVelocities=currentState.velocities,
-    #     operationProperties = OperationProperties(
-    #         kernel = config.kernel,
-    #         supportMode = SupportScheme.KernelMeanSymmetric,
-    #     ),
-    #     domain = config.domain,
-    #     adjacency = adjacency,
-    #     conductivityParams = diffusionParams,
-    # )
-
-
     v_halfstep = currentState.velocities + 0.5 * dt * dvdt
-    # diffSPHDiffusionConfig['energyScheme'] = EnergySchemeDiffSPH.CRK
-    # currentState.f_ij = compute_fij(diffSPHState, wrappedKernel, neighbors.get('noghost'), SupportScheme.SuperSymmetric, diffSPHDiffusionConfig, config.dt, v_halfstep, currentState.ap_ij, currentState.av_ij)
 
     currentState.f_ij = computeCompSPHBalanceTermWarp(
         queryParticles = currentState,
@@ -242,10 +138,6 @@ def compSPH_step(
         adjacency = adjacency,
         gradHState = gradHState
     )
-    # dudt_diffSPH = compSPH_dudt(diffSPHState, wrappedKernel, neighbors.get('noghost'), SupportScheme.SuperSymmetric, diffSPHDiffusionConfig)
-
-    # print(f'Max du/dt: {dudt.abs().max()}, Max du/dt diffSPH: {dudt_diffSPH.abs().max()}')
-    # print(f'Max Diff: {(dudt - dudt_diffSPH).abs().max()}')
 
     drhodt = computeMomentumConsistent(
         currentState,

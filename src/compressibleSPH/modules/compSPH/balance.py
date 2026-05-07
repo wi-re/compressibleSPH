@@ -367,7 +367,7 @@ def computeCompSPHBalanceTermWarp(
                     queryEnergies_, referenceEnergies_,
                     queryPressures_, referencePressures_,
                     pairWise_pressureAccel, pairWise_viscosityAccel,
-                    wp.int32(energyScheme.value), dt, gamma
+                    wp.int32(energyScheme.value), wp.float32(dt), wp.float32(gamma)
                 ),
             )
 

@@ -1,8 +1,10 @@
+from ...configurations.compressibleConfig import CompressibleSPHConfig
+
 from .wp_omega import computeOmegaWarp
 from ...systems.baseState import *
 from sphWarpCore import *
-from compressibleSPH.config import SimulationConfig
-from compressibleSPH.utils.support import volumeToSupportHelper, nH_to_n_h
+from ...config import SimulationConfig
+from ...utils.support import volumeToSupportHelper, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
 
 def computeH(rho, m, targetNeighbors, dim):
@@ -13,18 +15,19 @@ def computeH(rho, m, targetNeighbors, dim):
 
 def F(h, rho, m, targetNeighbors, dim):
     return h - computeH(rho, m, targetNeighbors, dim)
-from diffSPH.schemes.states.compressiblesph import CompressibleState as CompState
-from diffSPH.neighborhood import evaluateNeighborhood
-from diffSPH.enums import KernelType
-from diffSPH.kernels import getSPHKernelv2
-from diffSPH.modules.density import computeDensity as computeDensityDiffSPH
-from diffSPH.modules.adaptiveSmoothing import computeOmega as computeOmegaDiffSPH
+# from diffSPH.schemes.states.compressiblesph import CompressibleState as CompState
+# from diffSPH.neighborhood import evaluateNeighborhood
+# from diffSPH.enums import KernelType
+# from diffSPH.kernels import getSPHKernelv2
+# from diffSPH.modules.density import computeDensity as computeDensityDiffSPH
+# from diffSPH.modules.adaptiveSmoothing import computeOmega as computeOmegaDiffSPH
 from sphWarpCore.enumTypes import SupportScheme
-from diffSPH.enums import SupportScheme as DiffSPHSupportScheme
+# from diffSPH.enums import SupportScheme as DiffSPHSupportScheme
 
 def evaluateOptimalSupport(
         particleState: BaseState,
         config: SimulationConfig,
+        compParams: CompressibleSPHConfig,
         supportScheme: SupportScheme = SupportScheme.Scatter,
         adjacency: Optional[AdjacencyList] = None,
 ):
@@ -32,9 +35,12 @@ def evaluateOptimalSupport(
         rhos = [particleState.densities]
         supports = [particleState.supports]
 
-        verletScale = 2**(1/particleState.positions.shape[1])
-        nIter = 16
-        hThreshold = 1e-3
+        # verletScale = 2**(1/particleState.positions.shape[1])
+        verletScale = config.verletScale
+        # nIter = 16
+        nIter = compParams.adaptiveSupportIterations
+        # hThreshold = 1e-3
+        hThreshold = compParams.adaptiveSupportThreshold
 
         hMin = particleState.supports.min()
         hMax = particleState.supports.max()
@@ -47,33 +53,6 @@ def evaluateOptimalSupport(
                 with record_function("[evalOS] buildVerletList"):
                     adjacency = buildVerletList(iterState, domain = config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric, priorNeighborhood=adjacency, verbose=False)
 
-                                    
-                # diffSPHState = CompState(
-                #     positions = iterState.positions,
-                #     velocities = iterState.velocities,
-                #     densities = iterState.densities,
-                #     supports = iterState.supports,
-                #     internalEnergies = iterState.internalEnergies,
-                #     totalEnergies = iterState.totalEnergies,
-                #     entropies = iterState.entropies,
-                #     soundspeeds= iterState.soundspeeds,
-                #     masses = iterState.masses,
-                #     kinds = iterState.kinds,
-                #     materials = iterState.materials,
-                #     UIDs = iterState.UIDs,
-                #     pressures = iterState.pressures,
-                #     omega = None,
-                # )
-
-                # kernel_ = KernelType.Wendland2
-                # wrappedKernel = getSPHKernelv2(KernelType.Wendland2)
-                # verletScale = 2 ** (1/config.dim)
-                # verletScale = 1
-
-                # neighborhood, neighbors = evaluateNeighborhood(diffSPHState, config.domain, KernelType.Wendland2, verletScale = verletScale, mode = DiffSPHSupportScheme.SuperSymmetric, priorNeighborhood=None)
-
-
-
                 iterState.densities = warpOperation(
                     iterState,
                     OperationProperties(
@@ -84,8 +63,6 @@ def evaluateOptimalSupport(
                     domain = config.domain,
                     adjacency=adjacency
                 )
-                # iterState.densities = computeDensityDiffSPH(diffSPHState, kernel_, neighbors.get('noghost'), DiffSPHSupportScheme.Gather, config)
-
                 h_prev = iterState.supports
 
                 safe_rho = torch.clamp(torch.nan_to_num(iterState.densities, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
@@ -97,8 +74,6 @@ def evaluateOptimalSupport(
                         ),
                         domain = config.domain,
                         adjacency=adjacency)
-                # dFdh_ = computeOmegaDiffSPH(diffSPHState, kernel_, neighbors.get('noghost'), DiffSPHSupportScheme.Gather, config)
-
                 dFdh_safe = torch.nan_to_num(dFdh_, nan=0.0, posinf=0.0, neginf=0.0)
                 step = F_ / (dFdh_safe + 1e-6)
                 step = torch.nan_to_num(step, nan=0.0, posinf=0.0, neginf=0.0)

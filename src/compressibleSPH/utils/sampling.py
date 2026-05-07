@@ -46,7 +46,7 @@ def buildPointCloud(nx, domain: DomainDescription = None, targetNeighbors = 16, 
         offset = dx/2 if periodicity[d] else 0
         offset -= dx * band
 
-        print(f'Dimension {d}: l: {l}, dx: {dx}, nd: {nd}, dn: {dn}, offset: {offset}')
+        # print(f'Dimension {d}: l: {l}, dx: {dx}, nd: {nd}, dn: {dn}, offset: {offset}')
         x = torch.linspace(domain.min[d] + offset, domain.max[d] - offset, nd + band * 2, device = domain.min.device, dtype = domain.min.dtype)
         spaces.append(x)
         ns.append(nd + band * 2)

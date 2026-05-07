@@ -18,18 +18,18 @@ class CompSPHState(BaseState):
     UIDcounter : int = constant(tags=('particle_UIDcounter',))
 
     internalEnergies : torch.Tensor = integrated('dudt', tags=('internalEnergy',))
-    totalEnergies : torch.Tensor = constant(tags=('energy',))
-    entropies : torch.Tensor = constant(tags=('soundSpeed',))
-    pressures : torch.Tensor = constant(tags=('damping',))
-    soundspeeds : torch.Tensor = constant(tags=('soundSpeed',))
+    totalEnergies : torch.Tensor = constant(tags=('energy',), default=None)
+    entropies : torch.Tensor = constant(tags=('soundSpeed',), default=None)
+    pressures : torch.Tensor = constant(tags=('damping',), default=None)
+    soundspeeds : torch.Tensor = constant(tags=('soundSpeed',), default=None)
 
-    divergence : torch.Tensor = constant(tags=('velocity_divergence',))
-    alpha0s: torch.Tensor = constant(tags=('alpha0',))
-    alphas: torch.Tensor = constant(tags=('alpha',))
+    divergence : torch.Tensor = constant(tags=('velocity_divergence',), default=None)
+    alpha0s: torch.Tensor = constant(tags=('alpha0',), default=None)
+    alphas: torch.Tensor = constant(tags=('alpha',), default=None)
 
-    ap_ij: torch.Tensor = constant(tags=('pairwise_acceleration',))
-    av_ij: torch.Tensor = constant(tags=('pairwise_acceleration',))
-    f_ij: torch.Tensor = constant(tags=('pairwise_energy_partition',))
+    ap_ij: torch.Tensor = constant(tags=('pairwise_acceleration',), default=None)
+    av_ij: torch.Tensor = constant(tags=('pairwise_acceleration',), default=None)
+    f_ij: torch.Tensor = constant(tags=('pairwise_energy_partition',), default=None)
 
 
 # from .compressibleMonaghan import CompressibleSystemUpdate

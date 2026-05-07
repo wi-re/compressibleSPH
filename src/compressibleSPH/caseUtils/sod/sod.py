@@ -1,6 +1,7 @@
 from typing import NamedTuple
 
 from compressibleSPH.config import SimulationConfig
+from compressibleSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from compressibleSPH.utils import *
 from sphWarpCore import *
 import torch
@@ -15,7 +16,8 @@ class sodInitialState(NamedTuple):
 
 
 def buildSod1D(
-    nx: int,
+    # nx: int,
+    SimulationSystem, SimulationState,
     samplingRatio: int,
     leftState: sodInitialState,
     rightState: sodInitialState,
@@ -24,6 +26,7 @@ def buildSod1D(
     smoothIC: bool = False
 ):
     
+    nx = config.nx 
     actualRatio = nx / (nx // samplingRatio)
 
     particles_l = sampleRegularParticles(nx, buildDomainDescription(1, config.dim, periodic = True, device = config.device, dtype = config.dtype), config.targetNeighbors, jitter = 0.0)
@@ -35,7 +38,7 @@ def buildSod1D(
     pos_r[pos_r[:,0] > 0, 0] += 0.5
     particles_r = particles_r._replace(positions = pos_r)
 
-    print(f'Left particles: {particles_l.positions.shape[0]}, Right particles: {particles_r.positions.shape[0]}')
+    # print(f'Left particles: {particles_l.positions.shape[0]}, Right particles: {particles_r.positions.shape[0]}')
 
     combinedPositions = torch.cat([particles_l.positions, particles_r.positions], dim = 0)
     tags = torch.cat([
@@ -62,7 +65,7 @@ def buildSod1D(
         torch.arange(particles_r.positions.shape[0], dtype = torch.int32, device = particles_r.positions.device)], dim = 0)
 
 
-    particleState = CompressibleState(
+    particleState = SimulationState(
         positions = combinedPositions,
         velocities = combinedVelocities,
         supports = combinedSupports,
@@ -109,8 +112,9 @@ def buildSod1D(
         ),
         domain = config.domain,
     )
+    compParams = CompressibleSPHConfig(gamma=gamma, adaptiveSupportCorrections=True, adaptiveSupportIterations=16, adaptiveSupportThreshold=1e-3)
 
-    rho_optimal, h_optimal, adjacency, rhos_iter, supports_iter = evaluateOptimalSupport(particleState, config, supportScheme = SupportScheme.Gather)
+    rho_optimal, h_optimal, adjacency, rhos_iter, supports_iter = evaluateOptimalSupport(particleState, config, compParams, supportScheme = SupportScheme.Gather)
     particleState.supports = h_optimal
 
     # rho_optimal = densities
@@ -156,9 +160,11 @@ def buildSod1D(
                                 domain = config.domain,
                                 verletScale = 2**(1/config.dim), supportMode = config.supportMode)
 
-    compressibleSystem = CompressibleSystem(
+    compressibleSystem = SimulationSystem(
         state=particleState, 
         adjacency = adjacency, 
         domain = config.domain)
 
+    dx = particleState.masses.min()
+    config.dx = dx
     return compressibleSystem

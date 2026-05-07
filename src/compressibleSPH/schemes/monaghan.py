@@ -20,12 +20,13 @@ def compressibleSPH_Monaghan(
     currentSystem = system#.initializeNewState()
     currentState = currentSystem.state
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, SupportScheme.Gather, currentSystem.adjacency)
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
 
-    verletScale = 2 ** (1/config.dim)
+    # verletScale = 2 ** (1/config.dim)
     # verletScale = 1
+    verletScale = config.verletScale
 
     adjacency = buildVerletList(
         currentState, 
@@ -54,18 +55,21 @@ def compressibleSPH_Monaghan(
         gamma = compParams.gamma,
     )
 
-    omega = computeOmega(currentState, 
-            OperationProperties(
-                kernel = config.kernel,
-                supportMode = SupportScheme.Gather,
-            ),
-            domain = config.domain,
-            adjacency = adjacency
-    )
+    if compParams.adaptiveSupportCorrections:
+        omega = computeOmega(currentState, 
+                OperationProperties(
+                    kernel = config.kernel,
+                    supportMode = SupportScheme.Gather,
+                ),
+                domain = config.domain,
+                adjacency = adjacency
+        )
 
-    gradHState = GradHState(
-        queryOmegas = omega
-    )
+        gradHState = GradHState(
+            queryOmegas = omega
+        )
+    else:
+        gradHState = None
 
     # from monaghanScheme import *
 

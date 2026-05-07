@@ -21,7 +21,7 @@ import torch
 import matplotlib.pyplot as plt
 from .sodSolution import solve
 
-def plotSod(simulationState, simulationConfig, domain, gamma, leftState: sodInitialState, rightState: sodInitialState, plotReference = True, plotLabels = True, scatter = False, t_ = None):
+def plotSod(simulationState, simulationConfig, schemeConfig, domain, gamma, leftState: sodInitialState, rightState: sodInitialState, plotReference = True, plotLabels = True, scatter = False, t_ = None):
     fig, axis = plt.subplots(2, 3, figsize=(10, 5), squeeze=False, sharex=True, sharey=False)
 
     referenceState = simulationState
@@ -49,7 +49,9 @@ def plotSod(simulationState, simulationConfig, domain, gamma, leftState: sodInit
     indices = torch.argsort(referenceState.positions[:,0]).cpu().numpy()
     indices = indices[pos[indices][:,0] > 0]
 
-    fig.suptitle(f'nx = {pos.shape[0]//2}, t = {t:6.4g}, Kinetic = {kineticEnergy_.cpu().item():6.4g}, Thermal = {thermalEnergy_.cpu().item():6.4g}, Total = {totalEnergy.cpu().item():6.4g}')
+    simText = f'{schemeConfig.schemeName}, kernel: {simulationConfig.kernel.name}, support: {simulationConfig.supportMode.name}, integrator: {simulationConfig.integrationScheme.name}' + f', Energy: {schemeConfig.energyScheme.name}' if hasattr(schemeConfig, 'energyScheme') and schemeConfig.energyScheme is not None else ''
+
+    fig.suptitle(f'{simText}\nnx = {pos.shape[0]//2}, t = {t:6.4g}, Kinetic = {kineticEnergy_.cpu().item():6.4g}, Thermal = {thermalEnergy_.cpu().item():6.4g}, Total = {totalEnergy.cpu().item():6.4g}')
     if not scatter:
         axis[0,0].plot(pos[indices], densities[indices], label='Density')
         axis[0,1].plot(pos[indices], supports[indices], label='Supports')

@@ -3,6 +3,7 @@ from .waveEquationConfig import ShapeSpec as WaveShapeSpec
 from .waveEquationConfig import WaveSource, WaveBoundary
 from .waveEquationConfig import CaseConfig as WaveCaseConfig
 from .compressibleConfig import CompressibleSPHConfig
+from .compSPHConfig import CompSPHConfig
 
 __all__ = [
     'SimulationConfig',
@@ -10,5 +11,6 @@ __all__ = [
     'WaveSource',
     'WaveBoundary',
     'WaveCaseConfig',
-    'CompressibleSPHConfig'
+    'CompressibleSPHConfig',
+    'CompSPHConfig',
 ]
