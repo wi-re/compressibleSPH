@@ -28,6 +28,23 @@ def buildDefaultDiffusionParamsCompressibleSPH():
     return diffusionParams
 
 @dataclass
+class ViscositySwitchConfig:
+    scheme: ViscositySwitch = field(default=ViscositySwitch.NoneSwitch, metadata={'description': 'Viscosity switch to use'})
+    limitXi: bool = field(default=False, metadata={'description': 'Whether to limit the viscosity switch based on the xi parameter'})
+    correctVelocityGradient: bool = field(default=False, metadata={'description': 'Whether to apply the correction matrix to the velocity gradient in the viscosity switch computation'})
+    divergenceScheme: Optional[str] = field(default='naive', metadata={'description': 'Scheme to compute the divergence for the viscosity switch. Options are "naive" for the standard SPH divergence and "cullen"'})
+
+    alpha_min : float = field(default=0.02, metadata={'description': 'Minimum alpha value for the viscosity switch'})
+    alpha_max : float = field(default=2.0, metadata={'description': 'Maximum alpha value for the viscosity switch'})
+
+    beta_c: float = field(default=0.7, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
+    beta_d: float = field(default=0.05, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
+    beta_xi: float = field(default=2.0, metadata={'description': 'Beta parameter for the xi limiter in the Cullen-Dehnen switch'})
+    limitXi: bool = field(default=False, metadata={'description': 'Whether to limit the xi parameter in the Cullen-Dehnen switch'})
+
+
+
+@dataclass
 class CompressibleSPHConfig:
     gamma: float = field(default=1.4, metadata={'description': 'Adiabatic index'})
     backgroundPressure: float = field(default=0.0, metadata={'description': 'Background pressure to prevent tensile instability'})
@@ -41,7 +58,6 @@ class CompressibleSPHConfig:
 
 
     diffusionParams: DiffusionParameters = field(default_factory=buildDefaultDiffusionParamsCompressibleSPH)
-    viscositySwitch: ViscositySwitch = field(default=ViscositySwitch.NoneSwitch, metadata={'description': 'Viscosity switch to use'})
-    viscositySwitchLimitXi: bool = field(default=False, metadata={'description': 'Whether to limit the viscosity switch based on the xi parameter'})
+    viscositySwitchParams: ViscositySwitchConfig = field(default_factory=ViscositySwitchConfig)
 
     schemeName: str = field(default='Compressible SPH', metadata={'description': 'Name of the compressible SPH scheme to use'})

@@ -52,6 +52,15 @@ def compSPH_step(
         domain = config.domain,
         adjacency = adjacency,
     )
+    if currentState.divergence is None:
+        drhodt = computeMomentumConsistent(
+            currentState,
+            config,
+            supportScheme = SupportScheme.Gather,
+            adjacency = adjacency,
+            gradH = gradHState
+        )
+        currentState.divergence = drhodt
 
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
@@ -76,6 +85,9 @@ def compSPH_step(
         )
     else:
         gradHState = None
+
+    # particles.alphas, switchState = computeViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.SuperSymmetric, config, dt)   
+
 
     dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
         queryParticles = currentState,
@@ -138,6 +150,7 @@ def compSPH_step(
         adjacency = adjacency,
         gradHState = gradHState
     )
+    # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
 
     drhodt = computeMomentumConsistent(
         currentState,
@@ -146,6 +159,7 @@ def compSPH_step(
         adjacency = adjacency,
         gradH = gradHState
     )
+    currentState.divergence = drhodt
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt)) + currentState.masses * (dudt)
 
     update = CompressibleSystemUpdate(
