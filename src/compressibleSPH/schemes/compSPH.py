@@ -11,13 +11,15 @@ from ..configurations.compSPHConfig import CompSPHConfig
 from ..configurations.simulationConfig import SimulationConfig
 import torch
 from ..systems.compressibleMonaghan import CompressibleSystemUpdate
-from diffSPH.schemes.states.compressiblesph import CompressibleState as CompState
-from diffSPH.kernels import getSPHKernelv2
-from diffSPH.neighborhood import evaluateNeighborhood
-from diffSPH.enums import KernelType as KernelTypeDiffSPH
+# from diffSPH.schemes.states.compressiblesph import CompressibleState as CompState
+# from diffSPH.kernels import getSPHKernelv2
+# from diffSPH.neighborhood import evaluateNeighborhood
+# from diffSPH.enums import KernelType as KernelTypeDiffSPH
 
-from diffSPH.modules.compSPH import compSPH_acceleration, compSPH_dudt, compute_fij
-from diffSPH.enums import EnergyScheme as EnergySchemeDiffSPH
+# from diffSPH.modules.compSPH import compSPH_acceleration, compSPH_dudt, compute_fij
+# from diffSPH.enums import EnergyScheme as EnergySchemeDiffSPH
+
+from ..modules.shockCapturing.CullenHopkins import computeHopkinsTerms, computeHopkinsUpdate
 
 def compSPH_step(
     system: CompSPHSystem,
@@ -86,7 +88,11 @@ def compSPH_step(
     else:
         gradHState = None
 
-    # particles.alphas, switchState = computeViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.SuperSymmetric, config, dt)   
+    currentState.alphas, switchState = computeHopkinsTerms(
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
 
 
     dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
@@ -151,6 +157,15 @@ def compSPH_step(
         gradHState = gradHState
     )
     # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
+
+    currentState.alpha0s, switchState = computeHopkinsUpdate(
+        switchState,
+        dt, dvdt,
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
+
 
     drhodt = computeMomentumConsistent(
         currentState,

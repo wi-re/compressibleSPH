@@ -57,7 +57,8 @@ def computeHopkinsTerms(
         v_sig = None
     )
     
-from diffSPH.kernels import Kernel_xi
+# from diffSPH.kernels import Kernel_xi
+from sphWarpCore.kernels.wp_kernel import sphKernel_xi
 def computeHopkinsUpdate(
         switchState: ViscositySwitchState,
         dt: float,
@@ -77,7 +78,7 @@ def computeHopkinsUpdate(
     alpha_max = switchConfig.alpha_max
     # alpha_max = getSetConfig(config, 'diffusionSwitch', 'alpha_max', 2) # from CRKSPH
     # The 1/xi is based on Hopkins' ATHENA paper after eq. F17
-    f_kern      = 1/Kernel_xi(simulationConfig.kernel, particleState.positions.shape[1])
+    f_kern      = 1/sphKernel_xi(simulationConfig.kernel.value, particleState.positions.shape[1])
     # f_kern = 1/3 # hard coded result for cubic spline from Hopkins 2015, Hopkins also uses h=1 as the cutoff so these terms _should_ be equivalent?
     # f_kern = 1
     beta_c = switchConfig.beta_c

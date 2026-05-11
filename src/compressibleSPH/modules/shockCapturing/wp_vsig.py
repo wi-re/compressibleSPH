@@ -81,7 +81,9 @@ def computeVsig_Func_i(
 
         c_bar = 0.5 * (cs_i + cs_j)
         vsigs           = c_bar - mu_ij
-        vsigs[mu_ij > 0]= 0
+        # vsigs[mu_ij > 0]= 0
+        if mu_ij > 0:
+            vsigs = 0.0
 
         out = wp.max(out, vsigs)
         
