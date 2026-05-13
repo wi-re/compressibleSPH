@@ -21,9 +21,8 @@ import torch
 import matplotlib.pyplot as plt
 from .sodSolution import solve
 
-def plotSod(simulationState, simulationConfig, schemeConfig, domain, gamma, leftState: sodInitialState, rightState: sodInitialState, plotReference = True, plotLabels = True, scatter = False, t_ = None):
-    fig, axis = plt.subplots(2, 3, figsize=(10, 5), squeeze=False, sharex=True, sharey=False)
 
+def plotSod_(fig, axis, simulationState, simulationConfig, schemeConfig, domain, gamma, leftState: sodInitialState, rightState: sodInitialState, plotReference = True, plotLabels = True, scatter = False, t_ = None):
     referenceState = simulationState
     # neighborhood, sparseNeighborhood = buildNeighborhood(referenceState, referenceState, domain, verletScale = 1.0)
     # CSR = coo_to_csr(sparseNeighborhood)
@@ -98,4 +97,11 @@ def plotSod(simulationState, simulationConfig, schemeConfig, domain, gamma, left
             decoratePlot(axis[1,1], positions, text = True)
             decoratePlot(axis[1,2], positions, text = False)
 
+
+def plotSod(simulationState, simulationConfig, schemeConfig, domain, gamma, leftState: sodInitialState, rightState: sodInitialState, plotReference = True, plotLabels = True, scatter = False, t_ = None):
+    fig, axis = plt.subplots(2, 3, figsize=(10, 5), squeeze=False, sharex=True, sharey=False)
+
+    plotSod_(fig, axis, simulationState, simulationConfig, schemeConfig, domain, gamma, leftState, rightState, plotReference, plotLabels, scatter, t_)
     fig.tight_layout()
+
+    return fig, axis
