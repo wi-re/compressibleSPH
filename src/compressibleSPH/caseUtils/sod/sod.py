@@ -122,26 +122,81 @@ def buildSod1D(
 
     eosRho = rho_optimal if smoothIC else particleState.densities
     P_initial = torch.where(particleState.materials == 0, leftState.p, rightState.p)
+    # particleState.densities = eosRho
 
     u = 1 / (gamma - 1) * (P_initial / eosRho)
-
+    # particleState.densities = eosRho
     if smoothIC:
+        # Due to the smoothing inherent in SPH the initial conditions for the Sod shock tube problem are not perfectly captured, especially near the discontinuity. 
+        # In the simulation we use the current density field to evaluate the pressure using the internal energy. However, this can lead to deviations as the smoothed density field is not the one the conditions were designed for. Consequently, we need to smooth the internal energy field as well to ensure that the initial pressure field matches the intended conditions. This is done by using the same smoothing operation on the internal energy as we do for the density, which allows us to maintain consistency in the initial conditions and better capture the behavior of the shock tube problem in our SPH simulation.
+
+        # print('Smoothing initial internal energy to match smoothed density field for consistent initial conditions.')
+        # print(f'Initial internal energy before smoothing: {u.min().item():6.4g} to {u.max().item():6.4g}')
+        
+        # particleState.densities = eosRho
+        # print(f'Initial density: {particleState.densities.min().item():6.4g} to {particleState.densities.max().item():6.4g}')
+        # print(f'Initial pressure before smoothing: {P_initial.min().item():6.4g} to {P_initial.max().item():6.4g}')
+        # P = warpOperation(
+        #     particleState,
+        #     operationProperties=OperationProperties(
+        #         kernel = config.kernel,
+        #         operation = WarpOperation.Interpolate,
+        #         supportMode = SupportScheme.KernelMeanSymmetric,
+        #     ),
+        #     domain = config.domain,
+        #     adjacency = adjacency,
+        #     queryValues = P_initial
+        # )
+        # print(f'Interpolated initial pressure: {P.min().item():6.4g} to {P.max().item():6.4g}')
+        # u = 1 / (gamma - 1) * (P / eosRho)
+        # particleState.densities = eosRho
+        # u = warpOperation(
+        #     particleState,
+        #     operationProperties=OperationProperties(
+        #         kernel = config.kernel,
+        #         operation = WarpOperation.Interpolate,
+        #         supportMode = SupportScheme.Gather,
+        #     ),
+        #     domain = config.domain,
+        #     adjacency = adjacency,
+        #     queryValues = u
+        # )
+
+        print(f'Initial internal energy: {u.min().item():6.4g} to {u.max().item():6.4g}')
+
         particleState.densities = eosRho
+        
         dx = particles_l.positions[1,0] - particles_l.positions[0,0]
-        x = torch.where(particleState.positions[:,0] > 0., particleState.positions[:,0] - 0.5, particleState.positions[:,0] + 0.5)
-        ramp = torch.exp(x/dx) / (1 + torch.exp(x/dx))
+        dx = 2.5 * dx
+        # x = torch.where(particleState.positions[:,0] > 0., particleState.positions[:,0] - 0.5, particleState.positions[:,0] + 0.5)
+        # ramp = torch.exp(x/dx) / (1 + torch.exp(x/dx))
         # ramp =  / (torch.exp(x/dx) + 1)
         ramped = lambda a, b, x: (a - b) / (torch.exp(x/dx) + 1) + b
 
         # u_max = u.max()
         # u_min = u.min()
         # u[mask] = u_min * (1 - ratio[mask]) + u_max * ratio[mask] if u_max < u_min else u_min * (1 - ratio[mask]) + u_max * ratio[mask]
+
+        left_p = leftState.p
+        right_p = rightState.p
+
         left_u = 1 / (gamma - 1) * (leftState.p / leftState.rho)
         right_u = 1 / (gamma - 1) * (rightState.p / rightState.rho)
-        u = torch.where(particleState.positions[:,0] > 0., ramped(left_u, right_u, x), u)
 
-        x = torch.where(particleState.positions[:,0] < 0., particleState.positions[:,0] + 0.5, particleState.positions[:,0] - 0.5)
-        u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x), u)
+        x = particleState.positions[:,0]
+        u = torch.where(particleState.positions[:,0] > 0., ramped(left_u, right_u, x - 0.5), u)
+        u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x + 0.5), u)
+        # p = torch.where(particleState.positions[:,0] > 0., ramped(left_p, right_p, x), P_initial)
+
+
+
+        # x = torch.where(particleState.positions[:,0] < 0., particleState.positions[:,0] + 0.5, particleState.positions[:,0] - 0.5)
+        # u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x), u)
+        # p = torch.where(particleState.positions[:,0] < 0., ramped(right_p, left_p, x), p)
+
+        # u = 1 / (gamma - 1) * (p / eosRho)
+        
+
 
     # A_, u_, P_, c_s = idealGasEOS(A = None, u = None, P = P_initial, rho = rho, gamma = gamma)
     A_, u_, P_, c_s = idealGasEOS(A = None, u = u, P = None, rho = eosRho, gamma = gamma)

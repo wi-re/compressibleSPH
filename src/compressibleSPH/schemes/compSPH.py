@@ -49,16 +49,17 @@ def compSPH_step(
         OperationProperties(
             kernel = config.kernel,
             operation = WarpOperation.Density,
-            supportMode = config.supportMode,
+            supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
         ),
         domain = config.domain,
         adjacency = adjacency,
     )
     if currentState.divergence is None:
+        print('Warning: divergence is None, computing for the first time')
         drhodt = computeMomentumConsistent(
             currentState,
             config,
-            supportScheme = SupportScheme.Gather,
+            supportScheme = SupportScheme.Gather, 
             adjacency = adjacency,
             gradH = gradHState
         )
@@ -76,7 +77,7 @@ def compSPH_step(
         omega = computeOmega(currentState, 
                 OperationProperties(
                     kernel = config.kernel,
-                    supportMode = SupportScheme.Gather,
+                    supportMode = SupportScheme.Gather, # E.5
                 ),
                 domain = config.domain,
                 adjacency = adjacency
@@ -88,7 +89,8 @@ def compSPH_step(
     else:
         gradHState = None
 
-    currentState.alphas, switchState = computeHopkinsTerms(
+    currentState.alphas, switchState = computeViscositySwitchTerms(
+        dt,
         currentState, 
         config, compParams, 
         SupportScheme.SuperSymmetric, 
@@ -118,8 +120,8 @@ def compSPH_step(
         queryParticles = currentState,
         operationProperties = OperationProperties(
             kernel = config.kernel,
-            supportMode = SupportScheme.KernelMeanSymmetric
-        ),
+            supportMode = SupportScheme.Gather #E.3
+         ),
         domain = config.domain,
         conductivityParams= compParams.diffusionParams,
 
@@ -158,7 +160,7 @@ def compSPH_step(
     )
     # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
 
-    currentState.alpha0s, switchState = computeHopkinsUpdate(
+    currentState.alpha0s, switchState = updateViscositySwitch(
         switchState,
         dt, dvdt,
         currentState, 
@@ -174,7 +176,7 @@ def compSPH_step(
         adjacency = adjacency,
         gradH = gradHState
     )
-    currentState.divergence = drhodt
+    currentState.divergence = -drhodt / currentState.densities
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt)) + currentState.masses * (dudt)
 
     update = CompressibleSystemUpdate(

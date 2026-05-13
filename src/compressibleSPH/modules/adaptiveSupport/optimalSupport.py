@@ -46,6 +46,7 @@ def evaluateOptimalSupport(
         hMax = particleState.supports.max()
 
         iterState = particleState#.initializeNewState()
+        originalDensities = iterState.densities.clone()
         # adjacency = None
 
         for i in range(nIter):
@@ -99,4 +100,16 @@ def evaluateOptimalSupport(
                     # print('Stopping Early')
                     break
 
-        return iterState.densities, iterState.supports, adjacency, rhos, supports
+        adjacency = buildVerletList(iterState, domain = config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric, priorNeighborhood=adjacency, verbose=False)
+        densities = warpOperation(
+            iterState,
+            OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Density,
+                supportMode = supportScheme,
+            ),
+            domain = config.domain,
+            adjacency=adjacency
+        )
+        particleState.densities = originalDensities
+        return densities, iterState.supports, adjacency, rhos, supports

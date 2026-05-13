@@ -5,6 +5,7 @@ from sphWarpCore import *
 from .CullenDehnen2010 import *
 
 def computeHopkinsTerms(
+        dt: float,
         particleState: CompressibleState,
         simulationConfig: SimulationConfig,
         schemeConfig: CompressibleSPHConfig,
@@ -21,9 +22,8 @@ def computeHopkinsTerms(
     # verbosePrint(verbose, '[Cullen]\t\tComputing Cullen Terms')
     # correctVelocityGradient = getSetConfig(config, 'diffusionSwitch', 'correctGradient', False)
     if correctVelocityGradient:
-        # verbosePrint(verbose, '[Cullen]\t\tComputing M')
-        M = computeM(particleState, simulationConfig, schemeConfig, supportMode, adjacency)
-        # M = computeM(particles, kernel, neighborhood, supportScheme, config)
+    # verbosePrint(verbose, '[Cullen]\t\tComputing M')
+        M = computeM(particleState, simulationConfig, schemeConfig, SupportScheme.Gather, adjacency) # E.6 in CRKSPH
         M_inv = torch.linalg.pinv(M)        
     else:
         M = None
@@ -31,15 +31,15 @@ def computeHopkinsTerms(
 
     # verbosePrint(verbose, '[Cullen]\t\tComputing Shear Tensor')
     # div, S, Rot = computeShearTensor(particles, kernel, neighborhood, supportScheme, config, M_inv)
-    div, S, Rot = computeShearTensor(M_inv, particleState, simulationConfig, schemeConfig, supportMode, adjacency)
+    div, S, Rot = computeShearTensor(M_inv, particleState, simulationConfig, schemeConfig, SupportScheme.Gather, adjacency) # E.4 in CRKSPH
 
     # div = sph_op(psphState, psphState, domain, wrappedKernel, actualNeighbors, 'superSymmetric', 'divergence', 'difference', quantity=(psphState.velocities, psphState.velocities))
     # verbosePrint(verbose, '[Cullen]\t\tComputing Limiter')
-    R = computeR(div, particleState, simulationConfig, schemeConfig, supportMode, adjacency)
+    R = computeR(div, particleState, simulationConfig, schemeConfig, SupportScheme.Gather, adjacency) # F.4
     # verbosePrint(verbose, '[Cullen]\t\tComputing Xi')
     # S = None
     # Rot = None
-    Xi = computeXi(div, S, R, particleState, simulationConfig, schemeConfig, supportMode, adjacency )
+    Xi = computeXi(div, S, R, particleState, simulationConfig, schemeConfig, SupportScheme.Gather, adjacency ) 
     
     # verbosePrint(verbose, '[Cullen]\t\tComputing Alphas')
     alphas = (Xi * particleState.alpha0s).clamp(min = alpha_min)
@@ -88,10 +88,19 @@ def computeHopkinsUpdate(
 
     # verbosePrint(verbose, '[Cullen]\t\tComputing Cullen Update')
     # verbosePrint(verbose, '[Cullen]\t\tSecond order Divergence')
-    # ddiv_dt = computeSecondOrderV(psphState, psphState, domain, wrappedKernel, actualNeighbors, solverConfig, dvdt, dvdt, correctionMatrix=CDState.M_inv)
+    ddiv_dt = computeSecondOrderV(
+        dvdt,
+        switchState.M_inv,
+        particleState,
+        simulationConfig,
+        schemeConfig,
+        supportScheme,
+        adjacency)
+        
+        # psphState, psphState, domain, wrappedKernel, actualNeighbors, solverConfig, dvdt, dvdt, correctionMatrix=CDState.M_inv)
 
     # ddiv_dt = sph_op(psphState, psphState, domain, wrappedKernel, actualNeighbors, 'superSymmetric', 'divergence', 'difference', quantity=(dvdt, dvdt))
-    ddiv_dt = (switchState.div - particleState.divergence) / dt
+    # ddiv_dt = (switchState.div - particleState.divergence) / dt
 
     # verbosePrint(verbose, '[Cullen]\t\tComputing Vsig')
     # There is an issue here!
@@ -117,7 +126,7 @@ def computeHopkinsUpdate(
     alpha_tmp = torch.where(torch.logical_or(ddiv_dt > 0, switchState.div > 0), 0, alpha_tmp)
     # print(f'alpha_tmp(c): {alpha_tmp.min()}, {alpha_tmp.max()}, {alpha_tmp.mean()}')
 
-    v_sig = compute_vsig(particleState, simulationConfig, schemeConfig, supportScheme, adjacency)
+    v_sig = torch.abs(compute_vsig(particleState, simulationConfig, schemeConfig, supportScheme, adjacency))
 
     # verbosePrint(verbose, '[Cullen]\t\tComputing Alpha0s')
     alpha_0 = particleState.alpha0s

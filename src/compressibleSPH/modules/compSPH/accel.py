@@ -124,8 +124,8 @@ def computeCompSPHAccel_Func_i(
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
-        gradw_i = 0.5 * (gradw_i + gradw_j)
-        gradw_j = gradw_i
+        # gradw_i = 0.5 * (gradw_i + gradw_j)
+        # gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
 
 
         Pj = referencePressures[j]

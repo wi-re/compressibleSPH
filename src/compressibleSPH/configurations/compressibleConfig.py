@@ -40,7 +40,7 @@ class ViscositySwitchConfig:
     beta_c: float = field(default=0.7, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
     beta_d: float = field(default=0.05, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
     beta_xi: float = field(default=2.0, metadata={'description': 'Beta parameter for the xi limiter in the Cullen-Dehnen switch'})
-    limitXi: bool = field(default=False, metadata={'description': 'Whether to limit the xi parameter in the Cullen-Dehnen switch'})
+    limitXi: bool = field(default=True, metadata={'description': 'Whether to limit the xi parameter in the Cullen-Dehnen switch'})
 
 
 
