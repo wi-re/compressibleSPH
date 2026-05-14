@@ -11,9 +11,10 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 @wp.func
 def limiterVL(x: wp.float32):
-    vL = 2.0 / (1.0 + x)
     if x <= 0.0:
         return 0.0
+    x = wp.min(x, 1.0e6)
+    vL = 2.0 / (1.0 + x)
     return x * vL*vL
     # return torch.where(x > 0, x * vL**2, 0.0)
 
@@ -33,8 +34,14 @@ def computeVanLeer(
     rif = wp.sign(gradj) * wp.max(wp.abs(gradj), 1e-30)
     # rjf = gradi.sgn() * gradi.abs().clamp(min = 1e-30)
     rjf = wp.sign(gradi) * wp.max(wp.abs(gradi), 1e-30)
-    ri = gradi / (rif + 1e-30)
-    rj = gradj / (rjf + 1e-30)
+    denom_i = wp.max(wp.abs(rif), 1e-30)
+    denom_j = wp.max(wp.abs(rjf), 1e-30)
+    if rif < 0.0:
+        denom_i = -denom_i
+    if rjf < 0.0:
+        denom_j = -denom_j
+    ri = gradi / denom_i
+    rj = gradj / denom_j
     rij = wp.min(ri, rj)
 
     # rij = (gradi + 1e-30) / (gradj + 1e-30)
