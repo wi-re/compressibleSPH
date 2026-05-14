@@ -15,6 +15,7 @@ class sodInitialState(NamedTuple):
     v: float
 
 
+from compressibleSPH.modules.timestep.compressible import computeTimestep
 def buildSod1D(
     # nx: int,
     SimulationSystem, SimulationState,
@@ -164,10 +165,10 @@ def buildSod1D(
 
         print(f'Initial internal energy: {u.min().item():6.4g} to {u.max().item():6.4g}')
 
-        particleState.densities = eosRho
+        # particleState.densities = eosRho
         
         dx = particles_l.positions[1,0] - particles_l.positions[0,0]
-        dx = 2.5 * dx
+        dx = 0.5 * dx
         # x = torch.where(particleState.positions[:,0] > 0., particleState.positions[:,0] - 0.5, particleState.positions[:,0] + 0.5)
         # ramp = torch.exp(x/dx) / (1 + torch.exp(x/dx))
         # ramp =  / (torch.exp(x/dx) + 1)
@@ -186,18 +187,23 @@ def buildSod1D(
         x = particleState.positions[:,0]
         u = torch.where(particleState.positions[:,0] > 0., ramped(left_u, right_u, x - 0.5), u)
         u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x + 0.5), u)
-        # p = torch.where(particleState.positions[:,0] > 0., ramped(left_p, right_p, x), P_initial)
+        p = torch.where(particleState.positions[:,0] > 0., ramped(left_p, right_p, x-0.5), P_initial)
 
+        # left_A = leftState.p / leftState.rho**gamma
+        # right_A = rightState.p / rightState.rho**gamma
+        # A = torch.where(particleState.positions[:,0] > 0., ramped(left_A, right_A, x - 0.5), left_A)
+        # A = torch.where(particleState.positions[:,0] < 0., ramped(right_A, left_A, x + 0.5), A)
 
+        # u = A * particleState.densities**(gamma - 1) / (gamma - 1)
 
         # x = torch.where(particleState.positions[:,0] < 0., particleState.positions[:,0] + 0.5, particleState.positions[:,0] - 0.5)
         # u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x), u)
-        # p = torch.where(particleState.positions[:,0] < 0., ramped(right_p, left_p, x), p)
+        p = torch.where(particleState.positions[:,0] < 0., ramped(right_p, left_p, x+0.5), p)
 
         # u = 1 / (gamma - 1) * (p / eosRho)
         
 
-
+    particleState.densities = eosRho
     # A_, u_, P_, c_s = idealGasEOS(A = None, u = None, P = P_initial, rho = rho, gamma = gamma)
     A_, u_, P_, c_s = idealGasEOS(A = None, u = u, P = None, rho = eosRho, gamma = gamma)
 
@@ -219,7 +225,9 @@ def buildSod1D(
         state=particleState, 
         adjacency = adjacency, 
         domain = config.domain)
+    compParams.gamma = gamma
 
     dx = particleState.masses.min()
     config.dx = dx
+    config.dt = computeTimestep(compressibleSystem, config, compParams, dt = config.dt)
     return compressibleSystem

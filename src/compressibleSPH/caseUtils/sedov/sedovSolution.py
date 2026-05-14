@@ -489,3 +489,19 @@ class SedovSolution:
 ##        result *= 8.0*Anu/((gamma - 1.0)*(gamma + 1.0)*(nu + 2.0)**2)
 
 ##        return result
+
+
+
+def radius(beta, E0, t, rho0, nu):
+    return beta *( E0 * t**2 / (rho0)) ** (1/(2+nu))
+def velocity(beta, E0, t, rho0, nu):
+    return 2/(nu+2) * radius(beta, E0, t, rho0, nu) / t
+
+def beta(nu):
+    if nu == 1:
+        # return 1 / (answer.alpha ** nu1 )
+        return 1.11
+    elif nu == 2:
+        return 1.12
+    elif nu == 3:
+        return 1.15

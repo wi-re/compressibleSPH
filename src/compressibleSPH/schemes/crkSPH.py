@@ -21,7 +21,9 @@ from ..systems.compressibleMonaghan import CompressibleSystemUpdate
 
 from ..modules.shockCapturing.CullenHopkins import computeHopkinsTerms, computeHopkinsUpdate
 
-def compSPH_step(
+from ..modules.crk.accel import computeCrkSPHAccelWarp
+
+def crkSPH_step(
     system: CompSPHSystem,
     dt: float,
     config: SimulationConfig,
@@ -44,16 +46,18 @@ def compSPH_step(
         priorNeighborhood = currentSystem.adjacency,
         verbose = False)
 
-    currentState.densities = warpOperation(
-        currentState,
-        OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Density,
-            supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-    )
+    apparentVolume, currentState.densities, crkState = computeCRKFactors(currentState, config.domain, config.kernel, adjacency = adjacency)
+
+    # currentState.densities = warpOperation(
+    #     currentState,
+    #     OperationProperties(
+    #         kernel = config.kernel,
+    #         operation = WarpOperation.Density,
+    #         supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
+    #     ),
+    #     domain = config.domain,
+    #     adjacency = adjacency,
+    # )
     if currentState.divergence is None:
         print('Warning: divergence is None, computing for the first time')
         drhodt = computeMomentumConsistent(
@@ -63,7 +67,7 @@ def compSPH_step(
             adjacency = adjacency,
             gradH = gradHState
         )
-        currentState.divergence = drhodt
+        currentState.divergence = -drhodt/currentState.densities
 
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
@@ -73,31 +77,66 @@ def compSPH_step(
         gamma = compParams.gamma,
     )
 
-    if compParams.adaptiveSupportCorrections:
-        omega = computeOmega(currentState, 
-                OperationProperties(
-                    kernel = config.kernel,
-                    supportMode = SupportScheme.Gather, # E.5
-                ),
-                domain = config.domain,
-                adjacency = adjacency
-        )
+    # if compParams.adaptiveSupportCorrections:
+    #     omega = computeOmega(currentState, 
+    #             OperationProperties(
+    #                 kernel = config.kernel,
+    #                 supportMode = SupportScheme.Gather, # E.5
+    #             ),
+    #             domain = config.domain,
+    #             adjacency = adjacency
+    #     )
 
-        gradHState = GradHState(
-            queryOmegas = omega
-        )
-    else:
-        gradHState = None
+    #     gradHState = GradHState(
+    #         queryOmegas = omega
+    #     )
+    # else:
+    gradHState = None
 
-    # currentState.alphas, switchState = computeViscositySwitchTerms(
-    #     dt,
-    #     currentState, 
-    #     config, compParams, 
-    #     SupportScheme.SuperSymmetric, 
-    #     adjacency)   
+    currentState.alphas, switchState = computeViscositySwitchTerms(
+        dt,
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
+
+    velocityGradient = warpOperation(
+        currentState,
+        OperationProperties(
+            kernel = config.kernel,
+            operation = WarpOperation.Gradient,
+            supportMode = SupportScheme.KernelMeanSymmetric, # E.3
+        ),
+        queryValues = currentState.velocities,
+        domain = config.domain,
+        adjacency = adjacency,
+        queryVolumes = apparentVolume,
+        crkState= crkState,
+    )
+    drhodt = -torch.einsum('...ii->...', velocityGradient) * currentState.densities
 
 
-    dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
+    # dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
+    #     queryParticles = currentState,
+    #     operationProperties = OperationProperties(
+    #         kernel = config.kernel,
+    #         supportMode =  SupportScheme.KernelMeanSymmetric
+    #     ),
+    #     domain = config.domain,
+    #     conductivityParams= compParams.diffusionParams,
+
+    #     queryEnergies = currentState.internalEnergies,
+    #     queryVelocities= currentState.velocities,
+    #     queryCs = currentState.soundspeeds,
+    #     queryAlphas = currentState.alphas,
+    #     queryPressures = currentState.pressures,
+
+    #     adjacency = adjacency,
+    #     gradHState = gradHState
+    # )
+
+
+    dvdt, currentState.ap_ij, currentState.av_ij = computeCrkSPHAccelWarp(
         queryParticles = currentState,
         operationProperties = OperationProperties(
             kernel = config.kernel,
@@ -105,18 +144,20 @@ def compSPH_step(
         ),
         domain = config.domain,
         conductivityParams= compParams.diffusionParams,
-
+        queryVelocityTensor= velocityGradient,
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,
         queryCs = currentState.soundspeeds,
         queryAlphas = currentState.alphas,
         queryPressures = currentState.pressures,
+        queryVolumes = apparentVolume,
+        crkState = crkState,
 
         adjacency = adjacency,
         gradHState = gradHState
     )
 
-    dudt = computeCompSPHdudtWarp(
+    dudt = computeCrkSPHdudtWarp(
         queryParticles = currentState,
         operationProperties = OperationProperties(
             kernel = config.kernel,
@@ -130,10 +171,32 @@ def compSPH_step(
         queryCs = currentState.soundspeeds,
         queryAlphas = currentState.alphas,
         queryPressures = currentState.pressures,
+        queryVolumes = apparentVolume,
+        crkState = crkState,
 
         adjacency = adjacency,
         gradHState = gradHState
     )
+    # dudt = computeCompSPHdudtWarp(
+    #     queryParticles = currentState,
+    #     operationProperties = OperationProperties(
+    #         kernel = config.kernel,
+    #         supportMode = SupportScheme.Gather #E.3
+    #      ),
+    #     domain = config.domain,
+    #     conductivityParams= compParams.diffusionParams,
+
+    #     queryEnergies = currentState.internalEnergies,
+    #     queryVelocities= currentState.velocities,
+    #     queryCs = currentState.soundspeeds,
+    #     queryAlphas = currentState.alphas,
+    #     queryPressures = currentState.pressures,
+    #     # queryVolumes = apparentVolume,
+    #     # crkState = crkState,
+
+    #     adjacency = adjacency,
+    #     gradHState = gradHState
+    # )
 
     v_halfstep = currentState.velocities + 0.5 * dt * dvdt
 
@@ -160,22 +223,22 @@ def compSPH_step(
     )
     # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
 
-    # currentState.alpha0s, switchState = updateViscositySwitch(
-    #     switchState,
-    #     dt, dvdt,
-    #     currentState, 
-    #     config, compParams, 
-    #     SupportScheme.SuperSymmetric, 
-    #     adjacency)   
+    currentState.alpha0s, switchState = updateViscositySwitch(
+        switchState,
+        dt, dvdt,
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
 
 
-    drhodt = computeMomentumConsistent(
-        currentState,
-        config,
-        supportScheme = SupportScheme.Gather,
-        adjacency = adjacency,
-        gradH = gradHState
-    )
+    # drhodt = computeMomentumConsistent(
+    #     currentState,
+    #     config,
+    #     supportScheme = SupportScheme.Gather,
+    #     adjacency = adjacency,
+    #     gradH = gradHState
+    # )
     currentState.divergence = -drhodt / currentState.densities
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt)) + currentState.masses * (dudt)
 
