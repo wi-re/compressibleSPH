@@ -79,8 +79,8 @@ def compSPH_deltaU_multistep(
         v_ji = v_j - v_i
 
         f_ij = stepState.f_ij
-        av_ij = stepState.ap_ij
-        ap_ij = stepState.av_ij
+        ap_ij = stepState.ap_ij
+        av_ij = stepState.av_ij
         
         k = butcherTerms[ii]
         if solverConfig.energyScheme == EnergyScheme.PdV:

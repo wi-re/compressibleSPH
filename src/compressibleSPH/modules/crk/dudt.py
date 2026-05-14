@@ -109,9 +109,9 @@ def computeCrkSPHdudt_Func_i(
         gradw_i = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
-            kernel_int, wp.uint32(wp.static(SupportScheme.Gather.value)), # gather mode for gradW
+            kernel_int, wp.uint32(wp.static(SupportScheme.Scatter.value)), # match accel.py
             domainState.periodicity, domainState.domainMin, domainState.domainMax,
-            False, Ai, Bi, gradAi, gradBi
+            True, Ai, Bi, gradAi, gradBi  # useCRK=True: must match accel.py gradient
         )
         if useGradientRenormalization:
             gradw_i = matmul(Li, gradw_i)
@@ -120,20 +120,15 @@ def computeCrkSPHdudt_Func_i(
         gradw_j = computeKernelGradientCRK(
             xj, xi,
             hj, hi,
-            kernel_int, wp.uint32(wp.static(SupportScheme.Gather.value)), # scatter mode for gradW
+            kernel_int, wp.uint32(wp.static(SupportScheme.Scatter.value)), # match accel.py
             domainState.periodicity, domainState.domainMin, domainState.domainMax,
-            True, Aj, Bj, gradAj, gradBj
+            True, Aj, Bj, gradAj, gradBj  # useCRK=True: must match accel.py gradient
         )
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
-        gradw_ij = computeKernelGradientCRK(
-            xi, xj, 
-            hi, hj,
-            kernel_int, wp.uint32(wp.static(SupportScheme.KernelMeanSymmetric.value)),
-            domainState.periodicity, domainState.domainMin, domainState.domainMax,
-            useCRK, Ai, Bi, gradAi, gradBi
-        )
+        # gradw_ij = 0.5*(gradw_i - gradw_j) mirrors accel.py's 0.5*(gradw_i + (-gradw_j))
+        # same deltagrad as the force — required for energy-momentum consistency
         gradw_ij = 0.5 * (gradw_i - gradw_j)
 
         Pj = referencePressures[j]
@@ -159,7 +154,7 @@ def computeCrkSPHdudt_Func_i(
         Qj = pi_j * rho_bar
 
         pTerm = - Pj * dot * Vi * Vj / mi
-        vTerm = - 0.5 * Qj * mu_ij * dot * Vi * Vj / mi
+        vTerm = - Qj * mu_ij * dot * Vi * Vj / mi
 
         # apparentVolume = mj/rhoj
         # pTerm = - apparentVolume * pressureTerm_i * rhoj * dot

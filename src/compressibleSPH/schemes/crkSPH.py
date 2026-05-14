@@ -105,7 +105,7 @@ def crkSPH_step(
         OperationProperties(
             kernel = config.kernel,
             operation = WarpOperation.Gradient,
-            supportMode = SupportScheme.KernelMeanSymmetric, # E.3
+            supportMode = SupportScheme.Gather, # E.3
         ),
         queryValues = currentState.velocities,
         domain = config.domain,

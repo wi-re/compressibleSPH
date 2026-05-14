@@ -152,8 +152,6 @@ def computeCrkSPHAccel_Func_i(
 
         phi_ij = wp.max(wp.min(phi_ij, 1.0), 0.0) # Ensure phi is between 0 and 1
 
-        phi_ij = 0.0 #
-
         # the term in crk is 
         # v_hat_ij = v_i - v_j - phi_ij/2 * (gradV_i + gradV_j) * x_ij
         # we utilize the more common form of v_ij = v_j - v_i
@@ -200,7 +198,7 @@ def computeCrkSPHAccel_Func_i(
         gradw_i = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
-            kernel_int, wp.uint32(wp.static(SupportScheme.KernelMeanSymmetric.value)), # gather mode for gradW
+            kernel_int, wp.uint32(12), # scatter mode for gradW
             domainState.periodicity, domainState.domainMin, domainState.domainMax,
             True, Ai, Bi, gradAi, gradBi
         )
@@ -208,17 +206,17 @@ def computeCrkSPHAccel_Func_i(
             gradw_i = matmul(Li, gradw_i)
 
         _, Aj, Bj, gradAj, gradBj = getCRK_j(correctionData, j)
-        gradw_j = -computeKernelGradientCRK(
+        gradw_j = computeKernelGradientCRK(
             xj, xi,
             hj, hi,
-            kernel_int, wp.uint32(wp.static(SupportScheme.KernelMeanSymmetric.value)), # scatter mode for gradW
+            kernel_int, wp.uint32(12), # scatter mode for gradW
             domainState.periodicity, domainState.domainMin, domainState.domainMax,
             True, Aj, Bj, gradAj, gradBj
         )
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
-        gradw_ij = 0.5 * (gradw_i + gradw_j)
+        gradw_ij = 0.5 * (gradw_i - gradw_j)
         # gradw_ij = gradw_i
         # gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
 
@@ -244,9 +242,9 @@ def computeCrkSPHAccel_Func_i(
 
         rho_bar = 0.5 * (rhoi + rhoj)
         Q_i = pi_i * rho_bar / rhoj * rhoi
-        Q_j = pi_j * rho_bar 
+        Q_j = pi_j * rho_bar
 
-        viscosityTerm_ij = -(Q_i + Q_j) * Vj * mu_ij * gradw_ij * Vi / mi 
+        viscosityTerm_ij = -(Q_i + Q_j) * Vj * mu_ij * gradw_ij * Vi / mi# *0.0
         # viscosityTerms_i = - Q_i * Vj * mu_ij * gradw_i * Vi / mi
         # viscosityTerms_j = - Q_j * Vj * mu_ij * gradw_j * Vi / mi
         # viscosityTerm_ij = 0.5 * (viscosityTerms_i + viscosityTerms_j)
