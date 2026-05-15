@@ -34,9 +34,21 @@ def crkSPH_step(
     currentSystem = system#
     currentState = currentSystem.state
 
+    IE = currentState.internalEnergies * currentState.masses
+    KE = 0.5 * currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, currentState.velocities)
+    TE = IE + KE
+
+    # print(f"TE: {TE.sum().item()}, IE: {IE.sum().item()}, KE: {KE.sum().item()}")
+    # print(f'\tmin/max/mean TE: {TE.min().item()}/{TE.max().item()}/{TE.mean().item()}')
+    # print(f'\tmin/max/mean IE: {IE.min().item()}/{IE.max().item()}/{IE.mean().item()}')
+    # print(f'\tmin/max/mean KE: {KE.min().item()}/{KE.max().item()}/{KE.mean().item()}')
+
     rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
+
+    # print(f"\tOptimal support: min/max/mean h: {h_optimal.min().item()}/{h_optimal.max().item()}/{h_optimal.mean().item()}")
+    # print(f'\tDensity: min/max/mean rho: {rho_optimal.min().item()}/{rho_optimal.max().item()}/{rho_optimal.mean().item()}')
 
     verletScale = config.verletScale
 
@@ -161,10 +173,11 @@ def crkSPH_step(
         queryParticles = currentState,
         operationProperties = OperationProperties(
             kernel = config.kernel,
-            supportMode = SupportScheme.Gather #E.3
+            supportMode = SupportScheme.KernelMeanSymmetric #E.3
          ),
         domain = config.domain,
         conductivityParams= compParams.diffusionParams,
+        queryVelocityTensor= velocityGradient,
 
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,

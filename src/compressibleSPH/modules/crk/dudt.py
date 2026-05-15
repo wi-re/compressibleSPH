@@ -9,6 +9,8 @@ from sphWarpCore import *
 from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
 
+from .accel import computeVanLeer
+
 @wp.func
 def computeCrkSPHdudt_Func_i(
     # General Shape Parameters and indices
@@ -54,6 +56,9 @@ def computeCrkSPHdudt_Func_i(
     P_i: wp.float32, referencePressures: wp.array(dtype = wp.float32), # type: ignore
     viscosityParams: DiffusionParameters,
 
+    gradV_i: matrix(shape=(Any, Any), dtype=wp.float32), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
+
+
     # Dummy value to allow allocation
 ):
     pressureTerm_i = P_i / (rhoi*rhoi )/ (omega_i if useGradHTerms else wp.float32(1.0))
@@ -79,16 +84,55 @@ def computeCrkSPHdudt_Func_i(
         P_j = referencePressures[j]
         cs_j = referenceCs[j]
 
+        gradV_j = referenceVelocityTensor[j]
+        x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
+
+        phi_ij = 1.0
+        # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
+        # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
+        w_xi = sphKernel_xi(kernel_int, dim)
+        # xi = Kernel_xi(config['kernel'], particles.positions.shape[0])
+        # eta_max = getSetConfig(config, 'CRKSPH', 'eta_max', 4.0)
+        eta_max = w_xi
+        # eta_max = 1.0
+        eta_crit = 1.0/4.0  * eta_max
+        eta_fold = 0.2  * eta_max
+        eta_i = x_ij/hi * eta_max
+        eta_j = x_ij/hj * eta_max
+            
+        eta_i_norm = safe_sqrt(wp.dot(eta_i, eta_i))
+        eta_j_norm = safe_sqrt(wp.dot(eta_j, eta_j))
+        eta_ij = wp.min(eta_i_norm, eta_j_norm)
+    
+        factor = wp.float32(1.0)
+        if eta_ij < eta_crit:
+            factor = wp.exp(- ((eta_ij - eta_crit)/eta_fold)**2.0)
+        # torch.where(eta_ij < eta_crit, torch.exp(- ((eta_ij - eta_crit)/eta_fold)**2), torch.ones_like(eta_ij))
+
+        phi_ij = computeVanLeer(
+            x_ij,
+            gradV_i,
+            gradV_j
+        ) * factor
+
+        phi_ij = wp.max(wp.min(phi_ij, 1.0), 0.0) # Ensure phi is between 0 and 1
+        v_corr_i = phi_ij / 2.0 * matmul(gradV_i, x_ij)
+        v_corr_j = phi_ij / 2.0 * matmul(gradV_j, x_ij)
+
+        v_dot_i = vel_i + v_corr_i
+        v_dot_j = vel_j - v_corr_j
+
         pi_i = computePi_actual(
             xi, xj, 
             hi, hj,
             mi, mj,
             rhoi, rhoj,
             True, P_i, P_j,
-            vel_i, vel_j,
+            v_dot_i, v_dot_j,
             domainState,
             kernel_int,
-            cs_i, cs_j,
+            cs_i, cs_i,
             alpha_i, referenceAlphas[j] if viscositySwitch else wp.float32(1.0),
             viscosityParams, 
             False, False)
@@ -98,10 +142,10 @@ def computeCrkSPHdudt_Func_i(
             mi, mj,
             rhoi, rhoj,
             True, P_i, P_j,
-            vel_i, vel_j,
+            v_dot_i, v_dot_j,
             domainState,
             kernel_int,
-            cs_i, cs_j,
+            cs_j, cs_j,
             alpha_i, referenceAlphas[j] if viscositySwitch else wp.float32(1.0),
             viscosityParams, 
             True, False)
@@ -135,9 +179,7 @@ def computeCrkSPHdudt_Func_i(
         # omegaj = referenceOmegas[j] if useGradHTerms else wp.float32(1.0)
         # pressureTerm_j = Pj / (rhoj*rhoj) / omegaj
         
-        x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
-        r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
-        u_ij = vel_j - vel_i
+        u_ij = v_dot_j - v_dot_i
         ux_ij = wp.dot(u_ij, x_ij) / (r_ij + 1e-14 * hi)
         mu_ij = ux_ij #/ (r_ij + 1e-14 * hi)
 
@@ -186,6 +228,7 @@ def computeCrkSPHdudt_Func_Adjacency(
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
     queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
     viscosityParams: DiffusionParameters,
+    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
     dudt: wp.array(dtype = Any), # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
@@ -203,6 +246,7 @@ def computeCrkSPHdudt_Func_Adjacency(
     alpha_i = queryAlphas[i] if viscositySwitch else wp.float32(1.0)
     u_i = queryEnergies[i]
     P_i = queryPressures[i]
+    gradV_i = queryVelocityTensor[i]
 
     out = zero_like_warp(dudt)
     for o in range(numOffsets):
@@ -239,6 +283,7 @@ def computeCrkSPHdudt_Func_Adjacency(
             viscositySwitch, alpha_i, referenceAlphas,
             P_i, referencePressures,
             viscosityParams,
+            gradV_i, referenceVelocityTensor,
         )
     return out
 
@@ -261,6 +306,7 @@ def computeCrkSPHdudt_Kernel(
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
     queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
     viscosityParams: DiffusionParameters,
+    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
     # The last parameter is always the output array and should not be changed
     out_dudt : wp.array(dtype = Any), # type: ignore
 ):                                                                                    
@@ -281,6 +327,7 @@ def computeCrkSPHdudt_Kernel(
         viscositySwitch, queryAlphas, referenceAlphas,
         queryPressures, referencePressures,
         viscosityParams,
+        queryVelocityTensor, referenceVelocityTensor,
         out_dudt
     )
 
@@ -290,6 +337,7 @@ def computeCrkSPHdudtWarp(
     domain: DomainDescription,
     
     conductivityParams: DiffusionParameters,
+    queryVelocityTensor: torch.Tensor, referenceVelocityTensor: Optional[torch.Tensor] = None,
     queryEnergies: Optional[torch.Tensor] = None, referenceEnergies: Optional[torch.Tensor] = None,
     queryVelocities : Optional[torch.Tensor] = None, referenceVelocities: Optional[torch.Tensor] = None,
     queryCs: Optional[torch.Tensor] = None, referenceCs: Optional[torch.Tensor] = None,
@@ -307,6 +355,8 @@ def computeCrkSPHdudtWarp(
         raise ValueError("This module requires an adjacency structure.")
     if referenceVelocities is None:
         referenceVelocities = queryVelocities
+    if referenceVelocityTensor is None:
+        referenceVelocityTensor = queryVelocityTensor
     with record_function("warpSPH[computeCrkSPHdudt]"):
         with record_function("warpSPH[computeCrkSPHdudt] - Preprocessing"):
             # Preprocessing and input validation
@@ -381,7 +431,8 @@ def computeCrkSPHdudtWarp(
                     queryCs_, referenceCs_,
                     viscositySwitch, queryAlphas_, referenceAlphas_,
                     queryPressures_, referencePressures_,
-                    conductivityParams
+                    conductivityParams,
+                    queryVelocityTensor, referenceVelocityTensor,
                 ),
             )
 

@@ -128,10 +128,8 @@ def computeCrkSPHAccel_Func_i(
         gradV_j = referenceVelocityTensor[j]
 
         phi_ij = 1.0
-
         # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
         # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
-
         w_xi = sphKernel_xi(kernel_int, dim)
         # xi = Kernel_xi(config['kernel'], particles.positions.shape[0])
         # eta_max = getSetConfig(config, 'CRKSPH', 'eta_max', 4.0)
@@ -172,8 +170,8 @@ def computeCrkSPHAccel_Func_i(
         v_corr_i = phi_ij / 2.0 * matmul(gradV_i, x_ij)
         v_corr_j = phi_ij / 2.0 * matmul(gradV_j, x_ij)
 
-        v_dot_i = vel_i - v_corr_i
-        v_dot_j = vel_j + v_corr_j
+        v_dot_i = vel_i + v_corr_i
+        v_dot_j = vel_j - v_corr_j
 
         pi_i = computePi_actual(
             xi, xj, 
