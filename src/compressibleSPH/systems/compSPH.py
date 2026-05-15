@@ -115,5 +115,7 @@ class CompSPHSystem(BaseIntegrationSystem):
         self.state.alpha0s.copy_(lastState.alpha0s)
         self.state.alphas.copy_(lastState.alphas)
 
+        updateValues[-1].dudt = (self.state.internalEnergies - initialState.state.internalEnergies) /dt
+
         return super().finalize(initialState, dt, returnValues, updateValues, weights, config, compParams, *args, **kwargs)
     

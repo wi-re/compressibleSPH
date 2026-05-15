@@ -120,8 +120,8 @@ def computeCrkSPHdudt_Func_i(
         v_corr_i = phi_ij / 2.0 * matmul(gradV_i, x_ij)
         v_corr_j = phi_ij / 2.0 * matmul(gradV_j, x_ij)
 
-        v_dot_i = vel_i + v_corr_i
-        v_dot_j = vel_j - v_corr_j
+        v_dot_i = vel_i #+ v_corr_i
+        v_dot_j = vel_j #- v_corr_j
 
         pi_i = computePi_actual(
             xi, xj, 

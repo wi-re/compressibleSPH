@@ -43,9 +43,9 @@ def crkSPH_step(
     # print(f'\tmin/max/mean IE: {IE.min().item()}/{IE.max().item()}/{IE.mean().item()}')
     # print(f'\tmin/max/mean KE: {KE.min().item()}/{KE.max().item()}/{KE.mean().item()}')
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
-    currentState.supports = h_optimal
-    currentState.densities = rho_optimal
+    # rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
+    # currentState.supports = h_optimal
+    # currentState.densities = rho_optimal
 
     # print(f"\tOptimal support: min/max/mean h: {h_optimal.min().item()}/{h_optimal.max().item()}/{h_optimal.mean().item()}")
     # print(f'\tDensity: min/max/mean rho: {rho_optimal.min().item()}/{rho_optimal.max().item()}/{rho_optimal.mean().item()}')
@@ -105,12 +105,12 @@ def crkSPH_step(
     # else:
     gradHState = None
 
-    currentState.alphas, switchState = computeViscositySwitchTerms(
-        dt,
-        currentState, 
-        config, compParams, 
-        SupportScheme.SuperSymmetric, 
-        adjacency)   
+    # currentState.alphas, switchState = computeViscositySwitchTerms(
+    #     dt,
+    #     currentState, 
+    #     config, compParams, 
+    #     SupportScheme.SuperSymmetric, 
+    #     adjacency)   
 
     velocityGradient = warpOperation(
         currentState,
@@ -236,13 +236,13 @@ def crkSPH_step(
     )
     # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
 
-    currentState.alpha0s, switchState = updateViscositySwitch(
-        switchState,
-        dt, dvdt,
-        currentState, 
-        config, compParams, 
-        SupportScheme.SuperSymmetric, 
-        adjacency)   
+    # currentState.alpha0s, switchState = updateViscositySwitch(
+    #     switchState,
+    #     dt, dvdt,
+    #     currentState, 
+    #     config, compParams, 
+    #     SupportScheme.SuperSymmetric, 
+    #     adjacency)   
 
 
     # drhodt = computeMomentumConsistent(
