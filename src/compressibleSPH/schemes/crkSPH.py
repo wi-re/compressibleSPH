@@ -43,9 +43,9 @@ def crkSPH_step(
     # print(f'\tmin/max/mean IE: {IE.min().item()}/{IE.max().item()}/{IE.mean().item()}')
     # print(f'\tmin/max/mean KE: {KE.min().item()}/{KE.max().item()}/{KE.mean().item()}')
 
-    # rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
-    # currentState.supports = h_optimal
-    # currentState.densities = rho_optimal
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
+    currentState.supports = h_optimal
+    currentState.densities = rho_optimal
 
     # print(f"\tOptimal support: min/max/mean h: {h_optimal.min().item()}/{h_optimal.max().item()}/{h_optimal.mean().item()}")
     # print(f'\tDensity: min/max/mean rho: {rho_optimal.min().item()}/{rho_optimal.max().item()}/{rho_optimal.mean().item()}')
