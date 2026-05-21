@@ -109,7 +109,9 @@ def generatePSILut_warp(
     nLut: int
 ):
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-    torch_t = get_torch_precision()
+    # torch_t = get_torch_precision()
+
+    torch_t = torch.float64
 
     psis = torch.zeros((nLut,3), dtype=torch_t, device=device)
     psiHs = torch.zeros((nLut,3), dtype=torch_t, device=device)

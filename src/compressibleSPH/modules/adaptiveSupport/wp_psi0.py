@@ -103,7 +103,7 @@ def computePsi0_Func_i(
 
         psi0 += kTerm
         psi0h += kTerm_H
-    return psi0, psi0h
+    return psi0**(scalar_t(1.0)/scalar_t(dim)), psi0h**(scalar_t(1.0)/scalar_t(dim))
 
 from sphWarpCore.operations_grid.grid_util import checkOffset
 

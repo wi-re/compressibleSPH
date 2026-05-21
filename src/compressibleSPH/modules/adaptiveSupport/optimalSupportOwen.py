@@ -85,7 +85,7 @@ def evaluateOptimalSupportOwen(
         if verbose:
             print(f'Psi: {psi_0_H.min()} | {psi_0_H.max()} | {psi_0_H.mean()}')
             
-        n_h_i = PsiLUT_fn.fromPsiH(psi_0_H)
+        n_h_i = PsiLUT_fn.fromPsiH(psi_0_H).to(dtype = particles.supports.dtype, device = particles.supports.device)
         if verbose:
             print(f'n_h: {n_h_i.min()} | {n_h_i.max()} | {n_h_i.mean()}')
         
