@@ -10,35 +10,35 @@ from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
 
 @wp.func
-def limiterVL(x: wp.float32):
-    if x <= 0.0:
-        return 0.0
-    x = wp.min(x, 1.0e6)
-    vL = 2.0 / (1.0 + x)
+def limiterVL(x: scalar_t):
+    if x <= scalar_t(0.0):
+        return scalar_t(0.0)
+    x = wp.min(x, scalar_t(1.0e6))
+    vL = scalar_t(2.0) / (scalar_t(1.0) + x)
     return x * vL*vL
     # return torch.where(x > 0, x * vL**2, 0.0)
 
 @wp.func
 def computeVanLeer(
-    xij_ : vector(length=Any, dtype=wp.float32), # type: ignore
-    DvDxi : matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
-    DvDxj: matrix(shape=(Any, Any), dtype=wp.float32) # type: ignore
+    xij_ : vector(length=Any, dtype=scalar_t), # type: ignore
+    DvDxi : matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
+    DvDxj: matrix(shape=(Any, Any), dtype=scalar_t) # type: ignore
 ):
-    xij = 0.5 * (xij_)
+    xij = scalar_t(0.5) * (xij_)
     # gradi = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxi, xij), xij)
     gradi = wp.dot(matmul(DvDxi, xij), xij)
     # gradj = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxj, xij), xij)
     gradj = wp.dot(matmul(DvDxj, xij), xij)
 
     # rif = gradj.sgn() * gradj.abs().clamp(min = 1e-30)
-    rif = wp.sign(gradj) * wp.max(wp.abs(gradj), 1e-30)
+    rif = wp.sign(gradj) * wp.max(wp.abs(gradj), scalar_t(1.0e-30))
     # rjf = gradi.sgn() * gradi.abs().clamp(min = 1e-30)
-    rjf = wp.sign(gradi) * wp.max(wp.abs(gradi), 1e-30)
-    denom_i = wp.max(wp.abs(rif), 1e-30)
-    denom_j = wp.max(wp.abs(rjf), 1e-30)
-    if rif < 0.0:
+    rjf = wp.sign(gradi) * wp.max(wp.abs(gradi), scalar_t(1.0e-30))
+    denom_i = wp.max(wp.abs(rif), scalar_t(1.0e-30))
+    denom_j = wp.max(wp.abs(rjf), scalar_t(1.0e-30))
+    if rif < scalar_t(0.0):
         denom_i = -denom_i
-    if rjf < 0.0:
+    if rjf < scalar_t(0.0):
         denom_j = -denom_j
     ri = gradi / denom_i
     rj = gradj / denom_j
@@ -54,13 +54,13 @@ def computeCrkSPHAccel_Func_i(
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
     correctionData: Any,
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -76,29 +76,29 @@ def computeCrkSPHAccel_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, omega_i: wp.float32,   # type: ignore
+    useGradHTerms: wp.bool, omega_i: scalar_t,   # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32,  # type: ignore
+    useVolume: bool, Vi: scalar_t,  # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
-    vel_i: vector(length=Any, dtype=wp.float32), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    u_i: wp.float32, referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
+    vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    u_i: scalar_t, referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
 
-    cs_i: wp.float32, referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, alpha_i: wp.float32, referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    P_i: wp.float32, referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, alpha_i: scalar_t, referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
 
-    gradV_i: matrix(shape=(Any, Any), dtype=wp.float32), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
+    gradV_i: matrix(shape=(Any, Any), dtype=scalar_t), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
 
     # Dummy value to allow allocation
-    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
+    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 ):
-    pressureTerm_i = P_i / (rhoi*rhoi )/ (omega_i if useGradHTerms else wp.float32(1.0))
+    pressureTerm_i = P_i / (rhoi*rhoi )/ (omega_i if useGradHTerms else scalar_t(1.0))
 
     # Initialize the output value
     out = zero_like_warp(pressureAccel_ij[i])
@@ -127,7 +127,7 @@ def computeCrkSPHAccel_Func_i(
 
         gradV_j = referenceVelocityTensor[j]
 
-        phi_ij = 1.0
+        phi_ij = scalar_t(1.0)
         # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
         # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
         w_xi = sphKernel_xi(kernel_int, dim)
@@ -135,8 +135,8 @@ def computeCrkSPHAccel_Func_i(
         # eta_max = getSetConfig(config, 'CRKSPH', 'eta_max', 4.0)
         eta_max = w_xi
         # eta_max = 1.0
-        eta_crit = 1.0/4.0  * eta_max
-        eta_fold = 0.2  * eta_max
+        eta_crit = scalar_t(1.0)/scalar_t(4.0)  * eta_max
+        eta_fold = scalar_t(0.2)  * eta_max
         eta_i = x_ij/hi * eta_max
         eta_j = x_ij/hj * eta_max
             
@@ -144,9 +144,9 @@ def computeCrkSPHAccel_Func_i(
         eta_j_norm = safe_sqrt(wp.dot(eta_j, eta_j))
         eta_ij = wp.min(eta_i_norm, eta_j_norm)
     
-        factor = wp.float32(1.0)
+        factor = scalar_t(1.0)
         if eta_ij < eta_crit:
-            factor = wp.exp(- ((eta_ij - eta_crit)/eta_fold)**2.0)
+            factor = wp.exp(- ((eta_ij - eta_crit)/eta_fold)**scalar_t(2.0))
         # torch.where(eta_ij < eta_crit, torch.exp(- ((eta_ij - eta_crit)/eta_fold)**2), torch.ones_like(eta_ij))
 
         phi_ij = computeVanLeer(
@@ -155,7 +155,7 @@ def computeCrkSPHAccel_Func_i(
             gradV_j
         ) * factor
 
-        phi_ij = wp.max(wp.min(phi_ij, 1.0), 0.0) # Ensure phi is between 0 and 1
+        phi_ij = wp.max(wp.min(phi_ij, scalar_t(1.0)), scalar_t(0.0)) # Ensure phi is between 0 and 1
 
         # the term in crk is 
         # v_hat_ij = v_i - v_j - phi_ij/2 * (gradV_i + gradV_j) * x_ij
@@ -167,8 +167,8 @@ def computeCrkSPHAccel_Func_i(
         # or
         # v_dot_i = v_i - phi_ij/2 * gradV_i * x_ij
         # v_dot_j = v_j + phi_ij/2 * gradV_j * x_ij
-        v_corr_i = phi_ij / 2.0 * matmul(gradV_i, x_ij)
-        v_corr_j = phi_ij / 2.0 * matmul(gradV_j, x_ij)
+        v_corr_i = phi_ij / scalar_t(2.0) * matmul(gradV_i, x_ij)
+        v_corr_j = phi_ij / scalar_t(2.0) * matmul(gradV_j, x_ij)
 
         v_dot_i = vel_i #+ v_corr_i
         v_dot_j = vel_j #- v_corr_j
@@ -183,7 +183,7 @@ def computeCrkSPHAccel_Func_i(
             domainState,
             kernel_int,
             cs_i, cs_j,
-            alpha_i, referenceAlphas[j] if viscositySwitch else wp.float32(1.0),
+            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
             False, False)
         pi_j = computePi_actual(
@@ -196,7 +196,7 @@ def computeCrkSPHAccel_Func_i(
             domainState,
             kernel_int,
             cs_i, cs_j,
-            alpha_i, referenceAlphas[j] if viscositySwitch else wp.float32(1.0),
+            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
             True, False)
         
@@ -221,17 +221,17 @@ def computeCrkSPHAccel_Func_i(
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
-        gradw_ij = 0.5 * (gradw_i - gradw_j)
+        gradw_ij = scalar_t(0.5) * (gradw_i - gradw_j)
         # gradw_ij = gradw_i
         # gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
 
 
-        # omegaj = referenceOmegas[j] if useGradHTerms else wp.float32(1.0)
+        # omegaj = referenceOmegas[j] if useGradHTerms else scalar_t(1.0)
         # pressureTerm_j = Pj / (rhoj*rhoj) / omegaj
         
         u_ij = v_dot_j - v_dot_i
-        mu_ij = wp.dot(u_ij, x_ij) / (r_ij + 1e-14 * hi)
-        # mu_ij = ux_ij #/ (r_ij + 1e-14 * hi)
+        mu_ij = wp.dot(u_ij, x_ij) / (r_ij + scalar_t(1.0e-14) * hi)
+        # mu_ij = ux_ij #/ (r_ij + scalar_t(1.0e-14) * hi)
 
         # note that the term here should be multiplied with rho_i if it was a gradient operation
         # however, because we are computing the pressure force this cancel out with the division by rho_i in the pressure term, so we do not include it here
@@ -245,7 +245,7 @@ def computeCrkSPHAccel_Func_i(
         # pressureTerms_j = - P_j * gradw_j * Vi * Vj / mi
         # pressureTerm_ij = 0.5 * (pressureTerms_i + pressureTerms_j)
 
-        rho_bar = 0.5 * (rhoi + rhoj)
+        rho_bar = scalar_t(0.5) * (rhoi + rhoj)
         Q_i = pi_i * rho_bar / rhoj * rhoi
         Q_j = pi_j * rho_bar
 
@@ -278,16 +278,16 @@ def computeCrkSPHAccel_Func_Adjacency(
 
     mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
     
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    queryEnergies: wp.array(dtype = wp.float32), referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
-    queryCs: wp.array(dtype = wp.float32), referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
+    queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
-    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
-    accel: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)) # type: ignore
+    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
+    accel: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)) # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if opInt != 0:
@@ -301,7 +301,7 @@ def computeCrkSPHAccel_Func_Adjacency(
     vel_i = queryVelocities[i]
 
     cs_i = queryCs[i] 
-    alpha_i = queryAlphas[i] if viscositySwitch else wp.float32(1.0)
+    alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
     u_i = queryEnergies[i]
     P_i = queryPressures[i] 
     gradV_i = queryVelocityTensor[i]
@@ -360,18 +360,18 @@ def computeCrkSPHAccel_Kernel(
     
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    queryEnergies: wp.array(dtype = wp.float32), referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
-    queryCs: wp.array(dtype = wp.float32), referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
+    queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
 
-    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)),# type: ignore
+    queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
     # The last parameter is always the output array and should not be changed
-    accel : wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
+    accel : wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 ):                                                                                    
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
@@ -451,15 +451,15 @@ def computeCrkSPHAccelWarp(
             
             queryEnergies_ = queryEnergies if queryEnergies is not None else (queryParticles.internalEnergies if hasattr(queryParticles, 'internalEnergies') else None)
             queryVelocities_ = queryVelocities if queryVelocities is not None else (queryParticles.velocities if hasattr(queryParticles, 'velocities') else None)
-            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            queryAlphas_ = queryAlphas if queryAlphas is not None else (queryParticles.alphas if hasattr(queryParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            queryPressures_ = queryPressures if queryPressures is not None else (queryParticles.pressures if hasattr(queryParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
+            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            queryAlphas_ = queryAlphas if queryAlphas is not None else (queryParticles.alphas if hasattr(queryParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            queryPressures_ = queryPressures if queryPressures is not None else (queryParticles.pressures if hasattr(queryParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
 
             referenceEnergies_ = referenceEnergies if referenceEnergies is not None else (referenceParticles.internalEnergies if hasattr(referenceParticles, 'internalEnergies') else None)
             referenceVelocities_ = referenceVelocities if referenceVelocities is not None else (referenceParticles.velocities if hasattr(referenceParticles, 'velocities') else None)
-            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            referenceAlphas_ = referenceAlphas if referenceAlphas is not None else (referenceParticles.alphas if hasattr(referenceParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            referencePressures_ = referencePressures if referencePressures is not None else (referenceParticles.pressures if hasattr(referenceParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
+            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            referenceAlphas_ = referenceAlphas if referenceAlphas is not None else (referenceParticles.alphas if hasattr(referenceParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            referencePressures_ = referencePressures if referencePressures is not None else (referenceParticles.pressures if hasattr(referenceParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
 
             if queryAlphas is not None or (hasattr(queryParticles, 'alphas') and queryParticles.alphas is not None):
                 viscositySwitch = True

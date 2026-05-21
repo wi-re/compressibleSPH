@@ -15,7 +15,7 @@ def evaluateOptimalSupport(
         supportScheme: SupportScheme = SupportScheme.Scatter,
         adjacency: Optional[AdjacencyList] = None,
 ):
-    if CompressibleSPHConfig.adaptiveSupportScheme == AdaptiveSupportScheme.Owen:
+    if compParams.adaptiveSupportScheme == AdaptiveSupportScheme.Owen:
         return evaluateOptimalSupportOwen(
             particles = particleState,
             config = config,
@@ -25,7 +25,7 @@ def evaluateOptimalSupport(
             supportScheme = supportScheme,
             verbose = False
         )
-    elif CompressibleSPHConfig.adaptiveSupportScheme == AdaptiveSupportScheme.Monaghan:
+    elif compParams.adaptiveSupportScheme == AdaptiveSupportScheme.Monaghan:
         return evaluateOptimalSupportMonaghan(
             particleState = particleState,
             config = config,
@@ -33,5 +33,8 @@ def evaluateOptimalSupport(
             supportScheme = supportScheme,
             adjacency = adjacency
         )
+    elif compParams.adaptiveSupportScheme == AdaptiveSupportScheme.NoScheme:
+        # print('Adaptive support scheme set to NoneSupport, skipping optimal support evaluation')
+        return particleState.densities, particleState.supports, adjacency, None, None
     else:
-        raise ValueError(f"Unsupported adaptive support scheme: {CompressibleSPHConfig.adaptiveSupportScheme}")
+        raise ValueError(f"Unsupported adaptive support scheme: {compParams.adaptiveSupportScheme}")

@@ -8,19 +8,20 @@ from sphWarpCore import *
 
 from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
 
+
 @wp.func
 def computePsi0_Func_i(
     # General Shape Parameters and indices
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
 
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -36,13 +37,13 @@ def computePsi0_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(dim_t, dim_t), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, omega_i: wp.float32, referenceOmegas: wp.array(dtype = wp.float32),  # type: ignore
+    useGradHTerms: wp.bool, omega_i: scalar_t, referenceOmegas: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
+    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
 ):
     # Initialize the output value
@@ -70,12 +71,12 @@ def computePsi0_Func_i(
         
         # h = particles.supports[i]
         h = hi
-        hReferenceFactor_W = 1.0**(-wp.float32(dim))
-        hActualFactor_W = h**(-wp.float32(dim))
+        hReferenceFactor_W = scalar_t(1.0)**(-scalar_t(dim))
+        hActualFactor_W = h**(-scalar_t(dim))
         hScaling_W = hReferenceFactor_W / hActualFactor_W
         
-        hReferenceFactor_WH = 1.0**(-wp.float32(dim + 1))
-        hActualFactor_WH = h**(-wp.float32(dim + 1))
+        hReferenceFactor_WH = scalar_t(1.0)**(-scalar_t(dim + 1))
+        hActualFactor_WH = h**(-scalar_t(dim + 1))
         hScaling_WH = hReferenceFactor_WH / hActualFactor_WH
         
         # print(particles.positions.shape, i.shape, j.shape)
@@ -125,7 +126,7 @@ def computePsi0_Func_Adjacency(
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if opInt != 0:
         if not checkDirectionality_i(ki, opInt):
-            return wp.float32(0.0), wp.float32(0.0)
+            return scalar_t(0.0), scalar_t(0.0)
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
@@ -184,8 +185,8 @@ def computePsi0_Kernel(
     # Do not change the parameters above
     
     # The last parameter is always the output array and should not be changed
-    output_psi0 : wp.array(dtype = wp.float32), # type: ignore
-    output_psi0_H : wp.array(dtype = wp.float32) # type: ignore
+    output_psi0 : wp.array(dtype = scalar_t), # type: ignore
+    output_psi0_H : wp.array(dtype = scalar_t) # type: ignore
 ):                                                                                    
     i = wp.tid()
     numParticles = queryState.positions.shape[0]

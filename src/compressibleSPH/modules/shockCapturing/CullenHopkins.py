@@ -78,7 +78,7 @@ def computeHopkinsUpdate(
     alpha_max = switchConfig.alpha_max
     # alpha_max = getSetConfig(config, 'diffusionSwitch', 'alpha_max', 2) # from CRKSPH
     # The 1/xi is based on Hopkins' ATHENA paper after eq. F17
-    f_kern      = 1/sphKernel_xi(simulationConfig.kernel.value, particleState.positions.shape[1])
+    f_kern      = 1/float(sphKernel_xi(simulationConfig.kernel.value, particleState.positions.shape[1]))
     # f_kern = 1/3 # hard coded result for cubic spline from Hopkins 2015, Hopkins also uses h=1 as the cutoff so these terms _should_ be equivalent?
     # f_kern = 1
     beta_c = switchConfig.beta_c

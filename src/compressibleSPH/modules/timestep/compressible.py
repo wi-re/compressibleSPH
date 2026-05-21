@@ -47,7 +47,7 @@ def computeTimestep(
         # dx = L / (nx * 2)
         h = volumeToSupportHelper(config.dx, config.targetNeighbors, config.dim)
         h = system.state.supports.min()
-        xi = sphKernel_xi(config.kernel.value, config.dim)
+        xi = float(sphKernel_xi(config.kernel.value, config.dim))
         # xi = 1
 
         dt_cfl_left = targetCFL * h / (c_s * xi)

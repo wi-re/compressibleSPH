@@ -110,4 +110,16 @@ def evaluateOptimalSupportOwen(
                 print('Stopping Early')
             # print('Stopping Early')
             break
-    return psi_0_H, hs[-1], adjacency, psis, hs
+
+    densities = warpOperation(
+        particles,
+        OperationProperties(
+            kernel = config.kernel,
+            operation = WarpOperation.Density,
+            supportMode = supportScheme,
+        ),
+        domain = config.domain,
+        adjacency = adjacency
+    )
+    
+    return densities, hs[-1], adjacency, psis, hs

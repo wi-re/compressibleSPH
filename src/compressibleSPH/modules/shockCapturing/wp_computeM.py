@@ -17,13 +17,13 @@ def computeM_Func_i(
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
 
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -39,13 +39,13 @@ def computeM_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, Viscosity_i: wp.float32, referenceViscositys: wp.array(dtype = wp.float32),  # type: ignore
+    useGradHTerms: wp.bool, Viscosity_i: scalar_t, referenceViscositys: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
+    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
     # Dummy value to allow allocation
     outputValue: Any, # type: ignore
@@ -167,7 +167,7 @@ def computeM_Kernel(
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
     # The last parameter is always the output array and should not be changed
-    outputValues : wp.array(dtype = matrix(shape=(Any, Any), dtype=wp.float32)) # type: ignore
+    outputValues : wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)) # type: ignore
 ):                                                                                    
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
@@ -210,7 +210,7 @@ def computeMWarp(
             device = queryParticles.positions.device
             outputSize = queryParticles.positions.shape[0]
             # outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
-            outputDtype = matrix(shape=(queryParticles.positions.shape[1], queryParticles.positions.shape[1]), dtype=wp.float32) # type: ignore
+            outputDtype = matrix(shape=(queryParticles.positions.shape[1], queryParticles.positions.shape[1]), dtype=scalar_t) # type: ignore
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
         

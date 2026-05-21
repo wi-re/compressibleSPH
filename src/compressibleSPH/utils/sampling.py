@@ -55,7 +55,7 @@ def buildPointCloud(nx, domain: DomainDescription = None, targetNeighbors = 16, 
 
 
 
-
+    dtype = spaces[0].dtype
         # print(f'dim: {d}, nx: {nx}, dx: {dx}, min: {x.min()}, max: {x.max()}, periodic: {periodicity[d]}, dxActual: {x[1] - x[0]}')
     # print(dxs)
     grid = torch.meshgrid(*spaces, indexing='ij')

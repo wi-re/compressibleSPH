@@ -10,8 +10,8 @@ from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
 
 @wp.func 
-def sgn(x: wp.float32) -> wp.float32:
-    return wp.float32(1.0) if x > 0 else (wp.float32(-1.0) if x < 0 else wp.float32(0.0))
+def sgn(x: scalar_t) -> scalar_t:
+    return scalar_t(1.0) if x > 0 else (scalar_t(-1.0) if x < 0 else scalar_t(0.0))
 
 @wp.func
 def computeCompSPHBalanceTerm_Func_i(
@@ -19,13 +19,13 @@ def computeCompSPHBalanceTerm_Func_i(
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
 
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -41,21 +41,21 @@ def computeCompSPHBalanceTerm_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, omega_i: wp.float32, referenceOmegas: wp.array(dtype = wp.float32),  # type: ignore
+    useGradHTerms: wp.bool, omega_i: scalar_t, referenceOmegas: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
+    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
-    vel_i: vector(length=Any, dtype=wp.float32), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    u_i: wp.float32, referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
+    vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    u_i: scalar_t, referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
 
-    P_i: wp.float32, referencePressures: wp.array(dtype = wp.float32), # type: ignore
-    ap_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    av_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    energyScheme_int: wp.int32, dt: wp.float32, gamma: wp.float32,  # type: ignore
+    P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
+    ap_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    av_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    energyScheme_int: wp.int32, dt: scalar_t, gamma: scalar_t,  # type: ignore
 
     f_ij : wp.array(dtype = Any) # type: ignore
 ):
@@ -84,61 +84,61 @@ def computeCompSPHBalanceTerm_Func_i(
 
         deltaE_thermal  = mi * wp.dot(v_ji, a_ij) * dt
 
-        f = wp.float32(0.5)
+        f = scalar_t(0.5)
 
         if energyScheme_int == wp.static(EnergyScheme.equalWork.value):
-            f = 0.5
+            f = scalar_t(0.5)
         elif energyScheme_int == wp.static(EnergyScheme.PdV.value):
         # raise NotImplementedError # Doesnt work with the current multistep code        
             f = (P_i / (rhoi*rhoi)) / (P_i / (rhoi * rhoi) + P_j / (rhoj * rhoj))
         elif energyScheme_int == wp.static(EnergyScheme.diminishing.value):
             u_ji_norm = wp.abs(u_ji)        
-            f = 0.5 * (1.0 + (u_ji * sgn(deltaE_thermal)) / (u_ji_norm + 1.0 / (1.0 + u_ji_norm)))
+            f = scalar_t(0.5) * (scalar_t(1.0) + (u_ji * sgn(deltaE_thermal)) / (u_ji_norm + scalar_t(1.0) / (scalar_t(1.0) + u_ji_norm)))
         elif energyScheme_int == wp.static(EnergyScheme.monotonic.value):
-            A = deltaE_thermal / (u_ji + 1e-14)
+            A = deltaE_thermal / (u_ji + scalar_t(1.0e-14))
             # B = torch.where(A >= 0, A / m_i, A / m_j)
-            B = A / mi if A >= 0.0 else A / mj
+            B = A / mi if A >= scalar_t(0.0) else A / mj
             
             # term_1 = torch.maximum(torch.zeros_like(B), sgn(B))
-            term_1 = wp.max(wp.float32(0.0), sgn(B))
-            term_2 = mi / (deltaE_thermal + 1e-14) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
+            term_1 = wp.max(scalar_t(0.0), sgn(B))
+            term_2 = mi / (deltaE_thermal + scalar_t(1.0e-14)) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
             
             # f_ij = torch.where(torch.abs(B) <= 1, term_1, term_2)
-            f = term_1 if wp.abs(B) <= 1.0 else term_2
+            f = term_1 if wp.abs(B) <= scalar_t(1.0) else term_2
         elif energyScheme_int == wp.static(EnergyScheme.hybrid.value):
             u_ji_norm = wp.abs(u_ji)
-            A = deltaE_thermal / (u_ji + 1e-14)
+            A = deltaE_thermal / (u_ji + scalar_t(1.0e-14))
             # B = torch.where(A >= 0, A / m_i, A / m_j)
-            B = A / mi if A >= 0.0 else A / mj
+            B = A / mi if A >= scalar_t(0.0) else A / mj
             
             # term_1 = torch.maximum(torch.zeros_like(B), sgn(B))
-            term_1 = wp.max(wp.float32(0.0), sgn(B))
-            term_2 = mi / (deltaE_thermal + 1e-14) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
+            term_1 = wp.max(scalar_t(0.0), sgn(B))
+            term_2 = mi / (deltaE_thermal + scalar_t(1.0e-14)) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
             
             # f_ij_mono = torch.where(torch.abs(B) <= 1, term_1, term_2)
-            f_ij_mono = term_1 if wp.abs(B) <= 1.0 else term_2
-            f_ij_sm = 0.5 * (1.0 + (u_ji * sgn(deltaE_thermal)) / (u_ji_norm + 1.0 / (1.0 + u_ji_norm)))
+            f_ij_mono = term_1 if wp.abs(B) <= scalar_t(1.0) else term_2
+            f_ij_sm = scalar_t(0.5) * (scalar_t(1.0) + (u_ji * sgn(deltaE_thermal)) / (u_ji_norm + scalar_t(1.0) / (scalar_t(1.0) + u_ji_norm)))
             
-            chi = wp.abs(u_ji) / (wp.abs(u_i) + wp.abs(u_j) + 1e-14)
+            chi = wp.abs(u_ji) / (wp.abs(u_i) + wp.abs(u_j) + scalar_t(1.0e-14))
             # chi = 1-chi
-            f = chi * f_ij_mono + (1.0 - chi) * f_ij_sm
+            f = chi * f_ij_mono + (scalar_t(1.0) - chi) * f_ij_sm
         elif energyScheme_int == wp.static(EnergyScheme.CRK.value):
             s_i = P_i / wp.pow(rhoi, gamma)
             s_j = P_j / wp.pow(rhoj, gamma)
             s_min = wp.min(wp.abs(s_i), wp.abs(s_j))
             s_max = wp.max(wp.abs(s_i), wp.abs(s_j))
 
-            f = wp.float32(0.5)
+            f = scalar_t(0.5)
             
-            maskA = wp.abs(s_i - s_j) == 0.0
+            maskA = wp.abs(s_i - s_j) == scalar_t(0.0)
 
             # maskB = torch.logical_or(torch.logical_and(deltaE_thermal >= 0, s_i >= s_j), torch.logical_and(deltaE_thermal < 0, s_i < s_j))
-            maskB = (deltaE_thermal >= 0.0 and s_i >= s_j) or (deltaE_thermal < 0.0 and s_i < s_j)
+            maskB = (deltaE_thermal >= scalar_t(0.0) and s_i >= s_j) or (deltaE_thermal < scalar_t(0.0) and s_i < s_j)
 
             # maskC = torch.logical_or(torch.logical_and(deltaE_thermal >= 0, s_i < s_j), torch.logical_and(deltaE_thermal < 0, s_i >= s_j))
-            maskC = (deltaE_thermal >= 0.0 and s_i < s_j) or (deltaE_thermal < 0.0 and s_i >= s_j)
+            maskC = (deltaE_thermal >= scalar_t(0.0) and s_i < s_j) or (deltaE_thermal < scalar_t(0.0) and s_i >= s_j)
 
-            f_ijA = 0.5
+            f_ijA = scalar_t(0.5)
             f_ijB = s_min / (s_min + s_max)
             f_ijC = s_max / (s_min + s_max)
                 
@@ -170,13 +170,13 @@ def computeCompSPHBalanceTerm_Func_Adjacency(
 
     mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
     
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    queryEnergies: wp.array(dtype = wp.float32), referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
     
-    queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
-    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    energyScheme_int: wp.int32, dt: wp.float32, gamma: wp.float32,  # type: ignore
+    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
+    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    energyScheme_int: wp.int32, dt: scalar_t, gamma: scalar_t,  # type: ignore
 
     f_ij : wp.array(dtype = Any), # type: ignore
 ):
@@ -244,13 +244,13 @@ def computeCompSPHBalanceTerm_Kernel(
     
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    queryEnergies: wp.array(dtype = wp.float32), referenceEnergies: wp.array(dtype = wp.float32), # type: ignore
-    queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
+    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
 
-    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    energyScheme_int: wp.int32, dt: wp.float32, gamma: wp.float32, # type: ignore
+    pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    energyScheme_int: wp.int32, dt: scalar_t, gamma: scalar_t, # type: ignore
 
     # The last parameter is always the output array and should not be changed
     f_ij : wp.array(dtype = Any), # type: ignore
@@ -282,8 +282,8 @@ def computeCompSPHBalanceTermWarp(
     domain: DomainDescription,
     
     energyScheme: EnergyScheme,
-    dt: float,
-    gamma: float,
+    dt: scalar_t,
+    gamma: scalar_t,
 
     pairWise_pressureAccel: torch.Tensor, #ap_ij
     pairWise_viscosityAccel: torch.Tensor, #av_ij
@@ -367,7 +367,7 @@ def computeCompSPHBalanceTermWarp(
                     queryEnergies_, referenceEnergies_,
                     queryPressures_, referencePressures_,
                     pairWise_pressureAccel, pairWise_viscosityAccel,
-                    wp.int32(energyScheme.value), wp.float32(dt), wp.float32(gamma)
+                    wp.int32(energyScheme.value), scalar_t(dt), scalar_t(gamma)
                 ),
             )
 

@@ -15,13 +15,13 @@ def computeViscosity_Func_i(
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
 
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -37,19 +37,19 @@ def computeViscosity_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, Viscosity_i: wp.float32, referenceViscositys: wp.array(dtype = wp.float32),  # type: ignore
+    useGradHTerms: wp.bool, Viscosity_i: scalar_t, referenceViscositys: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
+    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
-    vel_i: vector(length=Any, dtype=wp.float32), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
+    vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 
-    individual_cs: wp.bool, cs_i: wp.float32, referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, alpha_i: wp.float32, referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    explicitPressure: wp.bool, P_i: wp.float32, referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    individual_cs: wp.bool, cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, alpha_i: scalar_t, referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
 
     # Dummy value to allow allocation
@@ -79,12 +79,12 @@ def computeViscosity_Func_i(
             hi, hj,
             mi, mj,
             rhoi, rhoj,
-            explicitPressure, P_i, referencePressures[j] if explicitPressure else wp.float32(0.0),
+            explicitPressure, P_i, referencePressures[j] if explicitPressure else scalar_t(0.0),
             vel_i, vel_j,
             domainState,
             kernel_int,
             cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
-            alpha_i, referenceAlphas[j] if viscositySwitch else wp.float32(1.0),
+            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
             False)
         
@@ -102,7 +102,7 @@ def computeViscosity_Func_i(
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
         u_ij = vel_i - vel_j
         ux_ij = wp.dot(u_ij, x_ij)
-        mu_ij = ux_ij /(r_ij + 1e-14 * hi)
+        mu_ij = ux_ij /(r_ij + scalar_t(1.0e-14) * hi)
 
         out += apparentVolume * pi * gradw_ij * mu_ij
         
@@ -126,10 +126,10 @@ def computeViscosity_Func_Adjacency(
 
     mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
     
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    individual_cs: wp.bool, queryCs: wp.array(dtype = wp.float32), referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    explicitPressure: wp.bool, queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
     outputValue : Any, # type: ignore
 ):
@@ -145,8 +145,8 @@ def computeViscosity_Func_Adjacency(
     vel_i = queryVelocities[i]
 
     cs_i = queryCs[i] if individual_cs else viscosityParams.c_s
-    alpha_i = queryAlphas[i] if viscositySwitch else wp.float32(1.0)
-    P_i = queryPressures[i] if explicitPressure else wp.float32(0.0)
+    alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
+    P_i = queryPressures[i] if explicitPressure else scalar_t(0.0)
 
     out = zero_like_warp(outputValue)
     for o in range(numOffsets):
@@ -203,13 +203,13 @@ def computeViscosity_Kernel(
     
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=wp.float32)), # type: ignore
-    individual_cs: wp.bool, queryCs: wp.array(dtype = wp.float32), referenceCs: wp.array(dtype = wp.float32), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = wp.float32), referenceAlphas: wp.array(dtype = wp.float32), # type: ignore
-    explicitPressure: wp.bool, queryPressures: wp.array(dtype = wp.float32), referencePressures: wp.array(dtype = wp.float32), # type: ignore
+    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
     # The last parameter is always the output array and should not be changed
-    outputValues : wp.array(dtype = vector(length=Any, dtype=wp.float32)) # type: ignore
+    outputValues : wp.array(dtype = vector(length=Any, dtype=scalar_t)) # type: ignore
 ):                                                                                    
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
@@ -270,14 +270,14 @@ def computeViscosityWarp(
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             queryVelocities_ = queryVelocities if queryVelocities is not None else (queryParticles.velocities if hasattr(queryParticles, 'velocities') else None)
-            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            queryAlphas_ = queryAlphas if queryAlphas is not None else (queryParticles.alphas if hasattr(queryParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            queryPressures_ = queryPressures if queryPressures is not None else (queryParticles.pressures if hasattr(queryParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
+            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            queryAlphas_ = queryAlphas if queryAlphas is not None else (queryParticles.alphas if hasattr(queryParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            queryPressures_ = queryPressures if queryPressures is not None else (queryParticles.pressures if hasattr(queryParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
 
             referenceVelocities_ = referenceVelocities if referenceVelocities is not None else (referenceParticles.velocities if hasattr(referenceParticles, 'velocities') else None)
-            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            referenceAlphas_ = referenceAlphas if referenceAlphas is not None else (referenceParticles.alphas if hasattr(referenceParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
-            referencePressures_ = referencePressures if referencePressures is not None else (referenceParticles.pressures if hasattr(referenceParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.float32, device=device))
+            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            referenceAlphas_ = referenceAlphas if referenceAlphas is not None else (referenceParticles.alphas if hasattr(referenceParticles, 'alphas') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            referencePressures_ = referencePressures if referencePressures is not None else (referenceParticles.pressures if hasattr(referenceParticles, 'pressures') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
 
             if queryAlphas is not None or (hasattr(queryParticles, 'alphas') and queryParticles.alphas is not None):
                 viscositySwitch = True

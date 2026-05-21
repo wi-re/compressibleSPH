@@ -14,7 +14,7 @@ class sodInitialState(NamedTuple):
     rho: float
     v: float
 
-
+from compressibleSPH.enumTypes import AdaptiveSupportScheme
 from compressibleSPH.modules.timestep.compressible import computeTimestep
 def buildSod1D(
     # nx: int,
@@ -24,7 +24,8 @@ def buildSod1D(
     rightState: sodInitialState,
     gamma: float,
     config: SimulationConfig,
-    smoothIC: bool = False
+    smoothIC: bool = False,
+    adaptiveSupportScheme: AdaptiveSupportScheme = AdaptiveSupportScheme.Monaghan,
 ):
     
     nx = config.nx 
@@ -55,10 +56,10 @@ def buildSod1D(
 
 
 
-    combinedMasses = torch.where(tags == 0, leftMass, rightMass)
+    combinedMasses = torch.where(tags == 0, leftMass, rightMass).to(combinedPositions.dtype)
     combinedSupports = torch.where(tags[:, None] == 0, particles_l.supports.min(), particles_r.supports.min())[:,0]
-    combinedDensities = torch.where(tags == 0, leftState.rho, rightState.rho)
-    combinedVelocities = torch.where(tags[:, None] == 0, float(leftState.v), float(rightState.v))
+    combinedDensities = torch.where(tags == 0, leftState.rho, rightState.rho).to(combinedPositions.dtype)
+    combinedVelocities = torch.where(tags[:, None] == 0, float(leftState.v), float(rightState.v)).to(combinedPositions.dtype)
     combinedKinds = torch.zeros_like(tags)
     combinedMaterials = tags
     combinedUIDs = torch.cat([
@@ -113,7 +114,7 @@ def buildSod1D(
         ),
         domain = config.domain,
     )
-    compParams = CompressibleSPHConfig(gamma=gamma, adaptiveSupportCorrections=True, adaptiveSupportIterations=16, adaptiveSupportThreshold=1e-3)
+    compParams = CompressibleSPHConfig(gamma=gamma, adaptiveSupportCorrections=True, adaptiveSupportIterations=16, adaptiveSupportThreshold=1e-3, adaptiveSupportScheme=adaptiveSupportScheme)
 
     rho_optimal, h_optimal, adjacency, rhos_iter, supports_iter = evaluateOptimalSupport(particleState, config, compParams, supportScheme = SupportScheme.Gather)
     particleState.supports = h_optimal
@@ -186,7 +187,7 @@ def buildSod1D(
 
         x = particleState.positions[:,0]
         u = torch.where(particleState.positions[:,0] > 0., ramped(left_u, right_u, x - 0.5), u)
-        u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x + 0.5), u)
+        u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x + 0.5), u).to(particleState.densities.dtype)
         p = torch.where(particleState.positions[:,0] > 0., ramped(left_p, right_p, x-0.5), P_initial)
 
         # left_A = leftState.p / leftState.rho**gamma
@@ -198,7 +199,7 @@ def buildSod1D(
 
         # x = torch.where(particleState.positions[:,0] < 0., particleState.positions[:,0] + 0.5, particleState.positions[:,0] - 0.5)
         # u = torch.where(particleState.positions[:,0] < 0., ramped(right_u, left_u, x), u)
-        p = torch.where(particleState.positions[:,0] < 0., ramped(right_p, left_p, x+0.5), p)
+        p = torch.where(particleState.positions[:,0] < 0., ramped(right_p, left_p, x+0.5), p).to(particleState.densities.dtype)
 
         # u = 1 / (gamma - 1) * (p / eosRho)
         

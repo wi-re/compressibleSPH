@@ -18,5 +18,5 @@ def mergeParticles(particles_l, particles_r):
 def plotToAxis1D(ax, positions, values, title = '', **kwargs):
     order = torch.argsort(positions[:, 0])
 
-    ax.scatter(positions.cpu(), values.cpu(), s = 1, **kwargs)
+    ax.scatter(positions.cpu(), values.cpu(), s = 1, **kwargs, label = title if title else None)
     ax.set_title(title)

@@ -89,12 +89,12 @@ def compSPH_step(
     else:
         gradHState = None
 
-    # currentState.alphas, switchState = computeViscositySwitchTerms(
-    #     dt,
-    #     currentState, 
-    #     config, compParams, 
-    #     SupportScheme.SuperSymmetric, 
-    #     adjacency)   
+    currentState.alphas, switchState = computeViscositySwitchTerms(
+        dt,
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
 
 
     dvdt, currentState.ap_ij, currentState.av_ij = computeCompSPHAccelWarp(
@@ -160,13 +160,13 @@ def compSPH_step(
     )
     # particles.alpha0s, switchState = updateViscositySwitch(particles, wrappedKernel, neighbors.get('noghost'), SupportScheme.Gather, config, dt, dvdt, switchState)
 
-    # currentState.alpha0s, switchState = updateViscositySwitch(
-    #     switchState,
-    #     dt, dvdt,
-    #     currentState, 
-    #     config, compParams, 
-    #     SupportScheme.SuperSymmetric, 
-    #     adjacency)   
+    currentState.alpha0s, switchState = updateViscositySwitch(
+        switchState,
+        dt, dvdt,
+        currentState, 
+        config, compParams, 
+        SupportScheme.SuperSymmetric, 
+        adjacency)   
 
 
     drhodt = computeMomentumConsistent(
