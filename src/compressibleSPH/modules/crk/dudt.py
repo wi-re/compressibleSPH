@@ -196,7 +196,7 @@ def computeCrkSPHdudt_Func_i(
         Qj = pi_j * rho_bar
 
         pTerm = - Pj * dot * Vi * Vj / mi
-        vTerm = - Qj * mu_ij * dot * Vi * Vj / mi
+        vTerm = - Qi * mu_ij * dot * Vi * Vj / mi
 
         # apparentVolume = mj/rhoj
         # pTerm = - apparentVolume * pressureTerm_i * rhoj * dot

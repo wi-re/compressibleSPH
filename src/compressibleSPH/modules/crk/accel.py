@@ -211,7 +211,7 @@ def computeCrkSPHAccel_Func_i(
             gradw_i = matmul(Li, gradw_i)
 
         _, Aj, Bj, gradAj, gradBj = getCRK_j(correctionData, j)
-        gradw_j = computeKernelGradientCRK(
+        gradw_j = -computeKernelGradientCRK(
             xj, xi,
             hj, hi,
             kernel_int, wp.uint32(12), # scatter mode for gradW
@@ -221,7 +221,7 @@ def computeCrkSPHAccel_Func_i(
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
-        gradw_ij = scalar_t(0.5) * (gradw_i - gradw_j)
+        gradw_ij = scalar_t(0.5) * (gradw_i + gradw_j)
         # gradw_ij = gradw_i
         # gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
 
@@ -243,7 +243,7 @@ def computeCrkSPHAccel_Func_i(
 
         # pressureTerms_i = - P_i * gradw_i * Vi * Vj / mi
         # pressureTerms_j = - P_j * gradw_j * Vi * Vj / mi
-        # pressureTerm_ij = 0.5 * (pressureTerms_i + pressureTerms_j)
+        # pressureTerm_ij = (pressureTerms_i + pressureTerms_j)
 
         rho_bar = scalar_t(0.5) * (rhoi + rhoj)
         Q_i = pi_i * rho_bar / rhoj * rhoi
@@ -252,7 +252,7 @@ def computeCrkSPHAccel_Func_i(
         viscosityTerm_ij = -(Q_i + Q_j) * Vj * mu_ij * gradw_ij * Vi / mi# *0.0
         # viscosityTerms_i = - Q_i * Vj * mu_ij * gradw_i * Vi / mi
         # viscosityTerms_j = - Q_j * Vj * mu_ij * gradw_j * Vi / mi
-        # viscosityTerm_ij = 0.5 * (viscosityTerms_i + viscosityTerms_j)
+        # viscosityTerm_ij = (viscosityTerms_i + viscosityTerms_j)
         # viscosityTerm_ij = -(pi_i + pi_j) * gradw_ij * Vi * Vj / mi * mu_ij
 
         viscosityAccel_ij[jj] = viscosityTerm_ij
