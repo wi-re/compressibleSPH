@@ -6,47 +6,10 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
+from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi, sphKernelScale
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
 
-@wp.func
-def limiterVL(x: scalar_t):
-    if x <= scalar_t(0.0):
-        return scalar_t(0.0)
-    x = wp.min(x, scalar_t(1.0e6))
-    vL = scalar_t(2.0) / (scalar_t(1.0) + x)
-    return x * vL*vL
-    # return torch.where(x > 0, x * vL**2, 0.0)
-
-@wp.func
-def computeVanLeer(
-    xij_ : vector(length=Any, dtype=scalar_t), # type: ignore
-    DvDxi : matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
-    DvDxj: matrix(shape=(Any, Any), dtype=scalar_t) # type: ignore
-):
-    xij = scalar_t(0.5) * (xij_)
-    # gradi = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxi, xij), xij)
-    gradi = wp.dot(matmul(DvDxi, xij), xij)
-    # gradj = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxj, xij), xij)
-    gradj = wp.dot(matmul(DvDxj, xij), xij)
-
-    # rif = gradj.sgn() * gradj.abs().clamp(min = 1e-30)
-    rif = wp.sign(gradj) * wp.max(wp.abs(gradj), scalar_t(1.0e-30))
-    # rjf = gradi.sgn() * gradi.abs().clamp(min = 1e-30)
-    rjf = wp.sign(gradi) * wp.max(wp.abs(gradi), scalar_t(1.0e-30))
-    denom_i = wp.max(wp.abs(rif), scalar_t(1.0e-30))
-    denom_j = wp.max(wp.abs(rjf), scalar_t(1.0e-30))
-    if rif < scalar_t(0.0):
-        denom_i = -denom_i
-    if rjf < scalar_t(0.0):
-        denom_j = -denom_j
-    ri = gradi / denom_i
-    rj = gradj / denom_j
-    rij = wp.min(ri, rj)
-
-    # rij = (gradi + 1e-30) / (gradj + 1e-30)
-    phi = limiterVL(rij)
-    return phi
+from .limiter import computeVanLeer, crkLimiter
 
 @wp.func
 def computeCrkSPHAccel_Func_i(
@@ -130,25 +93,14 @@ def computeCrkSPHAccel_Func_i(
         phi_ij = scalar_t(1.0)
         # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
         # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
-        w_xi = sphKernel_xi(kernel_int, dim)
-        # xi = Kernel_xi(config['kernel'], particles.positions.shape[0])
-        # eta_max = getSetConfig(config, 'CRKSPH', 'eta_max', 4.0)
-        eta_max = w_xi
-        # eta_max = 1.0
-        eta_crit = scalar_t(1.0)/scalar_t(4.0)  * eta_max
-        eta_fold = scalar_t(0.2)  * eta_max
-        eta_i = x_ij/hi * eta_max
-        eta_j = x_ij/hj * eta_max
-            
-        eta_i_norm = safe_sqrt(wp.dot(eta_i, eta_i))
-        eta_j_norm = safe_sqrt(wp.dot(eta_j, eta_j))
-        eta_ij = wp.min(eta_i_norm, eta_j_norm)
-    
-        factor = scalar_t(1.0)
-        if eta_ij < eta_crit:
-            factor = wp.exp(- ((eta_ij - eta_crit)/eta_fold)**scalar_t(2.0))
         # torch.where(eta_ij < eta_crit, torch.exp(- ((eta_ij - eta_crit)/eta_fold)**2), torch.ones_like(eta_ij))
-
+        factor = crkLimiter(
+            x_ij,
+            hi,
+            hj,
+            kernel_int,
+            dim
+        )
         phi_ij = computeVanLeer(
             x_ij,
             gradV_i,
@@ -170,8 +122,8 @@ def computeCrkSPHAccel_Func_i(
         v_corr_i = phi_ij / scalar_t(2.0) * matmul(gradV_i, x_ij)
         v_corr_j = phi_ij / scalar_t(2.0) * matmul(gradV_j, x_ij)
 
-        v_dot_i = vel_i #+ v_corr_i
-        v_dot_j = vel_j #- v_corr_j
+        v_dot_i = vel_i - v_corr_i
+        v_dot_j = vel_j + v_corr_j
 
         pi_i = computePi_actual(
             xi, xj, 

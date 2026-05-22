@@ -9,7 +9,7 @@ from sphWarpCore import *
 from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
 
-from .accel import computeVanLeer
+from .limiter import computeVanLeer, crkLimiter
 
 @wp.func
 def computeCrkSPHdudt_Func_i(
@@ -91,24 +91,13 @@ def computeCrkSPHdudt_Func_i(
         phi_ij = scalar_t(1.0)
         # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
         # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
-        w_xi = sphKernel_xi(kernel_int, dim)
-        # xi = Kernel_xi(config['kernel'], particles.positions.shape[0])
-        # eta_max = getSetConfig(config, 'CRKSPH', 'eta_max', 4.0)
-        eta_max = w_xi
-        # eta_max = 1.0
-        eta_crit = scalar_t(1.0)/scalar_t(4.0)  * eta_max
-        eta_fold = scalar_t(0.2)  * eta_max
-        eta_i = x_ij/hi * eta_max
-        eta_j = x_ij/hj * eta_max
-            
-        eta_i_norm = safe_sqrt(wp.dot(eta_i, eta_i))
-        eta_j_norm = safe_sqrt(wp.dot(eta_j, eta_j))
-        eta_ij = wp.min(eta_i_norm, eta_j_norm)
-    
-        factor = scalar_t(1.0)
-        if eta_ij < eta_crit:
-            factor = wp.exp(- ((eta_ij - eta_crit)/eta_fold)**scalar_t(2.0))
-        # torch.where(eta_ij < eta_crit, torch.exp(- ((eta_ij - eta_crit)/eta_fold)**2), torch.ones_like(eta_ij))
+        factor = crkLimiter(
+            x_ij,
+            hi,
+            hj,
+            kernel_int,
+            dim
+        )
 
         phi_ij = computeVanLeer(
             x_ij,
@@ -118,10 +107,10 @@ def computeCrkSPHdudt_Func_i(
 
         phi_ij = wp.max(wp.min(phi_ij, scalar_t(1.0)), scalar_t(0.0)) # Ensure phi is between 0 and 1
         v_corr_i = phi_ij / scalar_t(2.0) * matmul(gradV_i, x_ij)
-        v_corr_j = phi_ij / scalar_t(2.0) * matmul(gradV_j, x_ij)
+        v_corr_j = phi_ij / scalar_t(2.0) * matmul(gradV_j, -x_ij)
 
-        v_dot_i = vel_i #+ v_corr_i
-        v_dot_j = vel_j #- v_corr_j
+        v_dot_i = vel_i - v_corr_i
+        v_dot_j = vel_j + v_corr_j
 
         pi_i = computePi_actual(
             xi, xj, 

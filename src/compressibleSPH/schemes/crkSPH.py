@@ -118,6 +118,7 @@ def crkSPH_step(
             kernel = config.kernel,
             operation = WarpOperation.Gradient,
             supportMode = SupportScheme.Scatter, # E.3
+            gradientMode = GradientScheme.Difference, # E.3
         ),
         queryValues = currentState.velocities,
         domain = config.domain,
