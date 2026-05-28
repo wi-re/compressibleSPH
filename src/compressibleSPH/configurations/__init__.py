@@ -4,6 +4,7 @@ from .waveEquationConfig import WaveSource, WaveBoundary
 from .waveEquationConfig import CaseConfig as WaveCaseConfig
 from .compressibleConfig import CompressibleSPHConfig
 from .compSPHConfig import CompSPHConfig
+from .crkSPH import CRKViscosity, CRKSPHConfig
 
 __all__ = [
     'SimulationConfig',
@@ -13,4 +14,6 @@ __all__ = [
     'WaveCaseConfig',
     'CompressibleSPHConfig',
     'CompSPHConfig',
+    'CRKViscosity',
+    'CRKSPHConfig'
 ]

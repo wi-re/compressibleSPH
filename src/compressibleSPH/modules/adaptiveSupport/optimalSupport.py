@@ -34,6 +34,7 @@ def evaluateOptimalSupport(
             adjacency = adjacency
         )
     elif compParams.adaptiveSupportScheme == AdaptiveSupportScheme.NoScheme:
+
         # print('Adaptive support scheme set to NoneSupport, skipping optimal support evaluation')
         return particleState.densities, particleState.supports, adjacency, None, None
     else:

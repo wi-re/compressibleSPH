@@ -15,8 +15,9 @@ def limiterVL(x: scalar_t):
         return scalar_t(0.0)
     # x = wp.min(x, scalar_t(1.0e6))
     vL = scalar_t(2.0) / (scalar_t(1.0) + x)
-    # return x * vL*vL
-    return torch.where(x > scalar_t(0.0), x * vL**scalar_t(2.0), scalar_t(0.0))
+    return x * vL*vL
+
+    # return torch.where(x > scalar_t(0.0), x * vL**scalar_t(2.0), scalar_t(0.0))
 
 @wp.func
 def sgn(x: scalar_t):
@@ -27,41 +28,64 @@ def sgn(x: scalar_t):
 
 @wp.func
 def computeVanLeer(
-    xij_ : vector(length=Any, dtype=scalar_t), # type: ignore
-    DvDxi : matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
-    DvDxj: matrix(shape=(Any, Any), dtype=scalar_t) # type: ignore
+    xij_  : vector(length=Any, dtype=scalar_t),  # type: ignore
+    vel_i : vector(length=Any, dtype=scalar_t),  # type: ignore
+    vel_j : vector(length=Any, dtype=scalar_t),  # type: ignore
+    DvDxi : matrix(shape=(Any, Any), dtype=scalar_t),  # type: ignore
+    DvDxj : matrix(shape=(Any, Any), dtype=scalar_t)   # type: ignore
 ):
     xij = scalar_t(0.5) * (xij_)
-    # gradi = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxi, xij), xij)
-    gradi = wp.dot(matmul(DvDxi, xij), xij)
-    # gradj = torch.einsum('na, na -> n', torch.einsum('nab, nb -> na', DvDxj, xij), xij)
-    gradj = wp.dot(matmul(DvDxj, xij), xij)
+    # velocity difference variant
+    # # Gradient correction vectors: linear extrapolation from each particle to the midpoint.
+    # # corr_i = DvDxi * 0.5*(xi-xj)  =  velocity change predicted by i's gradient toward midpoint
+    # # corr_j = DvDxj * 0.5*(xi-xj)  (same offset, applied from j side)
+    # corr_i = matmul(DvDxi, xij)
+    # corr_j = matmul(DvDxj, xij)
 
-    # rif = gradj.sgn() * gradj.abs().clamp(min = 1e-30)
-    # rif = wp.sign(gradj) * wp.max(wp.abs(gradj), scalar_t(1.0e-30))
-    # rjf = gradi.sgn() * gradi.abs().clamp(min = 1e-30)
-    # rjf = wp.sign(gradi) * wp.max(wp.abs(gradi), scalar_t(1.0e-30))
-    # denom_i = wp.max(wp.abs(rif), scalar_t(1.0e-30))
-    # denom_j = wp.max(wp.abs(rjf), scalar_t(1.0e-30))
-    # if rif < scalar_t(0.0):
-    #     denom_i = -denom_i
-    # if rjf < scalar_t(0.0):
-    #     denom_j = -denom_j
-    # ri = gradi / denom_i
-    # rj = gradj / denom_j
-#   from spheral
-#   const Scalar ri = gradi/(sgn(gradj)*max(1.0e-30, abs(gradj)));
-#   const Scalar rj = gradj/(sgn(gradi)*max(1.0e-30, abs(gradi)));
-    ri = gradi / (sgn(gradj) * wp.max(wp.abs(gradj), scalar_t(1.0e-30)))
-    rj = gradj / (sgn(gradi) * wp.max(wp.abs(gradi), scalar_t(1.0e-30)))
+    # # Actual velocity difference as the reference signal (Spheral GSPH scalar approach,
+    # # generalised to vectors by projecting onto the velocity-difference direction).
+    # # The quadratic form (DvDx*x).x is blind to shear because it measures only the
+    # # normal-strain component along x_ij; projecting onto vdiff_hat captures shear too.
+    # vdiff     = vel_i - vel_j
+    # vdiff_mag = safe_sqrt(wp.dot(vdiff, vdiff))
+
+    # # If there is no velocity difference the flow is trivially smooth: allow full correction.
+    # if vdiff_mag < scalar_t(1.0e-30):
+    #     return scalar_t(1.0)
+
+    # vdiff_hat = vdiff / vdiff_mag
+
+    # # Scalar projections along the velocity-difference direction (equiv. to Spheral's Dy0s / Dyis)
+    # Dyis = wp.dot(corr_i, vdiff_hat)
+    # Dyjs = wp.dot(corr_j, vdiff_hat)
+
+    # # Denominator: half the actual velocity-difference magnitude, same as Spheral's
+    # # denom = 2/(sgn(Dy0)*|Dy0|) where Dy0s > 0 by construction here.
+    # denom = scalar_t(2.0) / vdiff_mag
+    # ri = Dyis * denom
+    # rj = Dyjs * denom
+
+    # standard quadratic form approach, blind to shear
+    corr_i = matmul(DvDxi, xij)
+    corr_j = matmul(DvDxj, xij)
+
+    grad_i = wp.dot(corr_i, xij)
+    grad_j = wp.dot(corr_j, xij)
+
+    ri = grad_i / (sgn(grad_j) * abs(grad_j))
+    rj = grad_j / (sgn(grad_i) * abs(grad_i))
+    # these terms can be nan or inf. In either case, this would indicate that there is no flow or that the flow is perfectly linear, so we can just set the limiter to 1 in these cases. 
+    
+    if ri != ri:# or ri == scalar_t(float('inf')) or ri == scalar_t(float('-inf')):
+        ri = scalar_t(1.0)
+    if rj != rj:# or rj == scalar_t(float('inf')) or rj == scalar_t(float('-inf')):
+        rj = scalar_t(1.0)
+
 
     rij = wp.min(ri, rj)
 
-    # rij = (gradi + 1e-30) / (gradj + 1e-30)
     phi = limiterVL(rij)
     return phi
-    # return scalar_t(0.0)
-    # return phi * scalar_t(0.0)
 
 
 @wp.func
@@ -70,7 +94,9 @@ def crkLimiter(
     hi: scalar_t,
     hj: scalar_t,
     kernel_int: wp.int32,
-    dim: wp.int32
+    dim: wp.int32,
+    eta_crit: scalar_t,
+    eta_fold: scalar_t
 ):
     w_xi = sphKernel_xi(kernel_int, dim)
     # xi = Kernel_xi(config['kernel'], particles.positions.shape[0])
@@ -87,8 +113,8 @@ def crkLimiter(
     # Consequently when the CRK paper refers to eta_ij = r_ij / h, we need to convert this to our definition of support which gives us eta_ij = r_ij / H * ks
     # By scaling eta_crit instead 
 
-    eta_crit = scalar_t(1.0)/scalar_t(4.0)# * ks #  * eta_max
-    eta_fold = scalar_t(0.2) #/ ks
+    # eta_crit = scalar_t(1.0)/scalar_t(4.0)# * ks #  * eta_max
+    # eta_fold = scalar_t(0.2) #/ ks
     eta_i = x_ij/hi#*ks #* eta_max
     eta_j = x_ij/hj#*ks #* eta_max
         

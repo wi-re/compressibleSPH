@@ -61,10 +61,10 @@ class computeOwen:
         self.dim = dim
         
     def __call__(self, psiH_):
-        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psiH = psiH_)
+        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psiH = psiH_.to(torch.float64)).to(dtype = psiH_.dtype, device = psiH_.device)
     
     def fromPsiH(self, psiH_):
-        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psiH = psiH_)
+        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psiH = psiH_.to(torch.float64)).to(dtype = psiH_.dtype, device = psiH_.device)
     def fromPsi(self, psi_):
-        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psi = psi_)
+        return interpolateLUT(self.LUT, self.dim, which = 'n_h', psi = psi_.to(torch.float64)).to(dtype = psi_.dtype, device = psi_.device)
 

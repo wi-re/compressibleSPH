@@ -8,6 +8,7 @@ from sphWarpCore import *
 
 from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi, sphKernelScale
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
+from ...configurations.crkSPH import CRKViscosity
 
 from .limiter import computeVanLeer, crkLimiter
 
@@ -54,6 +55,7 @@ def computeCrkSPHAccel_Func_i(
     viscositySwitch: wp.bool, alpha_i: scalar_t, referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
     P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
+    crkViscosityParams: CRKViscosity,
 
     gradV_i: matrix(shape=(Any, Any), dtype=scalar_t), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
 
@@ -90,22 +92,36 @@ def computeCrkSPHAccel_Func_i(
 
         gradV_j = referenceVelocityTensor[j]
 
-        phi_ij = scalar_t(1.0)
+        phi_ij = scalar_t(0.0)
         # we then have the eta terms that depends on the 'r'_ij terms which are not the distances!
         # vx_ij = (del_b v_i^a x_ij^a x_ij^b) / (del_b v_j^a x_ij^a x_ij^b)
         # torch.where(eta_ij < eta_crit, torch.exp(- ((eta_ij - eta_crit)/eta_fold)**2), torch.ones_like(eta_ij))
-        factor = crkLimiter(
-            x_ij,
-            hi,
-            hj,
-            kernel_int,
-            dim
-        )
-        phi_ij = computeVanLeer(
-            x_ij,
-            gradV_i,
-            gradV_j
-        ) * factor
+        factor = scalar_t(1.0)
+        
+        if crkViscosityParams.enableCRKLimiter:
+            factor = crkLimiter(
+                x_ij,
+                hi,
+                hj,
+                kernel_int,
+                dim,
+                crkViscosityParams.eta_crit,
+                crkViscosityParams.eta_fold
+            )
+
+        if crkViscosityParams.enableVanLeerLimiter:
+            phi_ij = computeVanLeer(
+                x_ij,
+                vel_i,
+                vel_j,
+                gradV_i,
+                gradV_j
+            ) * factor
+
+        if crkViscosityParams.forceVanLeerOff:
+            phi_ij = scalar_t(0.0)
+        if crkViscosityParams.forceVanLeerOn:
+            phi_ij = scalar_t(1.0)
 
         phi_ij = wp.max(wp.min(phi_ij, scalar_t(1.0)), scalar_t(0.0)) # Ensure phi is between 0 and 1
 
@@ -173,6 +189,26 @@ def computeCrkSPHAccel_Func_i(
         if useGradientRenormalization:
             gradw_j = matmul(Li, gradw_j)
 
+        smooth_i = hi / sphKernelScale(kernel_int, dim)
+        smooth_j = hj / sphKernelScale(kernel_int, dim)
+
+        eta_i = x_ij / smooth_i
+        eta_j = x_ij / smooth_j
+
+        vij_dot = v_dot_i - v_dot_j
+        mu_ij = (wp.dot(vij_dot, eta_i)) / (wp.dot(eta_i, eta_i) + 1e-7 * smooth_i * smooth_i)
+        mu_ji = (wp.dot(vij_dot, eta_j)) / (wp.dot(eta_j, eta_j) + 1e-7 * smooth_j * smooth_j)
+
+        mu_ij = wp.min(scalar_t(0.0), mu_ij)
+        mu_ji = wp.min(scalar_t(0.0), mu_ji)
+
+        Cl = viscosityParams.C_l
+        Cq = viscosityParams.C_q        
+    
+        Q_i = rhoi * (-Cl * cs_i * mu_ij + Cq * mu_ij * mu_ij)
+        Q_j = rhoj * (-Cl * cs_j * mu_ji + Cq * mu_ji * mu_ji)
+
+
         gradw_ij = scalar_t(0.5) * (gradw_i + gradw_j)
         # gradw_ij = gradw_i
         # gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
@@ -183,6 +219,7 @@ def computeCrkSPHAccel_Func_i(
         
         u_ij = v_dot_j - v_dot_i
         mu_ij = wp.dot(u_ij, x_ij) / (r_ij + scalar_t(1.0e-14) * hi)
+        mu_ij = scalar_t(1.0)
         # mu_ij = ux_ij #/ (r_ij + scalar_t(1.0e-14) * hi)
 
         # note that the term here should be multiplied with rho_i if it was a gradient operation
@@ -198,8 +235,8 @@ def computeCrkSPHAccel_Func_i(
         # pressureTerm_ij = (pressureTerms_i + pressureTerms_j)
 
         rho_bar = scalar_t(0.5) * (rhoi + rhoj)
-        Q_i = pi_i * rho_bar / rhoj * rhoi
-        Q_j = pi_j * rho_bar
+        # Q_i = pi_i * rho_bar / rhoj * rhoi
+        # Q_j = pi_j * rho_bar
 
         viscosityTerm_ij = -(Q_i + Q_j) * Vj * mu_ij * gradw_ij * Vi / mi# *0.0
         # viscosityTerms_i = - Q_i * Vj * mu_ij * gradw_i * Vi / mi
@@ -236,6 +273,8 @@ def computeCrkSPHAccel_Func_Adjacency(
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
     queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
+    crkViscosityParams: CRKViscosity,
+
     queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
     accel: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
@@ -293,6 +332,7 @@ def computeCrkSPHAccel_Func_Adjacency(
             viscositySwitch, alpha_i, referenceAlphas,
             P_i, referencePressures,
             viscosityParams,
+            crkViscosityParams,
             gradV_i, referenceVelocityTensor,
 
             pressureAccel_ij, viscosityAccel_ij
@@ -318,6 +358,7 @@ def computeCrkSPHAccel_Kernel(
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
     queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
+    crkViscosityParams: CRKViscosity,
 
     queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
     # The last parameter is always the output array and should not be changed
@@ -342,6 +383,7 @@ def computeCrkSPHAccel_Kernel(
         viscositySwitch, queryAlphas, referenceAlphas,
         queryPressures, referencePressures,
         viscosityParams,
+        crkViscosityParams,
         queryVelocityTensor, referenceVelocityTensor,
         accel, pressureAccel_ij, viscosityAccel_ij
     )
@@ -352,6 +394,7 @@ def computeCrkSPHAccelWarp(
     domain: DomainDescription,
     
     conductivityParams: DiffusionParameters,
+    crkViscosityParams: CRKViscosity,
     queryVelocityTensor: torch.Tensor, referenceVelocityTensor: Optional[torch.Tensor] = None,
     queryEnergies: Optional[torch.Tensor] = None, referenceEnergies: Optional[torch.Tensor] = None,
     queryVelocities : Optional[torch.Tensor] = None, referenceVelocities: Optional[torch.Tensor] = None,
@@ -453,6 +496,7 @@ def computeCrkSPHAccelWarp(
                     viscositySwitch, queryAlphas_, referenceAlphas_,
                     queryPressures_, referencePressures_,
                     conductivityParams,
+                    crkViscosityParams,
                     queryVelocityTensor, referenceVelocityTensor,
                 ),
             )

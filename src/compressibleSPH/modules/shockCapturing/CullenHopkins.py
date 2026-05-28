@@ -100,7 +100,7 @@ def computeHopkinsUpdate(
         # psphState, psphState, domain, wrappedKernel, actualNeighbors, solverConfig, dvdt, dvdt, correctionMatrix=CDState.M_inv)
 
     # ddiv_dt = sph_op(psphState, psphState, domain, wrappedKernel, actualNeighbors, 'superSymmetric', 'divergence', 'difference', quantity=(dvdt, dvdt))
-    # ddiv_dt = (switchState.div - particleState.divergence) / dt
+    ddiv_dt = (switchState.div - particleState.divergence) / dt
 
     # verbosePrint(verbose, '[Cullen]\t\tComputing Vsig')
     # There is an issue here!

@@ -17,7 +17,7 @@ def buildScheme(
         )
     elif schemeName == 'crkSPH':
         return (
-            CompSPHSystem, CompSPHState, CompSPHConfig, crkSPH_step
+            CompSPHSystem, CompSPHState, CRKSPHConfig, crkSPH_step
         )
     else:
         raise ValueError(f"Scheme {schemeName} not recognized.")

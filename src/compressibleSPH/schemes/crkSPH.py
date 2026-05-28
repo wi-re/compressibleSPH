@@ -89,6 +89,38 @@ def crkSPH_step(
         gamma = compParams.gamma,
     )
 
+    # nabla_dot_v = warpOperation(
+    #     currentState,
+    #     OperationProperties(
+    #         kernel = config.kernel,
+    #         operation = WarpOperation.Divergence,
+    #         supportMode = SupportScheme.Scatter, # E.3
+    #         gradientMode = GradientScheme.Difference, # E.3
+    #     ),
+    #     queryValues = currentState.velocities,
+    #     domain = config.domain,
+    #     adjacency = adjacency,
+    #     queryVolumes = apparentVolume,
+    #     crkState= crkState,
+    # )
+    # nabla_times_v = warpOperation(
+    #     currentState,
+    #     OperationProperties(
+    #         kernel = config.kernel,
+    #         operation = WarpOperation.Curl,
+    #         supportMode = SupportScheme.Scatter, # E.3
+    #         gradientMode = GradientScheme.Difference, # E.3
+    #     ),
+    #     queryValues = currentState.velocities,
+    #     domain = config.domain,
+    #     adjacency = adjacency,
+    #     queryVolumes = apparentVolume,
+    #     crkState= crkState,
+    # )
+
+    # balsara = torch.abs(nabla_dot_v) / (torch.abs(nabla_dot_v) + torch.norm(nabla_times_v, dim=-1) + 1e-4 * currentState.soundspeeds )
+    # currentState.alphas = torch.clamp(balsara, 0.0, 1.0) 
+
     # if compParams.adaptiveSupportCorrections:
     #     omega = computeOmega(currentState, 
     #             OperationProperties(
@@ -125,7 +157,7 @@ def crkSPH_step(
         adjacency = adjacency,
         queryVolumes = apparentVolume,
         crkState= crkState,
-    )
+    ).mT
     drhodt = -torch.einsum('...ii->...', velocityGradient) * currentState.densities
 
 
@@ -157,6 +189,7 @@ def crkSPH_step(
         ),
         domain = config.domain,
         conductivityParams= compParams.diffusionParams,
+        crkViscosityParams = compParams.crkViscosityParams,
         queryVelocityTensor= velocityGradient,
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,
@@ -167,7 +200,7 @@ def crkSPH_step(
         crkState = crkState,
 
         adjacency = adjacency,
-        gradHState = gradHState
+        gradHState = gradHState,
     )
 
     dudt = computeCrkSPHdudtWarp(
@@ -178,6 +211,7 @@ def crkSPH_step(
          ),
         domain = config.domain,
         conductivityParams= compParams.diffusionParams,
+        crkViscosityParams = compParams.crkViscosityParams,
         queryVelocityTensor= velocityGradient,
 
         queryEnergies = currentState.internalEnergies,
