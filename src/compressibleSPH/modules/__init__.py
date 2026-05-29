@@ -7,6 +7,7 @@ from .pressure import *
 from .shockCapturing import *
 from .crk import *
 from .compSPH import *
+from .liu import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -18,3 +19,4 @@ __all__.extend(pressure.__all__)
 __all__.extend(shockCapturing.__all__)
 __all__.extend(crk.__all__)
 __all__.extend(compSPH.__all__)
+__all__.extend(liu.__all__)

@@ -196,8 +196,8 @@ def computeCrkSPHAccel_Func_i(
         eta_j = x_ij / smooth_j
 
         vij_dot = v_dot_i - v_dot_j
-        mu_ij = (wp.dot(vij_dot, eta_i)) / (wp.dot(eta_i, eta_i) + 1e-7 * smooth_i * smooth_i)
-        mu_ji = (wp.dot(vij_dot, eta_j)) / (wp.dot(eta_j, eta_j) + 1e-7 * smooth_j * smooth_j)
+        mu_ij = (wp.dot(vij_dot, eta_i)) / (wp.dot(eta_i, eta_i) + scalar_t(1.0e-7) * smooth_i * smooth_i)
+        mu_ji = (wp.dot(vij_dot, eta_j)) / (wp.dot(eta_j, eta_j) + scalar_t(1.0e-7) * smooth_j * smooth_j)
 
         mu_ij = wp.min(scalar_t(0.0), mu_ij)
         mu_ji = wp.min(scalar_t(0.0), mu_ji)

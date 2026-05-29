@@ -27,7 +27,7 @@ from sphWarpCore.types import *
 @wp.struct
 class CRKViscosity:
     eta_fold: scalar_t = field(default = scalar_t(0.2))
-    eta_crit: scalar_t = field(default = scalar_t(0.25))
+    eta_crit: scalar_t = field(default = scalar_t(0.3333333))
 
     enableCRKLimiter: bool = field(default = True)
     enableVanLeerLimiter: bool = field(default = True)
