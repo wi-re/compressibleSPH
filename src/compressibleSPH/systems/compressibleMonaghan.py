@@ -34,6 +34,7 @@ class CompressibleSystemUpdate:
     dudt: torch.Tensor = tagged(tags=('internalEnergy_derivative',))
     dEdt: torch.Tensor = tagged(tags=('totalEnergy_derivative',))
     drhodt: torch.Tensor = tagged(tags=('density_derivative',))
+    passive: Optional[torch.Tensor] = tagged(tags=('passive_derivative',), default=None)
 
 @dataclass
 class CompressibleSystem(BaseIntegrationSystem):

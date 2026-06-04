@@ -3,6 +3,8 @@ from ..utils import *
 from integrators import *
 from sphWarpCore import *
 
+from ..modules import *
+
 
 def f_wave_equation(system: WaveSystemv3, dt: float, verbose: bool = False):
     state = get_reference_state(system)
@@ -33,4 +35,12 @@ def f_wave_equation(system: WaveSystemv3, dt: float, verbose: bool = False):
     dudt = state.v
     dvdt = state.c**2 * laplacian_u - state.damping * state.v
 
-    return WaveSystemUpdatev3(dudt=dudt, dvdt=dvdt), adjacencyV
+    # forcing = computeForcing(currentSystem, dt, config, compParams)
+    # dvdt += forcing / currentState.masses.view(-1,1)
+
+
+    update = WaveSystemUpdatev3(dudt=dudt, dvdt=dvdt)
+    
+    # enforceUpdates(update, state, dt, config, compParams)
+    
+    return update, adjacencyV

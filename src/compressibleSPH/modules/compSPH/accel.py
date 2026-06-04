@@ -78,6 +78,11 @@ def computeCompSPHAccel_Func_i(
 
         apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
 
+
+        rho_bar = scalar_t(0.5) * (rhoi + rhoj)
+        rho_corr_i = rho_bar / rhoi
+        rho_corr_j = rho_bar / rhoj
+
         pi_i = computePi_actual(
             xi, xj, 
             hi, hj,
@@ -90,7 +95,7 @@ def computeCompSPHAccel_Func_i(
             cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
             alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
-            False, False)
+            False, False) * rho_corr_i
         pi_j = computePi_actual(
             xi, xj, 
             hi, hj,
@@ -103,7 +108,7 @@ def computeCompSPHAccel_Func_i(
             cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
             alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
-            True, False)
+            True, False) * rho_corr_j
         
         gradw_i = computeKernelGradientCRK(
             xi, xj, 

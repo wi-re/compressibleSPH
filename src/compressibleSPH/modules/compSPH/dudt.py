@@ -76,6 +76,11 @@ def computeCompSPHdudt_Func_i(
 
         apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
 
+
+        rho_bar = scalar_t(0.5) * (rhoi + rhoj)
+        rho_corr_i = rho_bar / rhoi
+        rho_corr_j = rho_bar / rhoj
+
         pi_i = computePi_actual(
             xi, xj, 
             hi, hj,
@@ -88,7 +93,7 @@ def computeCompSPHdudt_Func_i(
             cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
             alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
             viscosityParams, 
-            False, False)
+            False, False) * rho_corr_i
         
         gradw_ij = computeKernelGradientCRK(
             xi, xj, 
@@ -97,6 +102,20 @@ def computeCompSPHdudt_Func_i(
             domainState.periodicity, domainState.domainMin, domainState.domainMax,
             useCRK, Ai, Bi, gradAi, gradBi
         )
+        # gradw_i = computeKernelGradientCRK(
+        #     xi, xj, 
+        #     hi, hj,
+        #     kernel_int, wp.uint32(wp.static(SupportScheme.Scatter.value)), # match accel.py
+        #     domainState.periodicity, domainState.domainMin, domainState.domainMax,
+        #     False, Ai, Bi, gradAi, gradBi  # useCRK=True: must match accel.py gradient
+        # )
+        # gradw_j = -computeKernelGradientCRK(
+        #     xj, xi,
+        #     hj, hi,
+        #     kernel_int, wp.uint32(wp.static(SupportScheme.Scatter.value)), # match accel.py
+        #     domainState.periodicity, domainState.domainMin, domainState.domainMax,
+        #     False, Ai, Bi, gradAi, gradBi  # useCRK=True: must match accel.py gradient
+        # )
         if useGradientRenormalization:
             gradw_ij = matmul(Li, gradw_ij)
 

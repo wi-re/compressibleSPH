@@ -62,6 +62,14 @@ class CompSPHSystem(BaseIntegrationSystem):
         return update_position(self, update, spec, 'position', 'position_derivative', 'velocity', 'velocity_derivative')
     def apply_velocity_update(self, update, spec: ComponentUpdateSpec, **kwargs):
         return update_component(self, update, spec, 'velocity', 'velocity_derivative')
+        # Passive particles only drift with the velocity update, they do not get accelerated
+        # if hasattr(update, 'passive') and update.passive is not None:
+            # if hasattr(update, 'dxdt') and update.dxdt is not None:
+            # self.state.velocities[update.passive] = update.dxdt[update.passive]
+            # else:
+                # updated.state.velocities[update.passive] = self.state.velocities[update.passive]
+        return updated
+
     def apply_quantity_update(self, update, spec: ComponentUpdateSpec, **kwargs):
         updatedsystem = update_component(self, update, spec, 'internalEnergy', 'internalEnergy_derivative')
         # updatedsystem = update_component(updatedsystem, update, spec, 'totalEnergy', 'totalEnergy_derivative')
@@ -89,17 +97,18 @@ class CompSPHSystem(BaseIntegrationSystem):
         #         print(f'\ttype(item): {type(item)}')
 
         
-        delta_u = compSPH_deltaU_multistep(
-            dt,
-            initialState.state,
-            returnValues,
-            updateValues,
-            weights,
-            config,
-            compParams,
-            # verbose = verbose
-        )
-        self.state.internalEnergies = initialState.state.internalEnergies + delta_u * dt
+
+        # delta_u = compSPH_deltaU_multistep(
+        #     dt,
+        #     initialState.state,
+        #     returnValues,
+        #     updateValues,
+        #     weights,
+        #     config,
+        #     compParams,
+        #     # verbose = verbose
+        # )
+        # self.state.internalEnergies = initialState.state.internalEnergies + delta_u * dt
 
         self.state.supports.copy_(lastState.supports)
         self.state.densities.copy_(lastState.densities)

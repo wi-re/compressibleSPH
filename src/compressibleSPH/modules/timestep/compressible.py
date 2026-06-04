@@ -53,6 +53,11 @@ def computeTimestep(
         dt_cfl_left = targetCFL * h / (c_s * xi)
         # dt_cfl_right = targetCFL * h / (c_s + h * xi)
         initial_dt = torch.min(dt_cfl_left)
+        if initial_dt < config.minDt:
+            print(f"Warning: initial dt {initial_dt} is less than minDt {config.minDt}. Clamping to minDt.")
+        initial_dt = torch.clamp(initial_dt, min=config.minDt, max=config.maxDt)
+        if initial_dt > config.dt:
+            initial_dt = torch.clamp(initial_dt, max=config.dtGrowthFactor * config.dt)
         return initial_dt.cpu().item()
     else:
         if dt is not None:

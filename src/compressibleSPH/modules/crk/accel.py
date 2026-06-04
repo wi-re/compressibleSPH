@@ -229,6 +229,9 @@ def computeCrkSPHAccel_Func_i(
         # Vi = mi/rhoi
         # Vj = mj/rhoj
         pressureTerm_ij = -(P_i + P_j) * gradw_ij * Vi * Vj / mi
+        # pressureTerms_i = -P_i * gradw_i * Vi * Vj / mi
+        # pressureTerms_j = -P_j * gradw_j * Vi * Vj / mi
+
 
         # pressureTerms_i = - P_i * gradw_i * Vi * Vj / mi
         # pressureTerms_j = - P_j * gradw_j * Vi * Vj / mi

@@ -49,11 +49,13 @@ def computeLiuMatrices_Func_i(
 
     vector_out : Any, # type: ignore
     matrix_out: Any, # type: ignore
+    shep_out : Any, # type: ignore
 ):\
     # Initialize the output value
     out_vec = zero_like_warp(vector_out)
     out_mat = zero_like_warp(matrix_out)
     out_nbrs = wp.int32(0)
+    out_shep = scalar_t(0.0)
 
     # # Loop over neighbors to compute the gradient contribution from each neighbor    
     for neighborIndex in range(numIndices):
@@ -118,13 +120,15 @@ def computeLiuMatrices_Func_i(
 
         temp_mat[0, 0] = one_interp
         for d in range(dim):
-            temp_mat[0, d+1] = one_grad[d]
-            temp_mat[d+1, 0] = position_interp[d]
+            temp_mat[d+1, 0] = one_grad[d]
+            temp_mat[0, d+1] = position_interp[d]
             for dd in range(dim):
                 temp_mat[d+1, dd+1] = covarianceMat[d, dd]
 
         out_vec += temp_vec
         out_mat += temp_mat
+
+        out_shep += Vj * kernel
 
         if r_ij < hj:
             out_nbrs += 1
@@ -132,7 +136,7 @@ def computeLiuMatrices_Func_i(
 
 
         
-    return out_vec, out_mat, out_nbrs
+    return out_shep, out_vec, out_mat, out_nbrs
 
 from sphWarpCore.operations_grid.grid_util import checkOffset
 
@@ -157,6 +161,7 @@ def computeLiuMatrices_Func_Adjacency(
 
     vector_out : Any, # type: ignore
     matrix_out: Any, # type: ignore
+    shep_out : Any, # type: ignore
 ):
     xi, h_i, m_i, rho_i, k_i = getParticle(queryState, i)
     xi = queryPositions[i]
@@ -166,6 +171,7 @@ def computeLiuMatrices_Func_Adjacency(
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     
+    sh_out = scalar_t(0.0)
     vec_out = zero_like_warp(vector_out)
     mat_out = zero_like_warp(matrix_out)
     nnbrs = wp.int32(0)
@@ -185,7 +191,7 @@ def computeLiuMatrices_Func_Adjacency(
             if beginIndex < 0:
                 continue
         
-        out_vec, out_mat, nbrs = computeLiuMatrices_Func_i(
+        out_shep, out_vec, out_mat, nbrs = computeLiuMatrices_Func_i(
             i, dim, 
             xi, 
             referenceState,  correctionData, domainState,
@@ -200,13 +206,15 @@ def computeLiuMatrices_Func_Adjacency(
             useCRK, Ai, Bi, gradA_i, gradB_i,
             
             referenceQuantities,
-            vector_out, matrix_out
+            vector_out, matrix_out, shep_out
         )
+    
+        sh_out += out_shep
         vec_out += out_vec
         mat_out += out_mat
         nnbrs += nbrs
 
-    return vec_out, mat_out, nnbrs
+    return sh_out, vec_out, mat_out, nnbrs
 
 
 
@@ -225,6 +233,7 @@ def computeLiuMatrices_Kernel(
     referenceQuantities: wp.array(dtype = scalar_t), # type: ignore
     # The last parameter is always the output array and should not be changed
 
+    shep_out : wp.array(dtype = scalar_t), # type: ignore
     vector_out : wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     matrix_out: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), # type: ignore
     numNeighbors_out: wp.array(dtype = wp.int32) # type: ignore
@@ -234,22 +243,25 @@ def computeLiuMatrices_Kernel(
     if i >= numParticles:
         return
 
-    vec, mat, nnbrs = computeLiuMatrices_Func_Adjacency(
+    shep, vec, mat, nnbrs = computeLiuMatrices_Func_Adjacency(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
         mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
         queryPositions, referenceQuantities,
-        zero_like_warp(vector_out), zero_like_warp(matrix_out)
+        zero_like_warp(vector_out), zero_like_warp(matrix_out), zero_like_warp(shep_out)
     )
 
+    shep_out[i] = mat[0, 0]
     vector_out[i] = vec
     matrix_out[i] = mat
     numNeighbors_out[i] = nnbrs
 
 
-from sphWarpCore.utils.wp_util import _get_warp_vector_dtype, _get_warp_matrix_dtype, castTorchToWarpAsBuiltins
+from sphWarpCore.utils.wp_util import _get_warp_vector_dtype, _get_warp_matrix_dtype, _torch_scalar_to_warp_dtype, castTorchToWarpAsBuiltins
+
+from copy import deepcopy
 
 def computeLiuMatricesWarp(
     queryPositions: torch.Tensor,
@@ -288,8 +300,10 @@ def computeLiuMatricesWarp(
                 queryPositions.shape[0],
                 queryPositions.shape[0],
                 queryPositions.shape[0],
+                queryPositions.shape[0],
             )
             outputDtypes = (
+                _torch_scalar_to_warp_dtype(queryPositions.dtype),
                 outputVecType,
                 outputMatType,
                 wp.int32

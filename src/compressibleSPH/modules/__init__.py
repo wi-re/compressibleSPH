@@ -8,6 +8,7 @@ from .shockCapturing import *
 from .crk import *
 from .compSPH import *
 from .liu import *
+from .boundaryConditions import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -20,3 +21,5 @@ __all__.extend(shockCapturing.__all__)
 __all__.extend(crk.__all__)
 __all__.extend(compSPH.__all__)
 __all__.extend(liu.__all__)
+__all__.extend(boundaryConditions.__all__)
+

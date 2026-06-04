@@ -43,6 +43,8 @@ class ViscositySwitchConfig:
     limitXi: bool = field(default=True, metadata={'description': 'Whether to limit the xi parameter in the Cullen-Dehnen switch'})
 
 
+from ..boundaryConditions import BoundaryCondition
+from typing import List
 
 @dataclass
 class CompressibleSPHConfig:
@@ -61,3 +63,5 @@ class CompressibleSPHConfig:
     viscositySwitchParams: ViscositySwitchConfig = field(default_factory=ViscositySwitchConfig)
 
     schemeName: str = field(default='Compressible SPH', metadata={'description': 'Name of the compressible SPH scheme to use'})
+
+    boundaryConditions: List[BoundaryCondition] = field(default_factory=list, metadata={'description': 'List of boundary conditions to apply in the simulation'})

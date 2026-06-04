@@ -47,6 +47,7 @@ def compressibleSPH_Monaghan(
         adjacency = adjacency,
     )
 
+    enforceDirichlet(currentSystem, dt, config, compParams)
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
         u = currentState.internalEnergies,
@@ -141,6 +142,10 @@ def compressibleSPH_Monaghan(
 
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt + dvdt_diss)) + currentState.masses * (dudt + dudt_diss)
 
+    forcing = computeForcing(currentSystem, dt, config, compParams)
+    dvdt += forcing / currentState.masses.view(-1,1)
+
+
     update = CompressibleSystemUpdate(
         dxdt = currentState.velocities,
         dvdt = dvdt + dvdt_diss,
@@ -148,5 +153,6 @@ def compressibleSPH_Monaghan(
         drhodt = drhodt,
         dEdt = dEdt,
     )
+    enforceUpdates(update, currentSystem, dt, config, compParams)
 
     return update, adjacency, currentState

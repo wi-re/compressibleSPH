@@ -28,6 +28,9 @@ class SimulationConfig:
     integrationScheme: IntegrationSchemeType = field(default=IntegrationSchemeType.rungeKutta4, metadata={'description': 'Integration scheme for time stepping'})
     cflFactor: float = field(default=0.3, metadata={'description': ' CFL factor for time step calculation'})
     dt: Optional[float] = None
+    minDt: Optional[float] = field(default=1e-6, metadata={'description': 'Minimum time step for adaptive time stepping'})
+    maxDt: Optional[float] = field(default=1e-2, metadata={'description': 'Maximum time step for adaptive time stepping'})
+    dtGrowthFactor: Optional[float] = field(default=1.1, metadata={'description': 'Growth factor for time step increase in adaptive time stepping'})
     adaptiveDt: bool = field(default=True, metadata={'description': 'Whether to use adaptive time stepping'})
     
     dx: Optional[int] = field(default=None, metadata={'description': 'Initial particle spacing'})
@@ -52,6 +55,9 @@ def buildConfig(
     integrationScheme: Optional[IntegrationSchemeType] = None,
     cflFactor: Optional[float] = None,
     dt: Optional[float] = None,
+    minDt: Optional[float] = None,
+    maxDt: Optional[float] = None,
+    dtGrowthFactor: Optional[float] = None,
     adaptiveDt: Optional[bool] = None,
     targetNeighbors: Optional[int] = None,
     supportMode: Optional[SupportScheme] = None,
@@ -87,6 +93,12 @@ def buildConfig(
         laplacianMode = LaplacianScheme.Brookshaw
     if samplingScheme is None:
         samplingScheme = SamplingScheme.regular
+    if minDt is None:
+        minDt = 1e-6
+    if maxDt is None:        
+        maxDt = 1e-2
+    if dtGrowthFactor is None:        
+        dtGrowthFactor = 1.1
 
     return SimulationConfig(
         device=device,
@@ -98,6 +110,9 @@ def buildConfig(
         integrationScheme=integrationScheme,
         cflFactor=cflFactor,
         dt=dt,
+        minDt=minDt,
+        maxDt=maxDt,
+        dtGrowthFactor=dtGrowthFactor,
         adaptiveDt=adaptiveDt,
         targetNeighbors=targetNeighbors,
         supportMode=supportMode,
