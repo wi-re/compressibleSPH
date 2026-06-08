@@ -35,6 +35,16 @@ class CRKViscosity:
     forceVanLeerOff: bool = field(default = False)
     forceVanLeerOn: bool = field(default = False)
 
+def buildDefaultCRKViscosityParams():
+    crkViscosityParams = CRKViscosity()
+    crkViscosityParams.eta_fold = 0.2
+    crkViscosityParams.eta_crit = 0.3333333
+    crkViscosityParams.enableCRKLimiter = True
+    crkViscosityParams.enableVanLeerLimiter = True
+    crkViscosityParams.forceVanLeerOff = False
+    crkViscosityParams.forceVanLeerOn = False
+    
+    return crkViscosityParams
 
 
 from sphWarpCore.diffusion.viscosity import DiffusionParameters, ViscosityTerms
@@ -55,9 +65,9 @@ def buildDefaultDiffusionParamsCRKSPH():
         
     diffusionParams.c_s = 1
     diffusionParams.C_l = 1
-    diffusionParams.C_q = 2
+    diffusionParams.C_q = 1
     diffusionParams.Cu_l = 1
-    diffusionParams.Cu_q = 2
+    diffusionParams.Cu_q = 1
     diffusionParams.K = 1.0
     diffusionParams.thermalConductivity = 0.5
     diffusionParams.viscosityTerm = ViscosityTerms.Monaghan1992.value
@@ -73,5 +83,7 @@ class CRKSPHConfig(CompressibleSPHConfig):
     energyScheme: EnergyScheme = field(default=EnergyScheme.CRK, metadata={'description': 'Energy scheme for the simulation'})
 
     diffusionParams: DiffusionParameters = field(default_factory=buildDefaultDiffusionParamsCRKSPH)
-    crkViscosityParams: CRKViscosity = field(default_factory=CRKViscosity)
+    crkViscosityParams: CRKViscosity = field(default_factory=buildDefaultCRKViscosityParams)
     schemeName: str = field(default='CRKSPH', metadata={'description': 'Name of the CRK SPH scheme to use'})
+    
+    compatibleEnergy: bool = field(default=True, metadata={'description': 'Whether to use a compatible energy discretization (e.g. evolve total energy and compute internal energy from it) or not (e.g. evolve internal energy directly)'})

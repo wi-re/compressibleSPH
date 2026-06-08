@@ -97,18 +97,18 @@ class CompSPHSystem(BaseIntegrationSystem):
         #         print(f'\ttype(item): {type(item)}')
 
         
-
-        # delta_u = compSPH_deltaU_multistep(
-        #     dt,
-        #     initialState.state,
-        #     returnValues,
-        #     updateValues,
-        #     weights,
-        #     config,
-        #     compParams,
-        #     # verbose = verbose
-        # )
-        # self.state.internalEnergies = initialState.state.internalEnergies + delta_u * dt
+        if compParams.compatibleEnergy:
+            delta_u = compSPH_deltaU_multistep(
+                dt,
+                initialState.state,
+                returnValues,
+                updateValues,
+                weights,
+                config,
+                compParams,
+                # verbose = verbose
+            )
+            self.state.internalEnergies = initialState.state.internalEnergies + delta_u * dt
 
         self.state.supports.copy_(lastState.supports)
         self.state.densities.copy_(lastState.densities)

@@ -36,3 +36,5 @@ class CompSPHConfig(CompressibleSPHConfig):
     diffusionParams: DiffusionParameters = field(default_factory=buildDefaultDiffusionParamsCompSPH)
 
     schemeName: str = field(default='CompSPH', metadata={'description': 'Name of the compressible SPH scheme to use'})
+
+    compatibleEnergy: bool = field(default=True, metadata={'description': 'Whether to use a compatible energy discretization (e.g. evolve total energy and compute internal energy from it) or not (e.g. evolve internal energy directly)'})

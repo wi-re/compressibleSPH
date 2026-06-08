@@ -17,7 +17,7 @@ def computeTimestep(
 ):
     if config.adaptiveDt:
         # 
-        targetCFL = 0.3
+        targetCFL = config.cflFactor
         # The initial state contains density and pressure
         # we can get the internal energies for each state via the gas EOS
         u = system.state.internalEnergies
@@ -56,7 +56,7 @@ def computeTimestep(
         if initial_dt < config.minDt:
             print(f"Warning: initial dt {initial_dt} is less than minDt {config.minDt}. Clamping to minDt.")
         initial_dt = torch.clamp(initial_dt, min=config.minDt, max=config.maxDt)
-        if initial_dt > config.dt:
+        if dt is not None and initial_dt > config.dt:
             initial_dt = torch.clamp(initial_dt, max=config.dtGrowthFactor * config.dt)
         return initial_dt.cpu().item()
     else:
