@@ -98,6 +98,7 @@ def compSPH_step(
     global lut
     currentSystem = system#
     currentState = currentSystem.state
+    currentSystem.adjacency = None
 
 
     # dsphConfig = {    
@@ -223,7 +224,7 @@ def compSPH_step(
     adjacency = buildVerletList(
         currentState, 
         config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric,
-        priorNeighborhood = currentSystem.adjacency,
+        priorNeighborhood = None,
         verbose = False)
     currentSystem.adjacency = adjacency
 

@@ -41,7 +41,7 @@ def computeForcing(
     config: SimulationConfig,
     compParams: CompSPHConfig,
 ):
-    totalForcing = torch.zeros_like(system.state.positions)
+    totalForcing = torch.zeros_like(system.state.positions) if hasattr(system, 'state') else torch.zeros_like(system.positions)
     for bc in compParams.boundaryConditions:
         if bc.forcingFunctions is not None and len(bc.forcingFunctions) > 0:
             for forcingFn in bc.forcingFunctions:
