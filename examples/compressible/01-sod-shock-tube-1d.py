@@ -43,14 +43,14 @@ from compressibleSPH import *
 from compressibleSPH.caseUtils.sod import *
 
 
-argumentParser = argparse.ArgumentParser(description="Resume the Sod shock tube simulation from a saved state.")
+argumentParser = argparse.ArgumentParser(description="Run the Sod shock tube simulation.")
 # General IO Parameters
 argumentParser.add_argument('--exportPath', type=str, default='export/', help='Path to the export directory containing the saved state and config to resume from.')
 argumentParser.add_argument('--plot', action='store_true', help='Whether to plot the results during the simulation.')
 argumentParser.add_argument('--store', action='store_true', help='Whether to resume save the simulationstates.')
 argumentParser.add_argument('--plotInterval', type=int, default=10, help='Interval (in steps) at which to plot the results.')
 argumentParser.add_argument('--storeInterval', type=int, default=50, help='Interval (in steps) at which to save the simulation state.')
-argumentParser.add_argument('--caseName', type=str, default='sodShockTube', help='Name of the case for export purposes.')
+argumentParser.add_argument('--caseName', type=str, default='01-sodShockTube', help='Name of the case for export purposes.')
 
 # Physical Parameters
 argumentParser.add_argument('--t_limit', type=float, default=0.15, help='Time limit to run the simulation to.')

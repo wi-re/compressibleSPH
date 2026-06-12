@@ -112,12 +112,12 @@ def dictToCRKSPHConfig(configDict: Dict[str, Any]) -> CRKSPHConfig:
     crkSPHConfig.energyScheme = EnergyScheme[configDict['energyScheme']] if isinstance(configDict['energyScheme'], str) else configDict['energyScheme']
     crkSPHConfig.compatibleEnergy = configDict['compatibleEnergy']
     crkViscosityParamsDict = configDict['crkViscosityParams']
-    crkSPHConfig.crkViscosityParams = CRKViscosity(
-        eta_fold=crkViscosityParamsDict['eta_fold'],
-        eta_crit=crkViscosityParamsDict['eta_crit'],
-        enableCRKLimiter=crkViscosityParamsDict['enableCRKLimiter'],
-        enableVanLeerLimiter=crkViscosityParamsDict['enableVanLeerLimiter'],
-        forceVanLeerOff=crkViscosityParamsDict['forceVanLeerOff'],
-        forceVanLeerOn=crkViscosityParamsDict['forceVanLeerOn']
-    )
+    crkSPHConfig.crkViscosityParams = CRKViscosity()
+    crkSPHConfig.crkViscosityParams.eta_fold = crkViscosityParamsDict['eta_fold']
+    crkSPHConfig.crkViscosityParams.eta_crit = crkViscosityParamsDict['eta_crit']
+    crkSPHConfig.crkViscosityParams.enableCRKLimiter = crkViscosityParamsDict['enableCRKLimiter']
+    crkSPHConfig.crkViscosityParams.enableVanLeerLimiter = crkViscosityParamsDict['enableVanLeerLimiter']
+    crkSPHConfig.crkViscosityParams.forceVanLeerOff = crkViscosityParamsDict['forceVanLeerOff']
+    crkSPHConfig.crkViscosityParams.forceVanLeerOn = crkViscosityParamsDict['forceVanLeerOn']
+    
     return crkSPHConfig

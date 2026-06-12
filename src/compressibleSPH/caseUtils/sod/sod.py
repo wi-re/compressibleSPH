@@ -232,5 +232,5 @@ def buildSod1D(
 
     dx = particleState.masses.min()
     config.dx = dx
-    config.dt = computeTimestep(compressibleSystem, config, compParams, dt = config.dt)
+    config.dt = computeTimestep(compressibleSystem, config, compParams, dt = None)
     return compressibleSystem

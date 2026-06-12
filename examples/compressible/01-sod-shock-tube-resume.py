@@ -44,7 +44,7 @@ from compressibleSPH.caseUtils.sod import *
 
 
 argparser = argparse.ArgumentParser(description='Resume a Sod Shock Tube 1D simulation from a saved state.')
-argparser.add_argument('--exportPath', type=str, default='export/sodShockTube', help='Path to the export directory containing the saved state and config to resume from.')
+argparser.add_argument('--exportPath', type=str, default='export/01-sodShockTube', help='Path to the export directory containing the saved state and config to resume from.')
 argparser.add_argument('--fileName', type=str, default='trajectory/finalState.h5', help='Name of the saved state file to import from the exportPath/trajectory directory.')
 argparser.add_argument('--plot', action='store_true', help='Whether to plot the results during the simulation.')
 argparser.add_argument('--store', action='store_true', help='Whether to resume save the simulationstates.')
@@ -93,7 +93,7 @@ runningState = importedSystem.initializeNewState()
 startIndex = extraData['frame_num']
 t_limit = args.t_limit
 delta_t = t_limit - runningState.t
-nSteps = int(delta_t / config.dt) + 1
+nSteps = int(delta_t / config.dt)
 print(f"Resuming from frame {startIndex} at time {runningState.t:.5f}. Running {nSteps} steps to reach {t_limit:.5f} seconds.")
 
 if args.plot:
