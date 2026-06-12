@@ -4,7 +4,7 @@ from ...enumTypes import ViscositySwitch
 from ...systems.compressibleMonaghan import CompressibleState
 from typing import Optional, Union
 import torch
-from ...config import *
+from ...configurations import *
 from sphWarpCore import *
 
 from .switchState import ViscositySwitchState

@@ -1,6 +1,6 @@
 from sphWarpCore import *
 from ...systems.baseState import *
-from compressibleSPH.config import SimulationConfig
+from compressibleSPH.configurations import SimulationConfig
 
 from torch.profiler import profile, record_function, ProfilerActivity
 

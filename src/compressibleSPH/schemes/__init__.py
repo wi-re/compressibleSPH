@@ -1,5 +1,8 @@
 from .monaghan import *
 from .compSPH import *
+from .crkSPH import *
 from .waveEquation import f_wave_equation
 
-__all__ = ['f_wave_equation', 'compressibleSPH_Monaghan', 'compSPH_step']
+from .builder import buildScheme, CompressibleSPHScheme
+
+__all__ = ['f_wave_equation', 'compressibleSPH_Monaghan', 'compSPH_step', 'crkSPH_step', 'buildScheme', 'CompressibleSPHScheme']

@@ -2,8 +2,8 @@ import torch
 from typing import Optional
 from dataclasses import dataclass
 
-from ..config import SimulationConfig
-from ..sampling import sampleParticles
+from ..configurations import SimulationConfig
+from ..sample.sampling import sampleParticles
 
 from ..utils import *
 from integrators import *
@@ -62,7 +62,7 @@ class WaveSystemv3(BaseIntegrationSystem):
         return super().finalize(initialState, dt, returnValues, updateValues, weights, *args, **kwargs)
     
 
-from ..config import WaveCaseConfig
+from ..configurations import WaveCaseConfig
 
 def sampleInitialWaveState(nx, config: SimulationConfig, caseConfig: WaveCaseConfig):
     particles = sampleParticles(nx, config)

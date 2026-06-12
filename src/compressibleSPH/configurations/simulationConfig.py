@@ -2,7 +2,6 @@ import torch
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 
-from compressibleSPH import config
 
 from ..utils import *
 from integrators import *
@@ -120,3 +119,80 @@ def buildConfig(
         laplacianMode=laplacianMode,
         samplingScheme=samplingScheme,
     ), getIntegrator(integrationScheme)
+
+
+def configurationToDict(config: SimulationConfig) -> Dict[str, Any]:
+    return {
+        'device': str(config.device),
+        'dtype': str(config.dtype),
+        'domain': {
+            'min': config.domain.min.cpu().numpy().tolist(),
+            'max': config.domain.max.cpu().numpy().tolist(),
+            'periodic': config.domain.periodic.cpu().numpy().tolist(),
+            'dim': config.domain.dim,
+        },
+        'dim': config.dim,
+        'verletScale': config.verletScale,
+        'kernel': config.kernel.name,
+        'integrationScheme': config.integrationScheme.name,
+        'cflFactor': config.cflFactor,
+        'dt': config.dt,
+        'minDt': config.minDt,
+        'maxDt': config.maxDt,
+        'dtGrowthFactor': config.dtGrowthFactor,
+        'adaptiveDt': config.adaptiveDt,
+        'targetNeighbors': config.targetNeighbors,
+        'supportMode': config.supportMode.name,
+        'gradientMode': config.gradientMode.name,
+        'laplacianMode': config.laplacianMode.name,
+        'samplingScheme': config.samplingScheme.name,
+    }
+
+def dictToConfig(
+    configDict: Dict[str, Any]
+) -> SimulationConfig:
+    device = torch.device(configDict['device'])
+    dtype = getattr(torch, configDict['dtype'].split('.')[-1])
+    domainDict = configDict['domain']
+    domain = DomainDescription(
+        min=torch.tensor(domainDict['min'], device=device, dtype=dtype),
+        max=torch.tensor(domainDict['max'], device=device, dtype=dtype),
+        periodic=torch.tensor(domainDict['periodic'], device=device, dtype=torch.bool),
+        dim=domainDict['dim']
+    )
+    dim = configDict['dim']
+    verletScale = configDict['verletScale']
+    kernel = KernelFunctions[configDict['kernel']]
+    integrationScheme = IntegrationSchemeType[configDict['integrationScheme']]
+    cflFactor = configDict['cflFactor']
+    dt = configDict['dt']
+    minDt = configDict['minDt']
+    maxDt = configDict['maxDt']
+    dtGrowthFactor = configDict['dtGrowthFactor']
+    adaptiveDt = configDict['adaptiveDt']
+    targetNeighbors = configDict['targetNeighbors']
+    supportMode = SupportScheme[configDict['supportMode']]
+    gradientMode = GradientScheme[configDict['gradientMode']]
+    laplacianMode = LaplacianScheme[configDict['laplacianMode']]
+    samplingScheme = SamplingScheme[configDict['samplingScheme']]
+
+    return SimulationConfig(
+        device=device,
+        dtype=dtype,
+        domain=domain,
+        dim=dim,
+        verletScale=verletScale,
+        kernel=kernel,
+        integrationScheme=integrationScheme,
+        cflFactor=cflFactor,
+        dt=dt,
+        minDt=minDt,
+        maxDt=maxDt,
+        dtGrowthFactor=dtGrowthFactor,
+        adaptiveDt=adaptiveDt,
+        targetNeighbors=targetNeighbors,
+        supportMode=supportMode,
+        gradientMode=gradientMode,
+        laplacianMode=laplacianMode,
+        samplingScheme=samplingScheme
+    )

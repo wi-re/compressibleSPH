@@ -1,7 +1,7 @@
 from .optimalSupportOwen import evaluateOptimalSupportOwen
 from .optimalSupportMonaghan import evaluateOptimalSupportMonaghan
 from ...systems.baseState import BaseState
-from ...config import SimulationConfig, CompressibleSPHConfig
+from ...configurations import SimulationConfig, CompressibleSPHConfig
 import numpy as np
 import torch
 from sphWarpCore import *

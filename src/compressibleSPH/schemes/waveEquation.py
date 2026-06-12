@@ -1,4 +1,4 @@
-from ..system import *
+from ..systems import *
 from ..utils import *
 from integrators import *
 from sphWarpCore import *

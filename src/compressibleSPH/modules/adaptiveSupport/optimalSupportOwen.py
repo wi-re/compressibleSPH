@@ -1,5 +1,5 @@
 from ...systems import CompressibleState
-from ...config import SimulationConfig, CompressibleSPHConfig
+from ...configurations import SimulationConfig, CompressibleSPHConfig
 import numpy as np
 import torch
 from sphWarpCore import *

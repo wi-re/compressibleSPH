@@ -7,7 +7,7 @@ from ...systems.compressibleMonaghan import CompressibleSystemUpdate
 import torch
 
 from ...systems.baseState import BaseState
-from ...config import SimulationConfig, CompressibleSPHConfig
+from ...configurations import SimulationConfig, CompressibleSPHConfig
 from typing import Any
 
 def enforceDirichlet(

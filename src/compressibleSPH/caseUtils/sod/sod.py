@@ -1,11 +1,11 @@
 from typing import NamedTuple
 
-from compressibleSPH.config import SimulationConfig
+from compressibleSPH.configurations import SimulationConfig
 from compressibleSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from compressibleSPH.utils import *
 from sphWarpCore import *
 import torch
-from ...system import *
+from ...systems import *
 from ...modules import idealGasEOS, evaluateOptimalSupport
 # from optimalSupport import evaluateOptimalSupport
 
@@ -13,6 +13,8 @@ class sodInitialState(NamedTuple):
     p: float
     rho: float
     v: float
+
+from compressibleSPH.sample import *
 
 from compressibleSPH.enumTypes import AdaptiveSupportScheme
 from compressibleSPH.modules.timestep.compressible import computeTimestep

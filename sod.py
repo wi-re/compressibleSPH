@@ -10,16 +10,16 @@ import warp as wp; wp.init()
 
 import torch
 # from compressibleSPH.gencase import *
-from compressibleSPH.sample import generateInitialVariables, SamplingScheme
-from compressibleSPH.sampling import  sampleParticles
+from compressibleSPH.caseUtils.waveEquation.sample import generateInitialVariables, SamplingScheme
+from compressibleSPH.sample.sampling import  sampleParticles
 # from waves.util import plotState, plotInitialState
 # from simulation import runSimulation
 from compressibleSPH.utils import getCurrentTimestamp
 from argparse import ArgumentParser
-from compressibleSPH.casefile import argparse_defaults_from_casefile, load_casefile
+from compressibleSPH.caseUtils.waveEquation.casefile import argparse_defaults_from_casefile, load_casefile
 
 # from compressibleSPH.systemv3 import WaveSystemStatev3
-from compressibleSPH.sample import smoothState
+from compressibleSPH.caseUtils.waveEquation.sample import smoothState
 # from compressibleSPH.systemv3 import WaveSystemv3, f_wave_equation
 from integrators.integration import *
 from compressibleSPH.utils import *
@@ -35,8 +35,8 @@ from sphWarpCore import *
 # from waves.sampling import sampleParticles
 # from compressibleSPH.systemv3 import sampleInitialWaveState
 # from compressibleSPH.systemv3 import computeDt
-from compressibleSPH.sampling import finalizeWaveSystemSetup
-from compressibleSPH.shape_generation import populateSourceObstacleGridsStructured
+from compressibleSPH.sample.sampling import finalizeWaveSystemSetup
+from compressibleSPH.caseUtils.waveEquation.shape_generation import populateSourceObstacleGridsStructured
 
 from compressibleSPH.config import SimulationConfig, CompressibleSPHConfig
 from compressibleSPH.caseUtils.sod import *

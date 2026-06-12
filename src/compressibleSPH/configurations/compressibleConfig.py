@@ -1,4 +1,4 @@
-from sphWarpCore.diffusion.viscosity import DiffusionParameters, ViscosityTerms
+
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig
 import torch
@@ -10,40 +10,13 @@ from dataclasses import dataclass, field
 from typing import Optional
 from ..enumTypes import AdaptiveSupportScheme, ViscositySwitch
 
-def buildDefaultDiffusionParamsCompressibleSPH():
-    diffusionParams = DiffusionParameters()
-    diffusionParams.c_s = 1
-    diffusionParams.C_l = 1
-    diffusionParams.C_q = 0
-    diffusionParams.Cu_l = 1
-    diffusionParams.Cu_q = 0
-    diffusionParams.K = 1.0
-    diffusionParams.thermalConductivity = 0.5
-    diffusionParams.viscosityTerm = ViscosityTerms.Price2012_98.value
-    diffusionParams.thermalConducitiyTerm = ViscosityTerms.Price2008.value
-    diffusionParams.scaleBeta = False
-    diffusionParams.monaghanSwitch = True
-    diffusionParams.correctXi = True
-    
-    return diffusionParams
-
-@dataclass
-class ViscositySwitchConfig:
-    scheme: ViscositySwitch = field(default=ViscositySwitch.NoneSwitch, metadata={'description': 'Viscosity switch to use'})
-    limitXi: bool = field(default=False, metadata={'description': 'Whether to limit the viscosity switch based on the xi parameter'})
-    correctVelocityGradient: bool = field(default=False, metadata={'description': 'Whether to apply the correction matrix to the velocity gradient in the viscosity switch computation'})
-    divergenceScheme: Optional[str] = field(default='naive', metadata={'description': 'Scheme to compute the divergence for the viscosity switch. Options are "naive" for the standard SPH divergence and "cullen"'})
-
-    alpha_min : float = field(default=0.02, metadata={'description': 'Minimum alpha value for the viscosity switch'})
-    alpha_max : float = field(default=2.0, metadata={'description': 'Maximum alpha value for the viscosity switch'})
-
-    beta_c: float = field(default=0.7, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
-    beta_d: float = field(default=0.05, metadata={'description': 'Beta parameter for the Cullen-Dehnen switch'})
-    beta_xi: float = field(default=2.0, metadata={'description': 'Beta parameter for the xi limiter in the Cullen-Dehnen switch'})
-    limitXi: bool = field(default=True, metadata={'description': 'Whether to limit the xi parameter in the Cullen-Dehnen switch'})
+from .diffusionParameters import DiffusionParameters, buildDefaultDiffusionParamsCompressibleSPH, diffusionParamsToDict, dictToDiffusionParams
+from .viscositySwitchParameters import ViscositySwitchConfig, viscositySwitchConfigToDict, dictToViscositySwitchConfig
 
 
-from ..boundaryConditions import BoundaryCondition
+
+
+from .boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition
 from typing import List
 
 @dataclass
@@ -65,3 +38,37 @@ class CompressibleSPHConfig:
     schemeName: str = field(default='Compressible SPH', metadata={'description': 'Name of the compressible SPH scheme to use'})
 
     boundaryConditions: List[BoundaryCondition] = field(default_factory=list, metadata={'description': 'List of boundary conditions to apply in the simulation'})
+
+from typing import Dict, Any
+
+
+def compressibleConfigToDict(config: CompressibleSPHConfig) -> Dict[str, Any]:
+    return {
+        'gamma': config.gamma,
+        'backgroundPressure': config.backgroundPressure,
+        'rho0': config.rho0,
+        'adaptiveSupportScheme': config.adaptiveSupportScheme.name,
+        'adaptiveSupportIterations': config.adaptiveSupportIterations,
+        'adaptiveSupportThreshold': config.adaptiveSupportThreshold,
+        'adaptiveSupportCorrections': config.adaptiveSupportCorrections,
+        'diffusionParams': diffusionParamsToDict(config.diffusionParams),
+        'viscositySwitchParams': viscositySwitchConfigToDict(config.viscositySwitchParams),
+        'schemeName': config.schemeName,
+        'boundaryConditions': [boundaryConditionToDict(bc) for bc in config.boundaryConditions]
+    }
+
+def dictToCompressibleConfig(configDict: Dict[str, Any]) -> CompressibleSPHConfig:
+    config = CompressibleSPHConfig()
+    config.gamma = configDict['gamma']
+    config.backgroundPressure = configDict['backgroundPressure']
+    config.rho0 = configDict['rho0']
+    config.adaptiveSupportScheme = AdaptiveSupportScheme[configDict['adaptiveSupportScheme']] if isinstance(configDict['adaptiveSupportScheme'], str) else configDict['adaptiveSupportScheme']
+    config.adaptiveSupportIterations = configDict['adaptiveSupportIterations']
+    config.adaptiveSupportThreshold = configDict['adaptiveSupportThreshold']
+    config.adaptiveSupportCorrections = configDict['adaptiveSupportCorrections']
+    config.diffusionParams = dictToDiffusionParams(configDict['diffusionParams'])
+    config.viscositySwitchParams = dictToViscositySwitchConfig(configDict['viscositySwitchParams'])
+    config.schemeName = configDict['schemeName']
+    config.boundaryConditions = [dictToBoundaryCondition(bcDict) for bcDict in configDict['boundaryConditions']]
+    
+    return config

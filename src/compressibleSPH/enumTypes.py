@@ -25,3 +25,10 @@ class ViscositySwitch(Enum):
     MorrisMonaghan1997 = 4
     Rosswog2000 = 5
     NoneSwitch = 6
+
+
+@torch.jit.script
+class CompressibleSPHScheme(Enum):
+    Monaghan = 0
+    CompSPH = 1
+    CRKSPH = 2

@@ -3,7 +3,7 @@ from ...configurations.compressibleConfig import CompressibleSPHConfig
 from .wp_omega import computeOmegaWarp
 from ...systems.baseState import *
 from sphWarpCore import *
-from ...config import SimulationConfig
+from ...configurations import SimulationConfig
 from ...utils.support import volumeToSupportHelper, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
 
