@@ -46,24 +46,39 @@ class BoundaryCondition:
 
     
 import os, pickle
+import dill
 import codecs
+
+
+def _encode_callable(fn: Callable) -> str:
+    # dill can serialize local lambdas/closures used in case builders.
+    return codecs.encode(dill.dumps(fn), 'base64').decode()
+
+
+def _decode_callable(encoded_fn: str) -> Callable:
+    raw = codecs.decode(encoded_fn.encode(), 'base64')
+    try:
+        return dill.loads(raw)
+    except Exception:
+        # Backward compatibility for configs written with pickle.
+        return pickle.loads(raw)
 
 def boundaryConditionToDict(bc: BoundaryCondition) -> Dict[str, Any]:
     return {
         'type': bc.type.name if isinstance(bc.type, BoundaryConditionType) else bc.type,
-        'sdf': codecs.encode(pickle.dumps(bc.sdf), 'base64').decode(),  # Serialize the sdf function using pickle and encode as base64
-        'dirichletFunctions': {varName: codecs.encode(pickle.dumps(fn), 'base64').decode() for varName, fn in bc.dirichletFunctions.items()} if bc.dirichletFunctions is not None else None,
-        'updateFunctions': {varName: codecs.encode(pickle.dumps(fn), 'base64').decode() for varName, fn in bc.updateFunctions.items()} if bc.updateFunctions is not None else None,
-        'forcingFunctions': {varName: codecs.encode(pickle.dumps(fn), 'base64').decode() for varName, fn in bc.forcingFunctions.items()} if bc.forcingFunctions is not None else None,
+        'sdf': _encode_callable(bc.sdf),
+        'dirichletFunctions': {varName: _encode_callable(fn) for varName, fn in bc.dirichletFunctions.items()} if bc.dirichletFunctions is not None else None,
+        'updateFunctions': {varName: _encode_callable(fn) for varName, fn in bc.updateFunctions.items()} if bc.updateFunctions is not None else None,
+        'forcingFunctions': {varName: _encode_callable(fn) for varName, fn in bc.forcingFunctions.items()} if bc.forcingFunctions is not None else None,
         'vectorProjectionType': bc.vectorProjectionType.name if isinstance(bc.vectorProjectionType, VectorProjectionType) else bc.vectorProjectionType
     }
 
 def dictToBoundaryCondition(bcDict: Dict[str, Any]) -> BoundaryCondition:
     return BoundaryCondition(
         type=BoundaryConditionType[bcDict['type']] if 'type' in bcDict else None,
-        sdf=pickle.loads(codecs.decode(bcDict['sdf'].encode(), 'base64')) if 'sdf' in bcDict else None,
-        dirichletFunctions={varName: pickle.loads(codecs.decode(fn.encode(), 'base64')) for varName, fn in bcDict['dirichletFunctions'].items()} if 'dirichletFunctions' in bcDict and bcDict['dirichletFunctions'] is not None else None,
-        updateFunctions={varName: pickle.loads(codecs.decode(fn.encode(), 'base64')) for varName, fn in bcDict['updateFunctions'].items()} if 'updateFunctions' in bcDict and bcDict['updateFunctions'] is not None else None,
-        forcingFunctions={varName: pickle.loads(codecs.decode(fn.encode(), 'base64')) for varName, fn in bcDict['forcingFunctions'].items()} if 'forcingFunctions' in bcDict and bcDict['forcingFunctions'] is not None else None,
+        sdf=_decode_callable(bcDict['sdf']) if 'sdf' in bcDict else None,
+        dirichletFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['dirichletFunctions'].items()} if 'dirichletFunctions' in bcDict and bcDict['dirichletFunctions'] is not None else None,
+        updateFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['updateFunctions'].items()} if 'updateFunctions' in bcDict and bcDict['updateFunctions'] is not None else None,
+        forcingFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['forcingFunctions'].items()} if 'forcingFunctions' in bcDict and bcDict['forcingFunctions'] is not None else None,
         vectorProjectionType=VectorProjectionType[bcDict['vectorProjectionType']] if 'vectorProjectionType' in bcDict else VectorProjectionType.none
     )
