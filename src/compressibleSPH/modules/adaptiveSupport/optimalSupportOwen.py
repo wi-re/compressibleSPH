@@ -44,7 +44,7 @@ def evaluateOptimalSupportOwen(
 
     kernel = kernel_ if kernel_ is not None else config.kernel
     if PsiLUT_fn is None:
-        PsiLUT_fn = computeOwen(kernel_, dim = config.domain.dim, nMin = 2.0, nMax = 6.0, nLUT = 1024)
+        PsiLUT_fn = computeOwen(kernel_, dim = config.domain.dim, nMin = 2.0, nMax = 6.0, nLUT = 2**12)
         # config['support']['LUT'] = PsiLUT_fn
     # particles, domain, kernel, targetNeighbors, PsiLUT_fn, nIter = 16, neighborhood = None, verbose = False,eps = 1e-3, neighborhoodAlgorithm = 'compact'):
     hs = [particles.supports]
