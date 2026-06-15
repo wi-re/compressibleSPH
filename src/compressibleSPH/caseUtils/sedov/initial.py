@@ -13,11 +13,11 @@ from sphWarpCore.enumTypes import *
 
 from warp import Kernel
 
-from compressibleSPH.config import SimulationConfig
+from compressibleSPH.configurations import SimulationConfig
 from compressibleSPH.utils import *
 from sphWarpCore import *
 import torch
-from compressibleSPH.system import *
+from compressibleSPH.systems import *
 from compressibleSPH.modules import idealGasEOS, evaluateOptimalSupport
 # from optimalSupport import evaluateOptimalSupport
 
@@ -27,6 +27,7 @@ from diffSPH.kernels import KernelType
 from  compressibleSPH.enumTypes import AdaptiveSupportScheme
 import warnings
 
+from compressibleSPH.sample import *
 
 def warpKernelToDiffSPHKernel(
         warpKernel: KernelFunctions
@@ -136,7 +137,7 @@ def buildSedov(
     compressibleSPHConfig = CompressibleSPHConfig(
         adaptiveSupportIterations=16,
         adaptiveSupportThreshold=1e-3,
-        adaptiveSupportScheme=AdaptiveSupportScheme.Monaghan,
+        adaptiveSupportScheme=AdaptiveSupportScheme.Owen,
         gamma=gamma
     )
 

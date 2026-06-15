@@ -29,3 +29,8 @@ __all__.extend(['prepExport', 'importConfigs', 'exportSimulationSystem', 'import
 
 from .io import parseKernelFunctions, parseIntegrationScheme, parseViscositySwitch, parseCompressibleSPHScheme, parseAdaptiveSupportScheme
 __all__.extend(['parseKernelFunctions', 'parseIntegrationScheme', 'parseViscositySwitch', 'parseCompressibleSPHScheme', 'parseAdaptiveSupportScheme'])
+
+
+from .sample.compressible import setupBasicCompressibleInitialState, sampleShockRegions1D
+
+__all__.extend(['setupBasicCompressibleInitialState', 'sampleShockRegions1D'])

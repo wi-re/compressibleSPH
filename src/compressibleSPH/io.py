@@ -92,9 +92,35 @@ def exportSimulationSystem(
             dumpStage(stages[stageIndex], stageGroupList, stageIndex, type(system.state), exportStagesAdjacency)
 
     for key, value in extraData.items() if extraData is not None else {}:
-        if isinstance(value, torch.Tensor):
+        if isinstance(value, dict):
+            extraGroup = outFile.create_group(f'dict_{key}')
+            for subKey, subValue in value.items():
+                if isinstance(subValue, torch.Tensor):
+                    extraGroup.create_dataset(subKey, data=subValue.cpu().numpy())
+                else:
+                    extraGroup.attrs[subKey] = subValue
+            outFile.attrs[key] = 'dict'
+        elif isinstance(value, list):
+            extraGroup = outFile.create_group(f'dict_{key}')
+            for subIndex, subValue in enumerate(value):
+                if isinstance(subValue, torch.Tensor):
+                    extraGroup.create_dataset(f'{subIndex}', data=subValue.cpu().numpy())
+                elif isinstance(subValue, dict):
+                    subGroup = extraGroup.create_group(f'{subIndex}')
+                    for subSubKey, subSubValue in subValue.items():
+                        if isinstance(subSubValue, torch.Tensor):
+                            subGroup.create_dataset(subSubKey, data=subSubValue.cpu().numpy())
+                        else:
+                            # print(f'Exporting extra data key {key}[{subIndex}][{subSubKey}] with value {subSubValue} of type {type(subSubValue)}')
+                            subGroup.attrs[subSubKey] = subSubValue
+                else:
+                    # print(f'Exporting extra data key {key}[{subIndex}] with value {subValue} of type {type(subValue)}')
+                    extraGroup.attrs[f'{subIndex}'] = subValue
+            outFile.attrs[key] = 'list'
+        elif isinstance(value, torch.Tensor):
             outFile.create_dataset(key, data=value.cpu().numpy())
         else:
+            # print(f'Exporting extra data key {key} with value {value} of type {type(value)}')
             outFile.attrs[key] = value
 
     outFile.close()
@@ -203,12 +229,42 @@ def importSimulationSystem(
     for key, value in inFile.items():
         if key in ['adjacency', 'state', 'stages']:
             continue
-        extraData[key] = torch.from_numpy(value[:]).to(device).to(hdfDtypeToTorchDtype(value.dtype)) if value.shape else torch.tensor(value[()], device=device, dtype=hdfDtypeToTorchDtype(value.dtype))
+        if key.startswith('dict_'):
+            continue
+        else:
+            extraData[key] = torch.from_numpy(value[:]).to(device).to(hdfDtypeToTorchDtype(value.dtype)) if value.shape else torch.tensor(value[()], device=device, dtype=hdfDtypeToTorchDtype(value.dtype))
 
     for key, value in inFile.attrs.items():
         if key in ['scheme', 'time']:
             continue
-        extraData[key] = value
+        if value == 'dict':
+            dictKey = key[len('dict_'):] if key.startswith('dict_') else key
+            extraData[dictKey] = {}
+            dictGroup = inFile[f'dict_{dictKey}'] if f'dict_{dictKey}' in inFile else inFile[dictKey]
+            for subKey, subValue in dictGroup.items():
+                if isinstance(subValue, h5py.Dataset):
+                    extraData[dictKey][subKey] = torch.from_numpy(subValue[:]).to(device).to(hdfDtypeToTorchDtype(subValue.dtype)) if subValue.shape else torch.tensor(subValue[()], device=device, dtype=hdfDtypeToTorchDtype(subValue.dtype))
+                else:
+                    extraData[dictKey][subKey] = subValue
+        elif value == 'list':
+            listKey = key[len('dict_'):] if key.startswith('dict_') else key
+            extraData[listKey] = []
+            listGroup = inFile[f'dict_{listKey}'] if f'dict_{listKey}' in inFile else inFile[listKey]
+            for subIndex, subValue in listGroup.items():
+                if isinstance(subValue, h5py.Dataset):
+                    extraData[listKey].append(torch.from_numpy(subValue[:]).to(device).to(hdfDtypeToTorchDtype(subValue.dtype)) if subValue.shape else torch.tensor(subValue[()], device=device, dtype=hdfDtypeToTorchDtype(subValue.dtype)))
+                elif isinstance(subValue, h5py.Group):
+                    subDict = {}
+                    for subSubKey, subSubValue in subValue.items():
+                        if isinstance(subSubValue, h5py.Dataset):
+                            subDict[subSubKey] = torch.from_numpy(subSubValue[:]).to(device).to(hdfDtypeToTorchDtype(subSubValue.dtype)) if subSubValue.shape else torch.tensor(subSubValue[()], device=device, dtype=hdfDtypeToTorchDtype(subSubValue.dtype))
+                        else:
+                            subDict[subSubKey] = subSubValue
+                    extraData[listKey].append(subDict)
+                else:
+                    extraData[listKey].append(subValue)
+        else:
+            extraData[key] = value
 
     inFile.close()
 

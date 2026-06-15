@@ -1,0 +1,78 @@
+import torch
+from ..modules.timestep.compressible import computeTimestep
+from .regular import sampleRegularParticles
+from ..modules import *
+
+def setupBasicCompressibleInitialState(
+        nx,
+        config, schemeConfig,
+        SimulationState, SimulationSystem,
+):
+    particles_l = sampleRegularParticles(nx, config.domain, config.targetNeighbors, jitter = 0.0)
+    Pinitial = torch.zeros_like(particles_l.densities)
+    rhoInitial = torch.ones_like(particles_l.densities)
+    v_initial = torch.zeros_like(particles_l.positions)
+
+        
+    A_, u_, P_, c_s = idealGasEOS(A = None, u = None, P = Pinitial, rho = particles_l.densities, gamma = schemeConfig.gamma)
+
+    internalEnergy = u_ 
+    kineticEnergy = torch.linalg.norm(v_initial, dim = -1) **2/ 2
+    totalEnergy = (internalEnergy + kineticEnergy) * particles_l.masses
+
+
+    simulationState = SimulationState(
+        positions = particles_l.positions,
+        supports = particles_l.supports,
+        masses = particles_l.masses,
+        densities = particles_l.densities,        
+        velocities = v_initial,
+
+        kinds = torch.zeros_like(particles_l.positions[:,0], dtype = torch.int32),
+        materials = torch.zeros_like(particles_l.positions[:,0], dtype = torch.int32),
+        UIDs = torch.arange(particles_l.positions.shape[0], device = config.device, dtype = torch.int32),
+        UIDcounter= particles_l.positions.shape[0],
+        
+        internalEnergies = u_,
+        totalEnergies = totalEnergy,
+        entropies = A_,
+        pressures = P_,
+        soundspeeds = c_s,
+
+        alphas = torch.ones_like(particles_l.densities),
+        alpha0s = torch.ones_like(particles_l.densities),
+        divergence = torch.zeros_like(particles_l.densities)
+    )
+    compressibleSystem = SimulationSystem(
+        state=simulationState, 
+        adjacency = None, 
+        domain = config.domain
+    )
+        
+    dx = simulationState.masses.min()
+    config.dx = dx
+    config.dt = computeTimestep(compressibleSystem, config, schemeConfig, dt = config.dt)
+
+    return compressibleSystem
+
+
+
+def sampleShockRegions1D(nx, config, schemeConfig, SimulationState, SimulationSystem, initialRegions):
+    particleSystem = setupBasicCompressibleInitialState(nx, config, schemeConfig, SimulationState, SimulationSystem)
+
+    for region in initialRegions:
+        begin = region['begin']
+        end = region['end']
+        pressure = region['pressure']
+        density = region['density']
+        
+        mask = (particleSystem.state.positions[:,0].abs() >= begin) & (particleSystem.state.positions[:,0].abs() < end)
+        particleSystem.state.pressures[mask] = pressure
+        particleSystem.state.densities[mask] = density
+
+    A_, u_, P_, c_s = idealGasEOS(A = None, u = None, P = particleSystem.state.pressures, rho = particleSystem.state.densities, gamma = schemeConfig.gamma)
+    particleSystem.state.internalEnergies = u_
+
+    config.dt = computeTimestep(particleSystem, config, schemeConfig, dt = None)
+
+    return particleSystem
