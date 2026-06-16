@@ -2,6 +2,9 @@ import torch
 from ..modules.timestep.compressible import computeTimestep
 from .regular import sampleRegularParticles
 from ..modules import *
+from ..configurations import CompressibleSPHConfig
+from ..enumTypes import *
+from sphWarpCore import *
 
 def setupBasicCompressibleInitialState(
         nx,
@@ -43,6 +46,18 @@ def setupBasicCompressibleInitialState(
         alpha0s = torch.ones_like(particles_l.densities),
         divergence = torch.zeros_like(particles_l.densities)
     )
+        
+    compressibleSPHConfigAdapt = CompressibleSPHConfig(
+        adaptiveSupportIterations=16,
+        adaptiveSupportThreshold=1e-3,
+        adaptiveSupportScheme=AdaptiveSupportScheme.NoScheme,
+    )
+    rho_optimal, h_optimal, adjacency, rhos_iter, supports_iter = evaluateOptimalSupport(simulationState, config, supportScheme = SupportScheme.Gather, compParams = compressibleSPHConfigAdapt)
+
+    simulationState.supports = h_optimal
+    simulationState.densities = rho_optimal
+
+
     compressibleSystem = SimulationSystem(
         state=simulationState, 
         adjacency = None, 
