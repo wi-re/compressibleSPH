@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Tuple, Dict, Any
+from typing import Callable, List, Tuple, Dict, Any
 from compressibleSPH.utils.sdf import *
 import torch
 
@@ -38,7 +38,7 @@ class BoundaryCondition:
     # Update functions work the same as dirichlet functions but instead target the update of the quantity instead of its value. This is useful for dynamic boundary conditions where the update of the quantity depends on its current value and the state of the system.
     updateFunctions: Dict[str, Callable[[Any, Any, Any, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]] = None
     # Forcing functions work the same but return the forcing term. This gives a more convenient wrapper for some types of boundary conditions (e.g. dynamic_forcing) where the boundary condition is more naturally expressed as a forcing term rather than a direct update to the quantity.
-    forcingFunctions: Dict[str, Callable[[Any, Any, Any, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]] = None
+    forcingFunctions: List[Callable[[Any, Any, Any, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]] = None
 
     # Vector projection type for handling vector quantities at the boundary
     vectorProjectionType: VectorProjectionType = VectorProjectionType.none
@@ -69,7 +69,7 @@ def boundaryConditionToDict(bc: BoundaryCondition) -> Dict[str, Any]:
         'sdf': _encode_callable(bc.sdf),
         'dirichletFunctions': {varName: _encode_callable(fn) for varName, fn in bc.dirichletFunctions.items()} if bc.dirichletFunctions is not None else None,
         'updateFunctions': {varName: _encode_callable(fn) for varName, fn in bc.updateFunctions.items()} if bc.updateFunctions is not None else None,
-        'forcingFunctions': {varName: _encode_callable(fn) for varName, fn in bc.forcingFunctions.items()} if bc.forcingFunctions is not None else None,
+        'forcingFunctions': [_encode_callable(fn) for fn in bc.forcingFunctions] if bc.forcingFunctions is not None else None,
         'vectorProjectionType': bc.vectorProjectionType.name if isinstance(bc.vectorProjectionType, VectorProjectionType) else bc.vectorProjectionType
     }
 
@@ -79,6 +79,6 @@ def dictToBoundaryCondition(bcDict: Dict[str, Any]) -> BoundaryCondition:
         sdf=_decode_callable(bcDict['sdf']) if 'sdf' in bcDict else None,
         dirichletFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['dirichletFunctions'].items()} if 'dirichletFunctions' in bcDict and bcDict['dirichletFunctions'] is not None else None,
         updateFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['updateFunctions'].items()} if 'updateFunctions' in bcDict and bcDict['updateFunctions'] is not None else None,
-        forcingFunctions={varName: _decode_callable(fn) for varName, fn in bcDict['forcingFunctions'].items()} if 'forcingFunctions' in bcDict and bcDict['forcingFunctions'] is not None else None,
+        forcingFunctions=[_decode_callable(fn) for fn in bcDict['forcingFunctions']] if 'forcingFunctions' in bcDict and bcDict['forcingFunctions'] is not None else None,
         vectorProjectionType=VectorProjectionType[bcDict['vectorProjectionType']] if 'vectorProjectionType' in bcDict else VectorProjectionType.none
     )
