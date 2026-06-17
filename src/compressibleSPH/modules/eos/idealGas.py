@@ -2,6 +2,7 @@ import torch
 from typing import Optional, Tuple
 from torch.profiler import profile, record_function, ProfilerActivity
 
+
 def idealGasEOS(A: Optional[torch.Tensor], u: Optional[torch.Tensor], P: Optional[torch.Tensor], 
              rho: torch.Tensor, gamma: float):
     with record_function("EOS[IdealGas]"):
@@ -35,4 +36,7 @@ def idealGasEOS(A: Optional[torch.Tensor], u: Optional[torch.Tensor], P: Optiona
             A_ = P / rho**gamma
 
         return A_, u_, P_, c_s
+
+
+
 

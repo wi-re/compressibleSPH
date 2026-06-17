@@ -64,7 +64,7 @@ def setupBasicCompressibleInitialState(
         domain = config.domain
     )
         
-    dx = simulationState.masses.min()
+    dx = simulationState.masses.min() ** (1.0 / config.dim)
     config.dx = dx
     config.dt = computeTimestep(compressibleSystem, config, schemeConfig, dt = config.dt)
 
