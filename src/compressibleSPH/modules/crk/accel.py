@@ -286,7 +286,7 @@ def computeCrkSPHAccel_Func_Adjacency(
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if opInt != 0:
         if not checkDirectionality_i(ki, opInt):
-            return
+            return zero_like_warp(accel[i])
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
