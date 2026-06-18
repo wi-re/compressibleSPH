@@ -39,8 +39,8 @@ from sphWarpCore import *
 from compressibleSPH import *
 # end of boilerplate imports
 
+from compressibleSPH.caseUtils import *
 
-from compressibleSPH.caseUtils.sod import *
 
 
 argumentParser = argparse.ArgumentParser(description="Run the Sod shock tube simulation.")

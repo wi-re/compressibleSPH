@@ -1,5 +1,5 @@
-from compressibleSPH.caseUtils.kidder.kidder import KidderIsentropicCapsuleAnalyticSolution
-from compressibleSPH.modules.timestep.compressible import computeTimestep
+from .kidder import KidderIsentropicCapsuleAnalyticSolution
+from ....modules.timestep.compressible import computeTimestep
 from compressibleSPH import *
 from sphWarpCore import *
 import torch

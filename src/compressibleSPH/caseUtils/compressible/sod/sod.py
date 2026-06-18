@@ -5,8 +5,8 @@ from compressibleSPH.configurations.compressibleConfig import CompressibleSPHCon
 from compressibleSPH.utils import *
 from sphWarpCore import *
 import torch
-from ...systems import *
-from ...modules import idealGasEOS, evaluateOptimalSupport
+from ....systems import *
+from ....modules import idealGasEOS, evaluateOptimalSupport
 # from optimalSupport import evaluateOptimalSupport
 
 class sodInitialState(NamedTuple):

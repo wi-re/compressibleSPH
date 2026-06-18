@@ -15,7 +15,7 @@ def decoratePlot(axis, positions, text = True):
         axis.text((positions['Shock'] + 1) / 2, position, 'V')
         
         
-from ...modules import idealGasEOS
+from ....modules import idealGasEOS
 from .sod import sodInitialState
 import torch
 import matplotlib.pyplot as plt

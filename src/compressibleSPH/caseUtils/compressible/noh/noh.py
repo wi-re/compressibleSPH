@@ -1,4 +1,4 @@
-from ...sample.compressible import setupBasicCompressibleInitialState
+from ....sample.compressible import setupBasicCompressibleInitialState
 import torch
 
 

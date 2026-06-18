@@ -1,4 +1,4 @@
-from compressibleSPH.modules.timestep.compressible import computeTimestep
+from ....modules.timestep.compressible import computeTimestep
 
 # final import blocks that are generic
 import matplotlib.pyplot as plt
