@@ -85,7 +85,16 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         else:
             self.state.surfaceIndicators = lastState.surfaceIndicators.clone() if lastState.surfaceIndicators is not None else None
 
-                
+        velocity_magnitudes = torch.linalg.vector_norm(self.state.velocities, dim=-1)
+        finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
+        max_velocity_magnitude = (
+            torch.max(finite_velocity_magnitudes).item()
+            if finite_velocity_magnitudes.numel() > 0
+            else float('nan')
+        )
+
+        # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
+        # print(f'Maximum Velocity Magnitude: {max_velocity_magnitude}')
         config = kwargs.get('config', None)
         schemeConfig = kwargs.get('schemeConfig', None)
         if schemeConfig.shiftProperties.active:

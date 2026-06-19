@@ -5,6 +5,7 @@ from sphWarpCore import KernelFunctions, KernelFunctions, OperationProperties, S
 
 from sphWarpCore.enumTypes import HashMapLengthMode, SupportScheme, WarpOperation
 from sphWarpCore import warpOperation
+import torch
 
 from compressibleSPH.sample.wp_deltaShift import computeDeltaShiftWarp
 
@@ -25,7 +26,7 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency):
             currentState,
             operationProperties = OperationProperties(
                 operation=WarpOperation.Density,
-                kernel = KernelFunctions.Wendland6, 
+                kernel = config.kernel, 
                 supportMode = SupportScheme.Gather
             ),
             domain = domain,
@@ -33,12 +34,23 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency):
         )
         # display(currentState)
 
+        velocity_magnitudes = torch.linalg.vector_norm(currentState.velocities, dim=-1)
+        finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
+        v_max = (
+            torch.max(finite_velocity_magnitudes)
+            if finite_velocity_magnitudes.numel() > 0
+            else torch.tensor(float('nan'), device=currentState.velocities.device)
+        )
+        c_max = v_max / schemeConfig.fluid.fixedSoundSpeed
+        h_min = currentState.supports.min()
+        # print(f'Iteration {i}, max velocity: {v_max.item()}, min support: {h_min.item()}, c_max: {c_max.item()}')
+
 
         shift = computeDeltaShiftWarp(
             currentState,
             operationProperties = OperationProperties(
                 operation=WarpOperation.Density,
-                kernel = KernelFunctions.Wendland6, 
+                kernel = config.kernel, 
                 supportMode = SupportScheme.Gather
             ),
             referenceParticles = currentState,
@@ -48,7 +60,7 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency):
             # operationMode = OperationDirection.AllToAll,
             adjacency = adjacency,
 
-            CFL = schemeConfig.shiftProperties.CFL, computeMach = schemeConfig.shiftProperties.computeMach, c_max = schemeConfig.shiftProperties.maxC,
+            CFL = schemeConfig.shiftProperties.CFL, computeMach = schemeConfig.shiftProperties.computeMach, c_max = c_max.cpu().item(),
             rho0 = 1.0, dx = config.dx.item(),
         )
 

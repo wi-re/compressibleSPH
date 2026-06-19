@@ -113,7 +113,7 @@ def computeDensityDiffusionDeltaSPH_Func_i(
 
 
 
-        out += - apparentVolume * prod
+        out += apparentVolume * prod
         
     return out
 
