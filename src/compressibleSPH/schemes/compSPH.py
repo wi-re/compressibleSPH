@@ -98,7 +98,7 @@ def compSPH_step(
     global lut
     currentSystem = system#
     currentState = currentSystem.state
-    currentSystem.adjacency = None
+    # currentSystem.adjacency = None
 
 
     # dsphConfig = {    

@@ -185,7 +185,7 @@ A full gallery page with previews and embedded videos is available at:
 | 12. Kelvin-Helmholtz | [12-Kelvin-Helmholtz.ipynb](examples/compressible/12-Kelvin-Helmholtz.ipynb) | ![](examples/compressible/outputs/12-Kelvin_Helmholtz.png) | [MP4](examples/compressible/outputs/12-Kelvin_Helmholtz.mp4) |
 | 13. Rayleigh-Taylor | [13-Rayleigh_Taylor.ipynb](examples/compressible/13-Rayleigh_Taylor.ipynb) | ![](examples/compressible/outputs/13-Rayleigh_Taylor.png) | [MP4](examples/compressible/outputs/13-Rayleigh_Taylor.mp4) |
 | 14. Triple Point (Equal Resolution) | [14-Triple_point.ipynb](examples/compressible/14-Triple_point.ipynb) | ![](examples/compressible/outputs/14-Triple_Point_equal_resolution.png) | [MP4](examples/compressible/outputs/14-Triple_Point_equal_resolution.mp4) |
-| 15. Triple Point (Equal Mass) | [15-Triple_point_equalMass.ipynb](examples/compressible/15-Triple_point_equalMass.ipynb) | ![](examples/compressible/outputs/15-Triple_Point_equal_mass.png) | [MP4](examples/compressible/outputs/15-Triple_Point_equal_mass.mp4) |
+| 15. Triple Point (Equal Mass) | [15-Triple_point_equalMass.ipynb](examples/compressible/15-Triple_point_equalMass.ipynb) | ![](examples/compressible/outputs/15-Triple_Point_equal_mass.png) | <video src="https://github.com/wi-re/compressibleSPH/blob/main/examples/compressible/outputs/15-Triple_Point_equal_mass.mp4" width="80%" controls></video>|
 
 ## Precision Note (Notebook Workflows)
 

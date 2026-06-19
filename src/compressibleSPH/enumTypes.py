@@ -32,3 +32,32 @@ class CompressibleSPHScheme(Enum):
     Monaghan = 0
     CompSPH = 1
     CRKSPH = 2
+
+@torch.jit.script
+class WeaklyCompressibleSPHScheme(Enum):
+    deltaSPH = 0
+
+
+
+class EquationOfState(Enum):
+    stiffTait = "stiffTait"
+    Tait = "Tait"
+    isoThermal = "isoThermal"
+    Polytropic = "polytropic"
+    Murnaghan = "murnaghan"
+
+
+class DensityDiffusionScheme(Enum):
+    deltaSPH = 0
+    denormalized = 1
+    densityOnly = 2
+    deltaOnly = 3
+    denormalizedOnly = 4
+
+class PressureForceScheme(Enum):
+    conservative = 0
+    nonConservative = 1
+    Antuono = 2
+    i = 3
+    j = 4
+    symmetric = 5

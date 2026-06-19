@@ -309,8 +309,8 @@ def sampleRegionSystem(
     rho_optimal, h_optimal, adjacency, rhos_iter, supports_iter = evaluateOptimalSupport(particles, config, supportScheme = SupportScheme.Gather, compParams = schemeConfigAdaptiveH)
     # particleState.supports = h_optimal
 
-    # particles.densities = rho_optimal
-    # particles.supports = h_optimal
+    particles.densities = rho_optimal
+    particles.supports = h_optimal
 
     print(f' Support After Optimization: Min: {particles.supports.min().item()}, Max: {particles.supports.max().item()}, Mean: {particles.supports.mean().item()}')
 

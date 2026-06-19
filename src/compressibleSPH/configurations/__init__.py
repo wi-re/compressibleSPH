@@ -6,6 +6,7 @@ from .compressibleConfig import CompressibleSPHConfig, compressibleConfigToDict,
 from .compSPHConfig import CompSPHConfig, compSPHConfigToDict, dictToCompSPHConfig
 from .crkSPH import CRKViscosity, CRKSPHConfig, crkSPHConfigToDict, dictToCRKSPHConfig
 from .boundaryConditions import *
+from .weaklyCompressible import WeaklyCompressibleSPHConfig, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
 
 __all__ = [
     'SimulationConfig',
@@ -29,4 +30,7 @@ __all__ = [
     'dictToCompSPHConfig',
     'crkSPHConfigToDict',
     'dictToCRKSPHConfig',
+    'WeaklyCompressibleSPHConfig',
+    'weaklyCompressibleConfigToDict',
+    'dictToWeaklyCompressibleConfig'
 ]

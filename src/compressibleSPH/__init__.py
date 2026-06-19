@@ -10,7 +10,7 @@ from .systems import *
 from .schemes import *
 from .modules import *
 from .utils import *
-from .enumTypes import EnergyScheme, AdaptiveSupportScheme, ViscositySwitch, CompressibleSPHScheme
+from .enumTypes import EnergyScheme, AdaptiveSupportScheme, ViscositySwitch, CompressibleSPHScheme, WeaklyCompressibleSPHScheme, DensityDiffusionScheme, PressureForceScheme
 from .sample import *
 from .io import prepExport, importConfigs, exportSimulationSystem, importSimulationSystem
 
@@ -23,7 +23,7 @@ __all__.extend(utils.__all__)
 # __all__.extend(enumTypes.__all__)
 __all__.extend(sample.__all__)
 
-__all__.extend(['EnergyScheme', 'AdaptiveSupportScheme', 'ViscositySwitch', 'CompressibleSPHScheme'])
+__all__.extend(['EnergyScheme', 'AdaptiveSupportScheme', 'ViscositySwitch', 'CompressibleSPHScheme', 'WeaklyCompressibleSPHScheme', 'DensityDiffusionScheme', 'PressureForceScheme'])
 __all__.extend(['prepExport', 'importConfigs', 'exportSimulationSystem', 'importSimulationSystem'])
 
 
@@ -34,3 +34,6 @@ __all__.extend(['parseKernelFunctions', 'parseIntegrationScheme', 'parseViscosit
 from .sample.compressible import setupBasicCompressibleInitialState, sampleShockRegions1D
 
 __all__.extend(['setupBasicCompressibleInitialState', 'sampleShockRegions1D'])
+
+from .sample.weaklyCompressible import setupBasicWeaklyCompressibleInitialState
+__all__.extend(['setupBasicWeaklyCompressibleInitialState'])

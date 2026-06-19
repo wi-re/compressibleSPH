@@ -9,6 +9,7 @@ from .crk import *
 from .compSPH import *
 from .liu import *
 from .boundaryConditions import *
+from .deltaSPH import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -22,4 +23,4 @@ __all__.extend(crk.__all__)
 __all__.extend(compSPH.__all__)
 __all__.extend(liu.__all__)
 __all__.extend(boundaryConditions.__all__)
-
+__all__.extend(deltaSPH.__all__)

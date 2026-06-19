@@ -6,11 +6,12 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
+from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
 from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+from ...enumTypes import *
 
 @wp.func
-def computeViscosity_Func_i(
+def computeDensityDiffusionDeltaSPH_Func_i(
     # General Shape Parameters and indices
     i : wp.int32,  dim: wp.int32, 
 
@@ -39,19 +40,15 @@ def computeViscosity_Func_i(
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
     useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, Viscosity_i: scalar_t, referenceViscositys: wp.array(dtype = scalar_t),  # type: ignore
+    useGradHTerms: wp.bool, omega_i: scalar_t, referenceOmegas: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
     useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
     useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
-    vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-
-    individual_cs: wp.bool, cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
-    viscositySwitch: wp.bool, alpha_i: scalar_t, referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    explicitPressure: wp.bool, P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
-    viscosityParams: DiffusionParameters,
-
+    gradRho_i: vector(length=Any, dtype=scalar_t), referenceGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    gradRhoL_i: vector(length=Any, dtype=scalar_t), referenceGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    densityScheme: wp.int32,
     # Dummy value to allow allocation
     outputValue: Any, # type: ignore
 ):
@@ -70,24 +67,9 @@ def computeViscosity_Func_i(
         ##########################################################
         
         xj, hj, mj, rhoj, kj = getParticle(referenceState, j)
-        vel_j = referenceVelocities[j]
 
         apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
 
-        pi = computePi_actual(
-            xi, xj, 
-            hi, hj,
-            mi, mj,
-            rhoi, rhoj,
-            explicitPressure, P_i, referencePressures[j] if explicitPressure else scalar_t(0.0),
-            vel_i, vel_j,
-            domainState,
-            kernel_int,
-            cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
-            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
-            viscosityParams, 
-            False)
-        
         gradw_ij = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
@@ -100,18 +82,45 @@ def computeViscosity_Func_i(
         
         x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
-        u_ij = vel_i - vel_j
-        ux_ij = wp.dot(u_ij, x_ij)
-        mu_ij = ux_ij /(r_ij + scalar_t(1.0e-14) * hi)
+        n_ij = x_ij / (r_ij + scalar_t(1.0e-14) * hi)
 
-        out += apparentVolume * pi * gradw_ij * mu_ij
+
+        # grad_ij = zero_like_warp(gradw_ij)
+        # rho_ij = scalar_t(0.0)
+        psi_ij = zero_like_warp(gradw_ij)
+        if densityScheme == wp.int32(DensityDiffusionScheme.deltaSPH.value):
+            grad_ij = gradRhoL_i + referenceGradRhoL[j]
+            rho_ij = scalar_t(2.0) * (rhoj - rhoi) * n_ij / (r_ij + scalar_t(1.0e-14) * hi)
+            psi_ij = grad_ij - rho_ij
+        elif densityScheme == wp.int32(DensityDiffusionScheme.denormalized.value):
+            grad_ij = gradRho_i + referenceGradRho[j]
+            rho_ij = scalar_t(2.0) * (rhoj - rhoi) * n_ij / (r_ij + scalar_t(1.0e-14) * hi)
+            psi_ij = grad_ij - rho_ij
+        elif densityScheme == wp.int32(DensityDiffusionScheme.densityOnly.value):
+            grad_ij = zero_like_warp(gradw_ij)
+            rho_ij = scalar_t(2.0) * (rhoj - rhoi) * n_ij / (r_ij + scalar_t(1.0e-14) * hi)
+            psi_ij = - rho_ij
+        elif densityScheme == wp.int32(DensityDiffusionScheme.deltaOnly.value):
+            grad_ij = gradRhoL_i + referenceGradRhoL[j]
+            rho_ij = zero_like_warp(gradw_ij)
+            psi_ij = grad_ij
+        elif densityScheme == wp.int32(DensityDiffusionScheme.denormalizedOnly.value):
+            grad_ij = gradRho_i + referenceGradRho[j]
+            rho_ij = zero_like_warp(gradw_ij)
+            psi_ij = grad_ij
+        
+        prod = wp.dot(psi_ij, gradw_ij)
+
+
+
+        out += - apparentVolume * prod
         
     return out
 
 from sphWarpCore.operations_grid.grid_util import checkOffset
 
 @wp.func
-def computeViscosity_Func_Adjacency(
+def computeDensityDiffusionDeltaSPH_Func_Adjacency(
     i : wp.int32, dim: wp.int32, 
 
     queryState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
@@ -126,11 +135,10 @@ def computeViscosity_Func_Adjacency(
 
     mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
     
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
-    viscosityParams: DiffusionParameters,
+    queryGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    densityScheme: wp.int32,
+
     outputValue : Any, # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
@@ -142,11 +150,9 @@ def computeViscosity_Func_Adjacency(
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
-    vel_i = queryVelocities[i]
-
-    cs_i = queryCs[i] if individual_cs else viscosityParams.c_s
-    alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
-    P_i = queryPressures[i] if explicitPressure else scalar_t(0.0)
+    
+    gradRho_i = queryGradRho[i]
+    gradRhoL_i = queryGradRhoL[i]
 
     out = zero_like_warp(outputValue)
     for o in range(numOffsets):
@@ -164,7 +170,7 @@ def computeViscosity_Func_Adjacency(
             if beginIndex < 0:
                 continue
         
-        out += computeViscosity_Func_i(
+        out += computeDensityDiffusionDeltaSPH_Func_i(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
@@ -177,11 +183,9 @@ def computeViscosity_Func_Adjacency(
             useGradHTerms, omega_i, correctionData.referenceOmegas,
             useVolume, Vi , correctionData.referenceVolumes,
             useCRK, Ai, Bi, gradA_i, gradB_i,
-            vel_i, referenceVelocities,
-            individual_cs, cs_i, referenceCs,
-            viscositySwitch, alpha_i, referenceAlphas,
-            explicitPressure, P_i, referencePressures,
-            viscosityParams,
+            gradRho_i, referenceGradRho,
+            gradRhoL_i, referenceGradRhoL,
+            densityScheme,
 
 
             outputValue,
@@ -193,7 +197,7 @@ def computeViscosity_Func_Adjacency(
 
 
 @wp.kernel
-def computeViscosity_Kernel(
+def computeDensityDiffusionDeltaSPH_Kernel(
     queryState: Any,
     referenceState: Any,
     domainState: domainData,
@@ -203,46 +207,43 @@ def computeViscosity_Kernel(
     
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
-    queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
-    viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
-    viscosityParams: DiffusionParameters,
+    queryGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    queryGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    densityScheme: wp.int32,
+
     # The last parameter is always the output array and should not be changed
-    outputValues : wp.array(dtype = vector(length=Any, dtype=scalar_t)) # type: ignore
+    outputValues : wp.array(dtype = scalar_t) # type: ignore
 ):                                                                                    
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
     if i >= numParticles:
         return
 
-    outputValues[i] = computeViscosity_Func_Adjacency(
+    outputValues[i] = computeDensityDiffusionDeltaSPH_Func_Adjacency(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
         mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
-        queryVelocities, referenceVelocities,
-        individual_cs, queryCs, referenceCs,
-        viscositySwitch, queryAlphas, referenceAlphas,
-        explicitPressure, queryPressures, referencePressures,
-        viscosityParams,
+        queryGradRho, referenceGradRho,
+        queryGradRhoL, referenceGradRhoL,
+        densityScheme,
 
 
         zero_like_warp(outputValues)
     )
 
-def computeViscosityWarp(
+
+def computeDensityDiffusionDeltaSPH(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
     domain: DomainDescription,
     
-    viscosityParams: DiffusionParameters,
-    queryVelocities : Optional[torch.Tensor] = None, referenceVelocities: Optional[torch.Tensor] = None,
-    queryPressures: Optional[torch.Tensor] = None, referencePressures: Optional[torch.Tensor] = None,
-    queryCs: Optional[torch.Tensor] = None, referenceCs: Optional[torch.Tensor] = None,
-    queryAlphas: Optional[torch.Tensor] = None, referenceAlphas: Optional[torch.Tensor] = None,
-    
+    densityScheme: DensityDiffusionScheme,
+
+    queryGradRho: Optional[torch.Tensor] = None, referenceGradRho: Optional[torch.Tensor] = None,
+    queryGradRhoL: Optional[torch.Tensor] = None, referenceGradRhoL: Optional[torch.Tensor] = None,
+
     queryVolumes: Optional[torch.Tensor] = None, referenceVolumes: Optional[torch.Tensor] = None,
     adjacency: Optional[Union[AdjacencyList, CompactHashMap]] = None, # if none a datastructure is created for EVERY operation!,
     referenceParticles: Optional[ParticleState] = None,
@@ -250,11 +251,15 @@ def computeViscosityWarp(
     gradHState: Optional[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], GradHState]] = None,
     renormalizationState: Optional[Union[torch.Tensor,RenormalizationState]] = None,
 ):
-    if referenceVelocities is None:
-        referenceVelocities = queryVelocities
-    with record_function("warpSPH[computeViscosity]"):
-        with record_function("warpSPH[computeViscosity] - Preprocessing"):
+    if referenceGradRho is None:
+        referenceGradRho = queryGradRho
+    if referenceGradRhoL is None:
+        referenceGradRhoL = queryGradRhoL
+
+    with record_function("warpSPH[computeDensityDiffusion]"):
+        with record_function("warpSPH[computeDensityDiffusion] - Preprocessing"):
             # Preprocessing and input validation
+            device = queryParticles.positions.device
             # args, device, dim = parseArguments(
             #     queryParticles, operationProperties, domain,
             #     queryVolumes, referenceVolumes,
@@ -264,41 +269,21 @@ def computeViscosityWarp(
             #     gradHState,
             #     renormalizationState,
             # )
-            device = queryParticles.positions.device
+
             outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
+            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            queryVelocities_ = queryVelocities if queryVelocities is not None else (queryParticles.velocities if hasattr(queryParticles, 'velocities') else None)
-            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
-            queryAlphas_ = queryAlphas if queryAlphas is not None else (queryParticles.alphas if hasattr(queryParticles, 'alphas') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
-            queryPressures_ = queryPressures if queryPressures is not None else (queryParticles.pressures if hasattr(queryParticles, 'pressures') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
+            
+            queryGradRho_ = queryGradRho if queryGradRho is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
+            queryGradRhoL_ = queryGradRhoL if queryGradRhoL is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
+            referenceGradRho_ = referenceGradRho if referenceGradRho is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
+            referenceGradRhoL_ = referenceGradRhoL if referenceGradRhoL is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
 
-            referenceVelocities_ = referenceVelocities if referenceVelocities is not None else (referenceParticles.velocities if hasattr(referenceParticles, 'velocities') else None)
-            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
-            referenceAlphas_ = referenceAlphas if referenceAlphas is not None else (referenceParticles.alphas if hasattr(referenceParticles, 'alphas') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
-            referencePressures_ = referencePressures if referencePressures is not None else (referenceParticles.pressures if hasattr(referenceParticles, 'pressures') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
-
-            if queryAlphas is not None or (hasattr(queryParticles, 'alphas') and queryParticles.alphas is not None):
-                viscositySwitch = True
-            else:
-                viscositySwitch = False
-            if queryCs is not None or (hasattr(queryParticles, 'soundspeeds') and queryParticles.soundspeeds is not None):
-                individual_cs = True
-            else:            
-                individual_cs = False
-            if queryPressures is not None or (hasattr(queryParticles, 'pressures') and queryParticles.pressures is not None):
-                explicitPressure = True
-            else:
-                explicitPressure = False
-
-            if queryVelocities_ is None:
-                raise ValueError("Velocities must be provided either through queryVelocities or as a property of queryParticles.")
-
-        with record_function("warpSPH[computeViscosity] - Kernel Execution"):
+        with record_function("warpSPH[computeDensityDiffusionDeltaSPH] - Kernel Execution"):
             return warpWrapper2(
                 launcher = launch_kernel,
-                kernel   = computeViscosity_Kernel,
+                kernel   = computeDensityDiffusionDeltaSPH_Kernel,
                 outputSizes  = outputSize,
                 outputDtypes = outputDtype,
                 defaultStateArguments=(
@@ -311,23 +296,23 @@ def computeViscosityWarp(
                     renormalizationState,
                 ),
                 additionalArguments=(
-                    queryVelocities_, referenceVelocities_,
-                    individual_cs, queryCs_, referenceCs_,
-                    viscositySwitch, queryAlphas_, referenceAlphas_,
-                    explicitPressure, queryPressures_, referencePressures_,
-                    viscosityParams
+                    queryGradRho_, referenceGradRho_,
+                    queryGradRhoL_, referenceGradRhoL_,
+                    wp.int32(densityScheme.value)
                 ),
             )
 
+
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):
         #     warp_result = warpWrapper(
-        #         launch_kernel, computeViscosity_Kernel, outputSize, outputDtype,
+        #         launch_kernel, computeDensityDiffusionDeltaSPH_Kernel, outputSize, outputDtype,
         #         *args,
         #         queryVelocities_, referenceVelocities_,
+        #         queryEnergies_, referenceEnergies_,
         #         individual_cs, queryCs_, referenceCs_,
         #         viscositySwitch, queryAlphas_, referenceAlphas_,
         #         explicitPressure, queryPressures_, referencePressures_,
-        #         viscosityParams
+        #         conductivityParams
         #     )
 
     return warp_result
