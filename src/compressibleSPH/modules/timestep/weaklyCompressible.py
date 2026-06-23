@@ -25,7 +25,7 @@ def computeTimestep(
     maxDt = config.maxDt
     minDt = config.minDt
     
-    alpha = compParams.diffusionParams.C_l
+    alpha = compParams.diffusionParams.inviscidAlpha
     c_s = compParams.fluid.fixedSoundSpeed
     particleSupport = system.state.supports.min()
     kernelScale = sphKernel_xi(config.kernel.value, config.dim)
@@ -44,7 +44,12 @@ def computeTimestep(
     state = system.state
     dim = state.positions.shape[1]
 
-    nu = alpha * c_s * particleSupport / (2 * (dim +2))
+    # nu = alpha * c_s * particleSupport / (2 * (dim +2))
+    if compParams.diffusionParams.inviscid:
+        nu = alpha * c_s * particleSupport / (2 * (dim +2))
+    else:
+        nu = compParams.diffusionParams.viscidNu
+
     # nu = config.get('diffusion', {}).get('nu', nu) if diffusionScheme == 'deltaSPH_viscid' else nu
     dt_v = 0.125 * particleSupport**2 / nu / kernelScale
     dt_v = torch.tensor(dt_v, dtype = dtype, device = device) if not isinstance(dt_v, torch.Tensor) else dt_v

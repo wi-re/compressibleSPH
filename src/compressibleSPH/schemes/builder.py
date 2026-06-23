@@ -1,6 +1,7 @@
 from ..systems import *
 from ..configurations import *
 from .compSPH import compSPH_step
+from .deltaSPH import deltaSPH_step
 from .crkSPH import crkSPH_step
 from .monaghan import compressibleSPH_Monaghan
 from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme
@@ -23,7 +24,7 @@ def buildScheme(
         )
     elif (isinstance(schemeName, str) and schemeName == 'deltaSPH') or (isinstance(schemeName, WeaklyCompressibleSPHScheme) and schemeName == WeaklyCompressibleSPHScheme.deltaSPH):
         return (
-            WeaklyCompressibleSystem, WeaklyCompressibleState, WeaklyCompressibleSPHConfig, CompressibleSystemUpdate, compSPH_step, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
+            WeaklyCompressibleSystem, WeaklyCompressibleState, WeaklyCompressibleSPHConfig, CompressibleSystemUpdate, deltaSPH_step, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
         )
     else:
         raise ValueError(f"Scheme {schemeName} not recognized.")

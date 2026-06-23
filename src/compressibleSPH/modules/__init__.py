@@ -10,6 +10,8 @@ from .compSPH import *
 from .liu import *
 from .boundaryConditions import *
 from .deltaSPH import *
+from .density import *
+from .noise import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -24,3 +26,5 @@ __all__.extend(compSPH.__all__)
 __all__.extend(liu.__all__)
 __all__.extend(boundaryConditions.__all__)
 __all__.extend(deltaSPH.__all__)
+__all__.extend(density.__all__)
+__all__.extend(noise.__all__)

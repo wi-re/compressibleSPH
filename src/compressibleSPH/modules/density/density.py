@@ -11,18 +11,16 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from .wp_surfaceAware import computePressureSurfaceAwareWarp
 
-def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    dvdt = computePressureSurfaceAwareWarp(
+
+def computeDensities(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
+    return warpOperation(
         currentState,
-        operationProperties = OperationProperties(
+        OperationProperties(
             kernel = config.kernel,
-            supportMode = SupportScheme.SuperSymmetric,
+            operation = WarpOperation.Density,
+            supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
         ),
         domain = config.domain,
         adjacency = adjacency,
-        queryPressures = currentState.pressures,
-        pressureTerm = schemeConfig.pressureForceTerm
     )
-    return dvdt

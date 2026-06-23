@@ -11,18 +11,20 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from .wp_surfaceAware import computePressureSurfaceAwareWarp
 
-def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    dvdt = computePressureSurfaceAwareWarp(
+
+def computeMomentum(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
+    return warpOperation(
         currentState,
-        operationProperties = OperationProperties(
+        OperationProperties(
             kernel = config.kernel,
+            operation = WarpOperation.Divergence,
             supportMode = SupportScheme.SuperSymmetric,
+            operationMode = OperationDirection.AllToAll,
+            gradientMode = GradientScheme.Difference
         ),
+        queryValues = currentState.velocities,
         domain = config.domain,
         adjacency = adjacency,
-        queryPressures = currentState.pressures,
-        pressureTerm = schemeConfig.pressureForceTerm
+        consistentDivergence = False
     )
-    return dvdt

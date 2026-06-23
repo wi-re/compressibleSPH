@@ -68,6 +68,25 @@ def buildDefaultShiftProperties() -> ShiftProperties:
     )
 
 @dataclass
+class WeaklyCompressibleDiffusionParams():
+    inviscid : bool = field(default=True, metadata={"description": "Whether to use inviscid diffusion parameters"})
+    inviscidAlpha : float = field(default=0.01, metadata={"description": "Alpha value for inviscid diffusion"})
+
+    viscidNu : float = field(default=1e-3, metadata={"description": "Kinematic viscosity for viscous diffusion"})
+
+    densityDelta: float = field(default=0.1, metadata={"description": "Density diffusion coefficient for delta-SPH"})
+    densityDiffusionTerm: DensityDiffusionScheme = field(default=DensityDiffusionScheme.deltaSPH, metadata={'description': 'Density diffusion term to use'})
+
+def buildDefaultDiffusionParamsWeaklyCompressibleSPH() -> WeaklyCompressibleDiffusionParams:
+    return WeaklyCompressibleDiffusionParams(
+        inviscid=True,
+        inviscidAlpha=0.01,
+        viscidNu=1e-3,
+        densityDelta=0.1,
+        densityDiffusionTerm=DensityDiffusionScheme.deltaSPH
+    )
+
+@dataclass
 class WeaklyCompressibleSPHConfig:
     fluid: fluidProperties = field(default_factory=buildDefaultFluidProperties, metadata={"description": "Fluid properties for the weakly compressible SPH simulation"})
 
@@ -77,7 +96,8 @@ class WeaklyCompressibleSPHConfig:
     adaptiveSupportCorrections: bool = field(default=True, metadata={'description': 'Whether to apply corrections in the adaptive support scheme (grad-H terms)'})
 
 
-    diffusionParams: DiffusionParameters = field(default_factory=buildDefaultDiffusionParamsCompressibleSPH)
+    diffusionParams: WeaklyCompressibleDiffusionParams = field(default_factory=buildDefaultDiffusionParamsWeaklyCompressibleSPH, metadata={'description': 'Diffusion parameters for the weakly compressible SPH simulation'})
+
     viscositySwitchParams: ViscositySwitchConfig = field(default_factory=ViscositySwitchConfig)
 
     schemeName: str = field(default='Compressible SPH', metadata={'description': 'Name of the compressible SPH scheme to use'})
@@ -87,8 +107,6 @@ class WeaklyCompressibleSPHConfig:
     dt_viscosityConstraint: bool = field(default=True, metadata={'description': 'Whether to apply viscosity constraint in timestep computation'})
     dt_accelerationConstraint: bool = field(default=True, metadata={'description': 'Whether to apply acceleration constraint in timestep computation'})
     dt_acousticConstraint: bool = field(default=True, metadata={'description': 'Whether to apply acoustic constraint in timestep computation'})
-
-    densityDiffusionTerm: DensityDiffusionScheme = field(default=DensityDiffusionScheme.deltaSPH, metadata={'description': 'Density diffusion term to use'})
     pressureForceTerm: PressureForceScheme = field(default=PressureForceScheme.nonConservative, metadata={'description': 'Pressure force term to use'})
 
     shiftProperties: ShiftProperties = field(default_factory=buildDefaultShiftProperties, metadata={'description': 'Properties for the delta-SPH shift'})
@@ -97,6 +115,23 @@ class WeaklyCompressibleSPHConfig:
 
 from typing import Dict, Any
 
+
+def wcDiffusionParamsToDict(diffusionParams: WeaklyCompressibleDiffusionParams) -> Dict[str, Any]:
+    return {
+        'inviscid': diffusionParams.inviscid,
+        'inviscidAlpha': diffusionParams.inviscidAlpha,
+        'viscidNu': diffusionParams.viscidNu,
+        'densityDelta': diffusionParams.densityDelta,
+        'densityDiffusionTerm': diffusionParams.densityDiffusionTerm.name if isinstance(diffusionParams.densityDiffusionTerm, Enum) else diffusionParams.densityDiffusionTerm
+    }
+def dictToWCDiffusionParams(diffusionParamsDict: Dict[str, Any]) -> WeaklyCompressibleDiffusionParams:
+    return WeaklyCompressibleDiffusionParams(
+        inviscid=diffusionParamsDict.get('inviscid', True),
+        inviscidAlpha=diffusionParamsDict.get('inviscidAlpha', 0.01),
+        viscidNu=diffusionParamsDict.get('viscidNu', 1e-3),
+        densityDelta=diffusionParamsDict.get('densityDelta', 0.1),
+        densityDiffusionTerm=DensityDiffusionScheme[diffusionParamsDict.get('densityDiffusionTerm', 'deltaSPH')] if isinstance(diffusionParamsDict.get('densityDiffusionTerm'), str) else diffusionParamsDict.get('densityDiffusionTerm', DensityDiffusionScheme.deltaSPH)
+    )
 
 
 def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[str, Any]:
@@ -113,7 +148,7 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
         'adaptiveSupportIterations': config.adaptiveSupportIterations,
         'adaptiveSupportThreshold': config.adaptiveSupportThreshold,
         'adaptiveSupportCorrections': config.adaptiveSupportCorrections,
-        'diffusionParams': diffusionParamsToDict(config.diffusionParams),
+        'diffusionParams': wcDiffusionParamsToDict(config.diffusionParams),
         'viscositySwitchParams': viscositySwitchConfigToDict(config.viscositySwitchParams),
         'schemeName': config.schemeName,
         'boundaryConditions': [boundaryConditionToDict(bc) for bc in config.boundaryConditions],
@@ -121,7 +156,6 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
         'dt_accelerationConstraint': config.dt_accelerationConstraint,
         'dt_acousticConstraint': config.dt_acousticConstraint,
 
-        'densityDiffusionTerm': config.densityDiffusionTerm.name,
         'pressureForceTerm': config.pressureForceTerm.name,
         'shiftProperties': {
             'iterations': config.shiftProperties.iterations,
@@ -145,14 +179,14 @@ def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompress
     config.adaptiveSupportIterations = configDict['adaptiveSupportIterations']
     config.adaptiveSupportThreshold = configDict['adaptiveSupportThreshold']
     config.adaptiveSupportCorrections = configDict['adaptiveSupportCorrections']
-    config.diffusionParams = dictToDiffusionParams(configDict['diffusionParams'])
+    config.diffusionParams = dictToWCDiffusionParams(configDict['diffusionParams'])
     config.viscositySwitchParams = dictToViscositySwitchConfig(configDict['viscositySwitchParams'])
     config.schemeName = configDict['schemeName']
     config.boundaryConditions = [dictToBoundaryCondition(bcDict) for bcDict in configDict['boundaryConditions']]
     config.dt_viscosityConstraint = configDict['dt_viscosityConstraint']
     config.dt_accelerationConstraint = configDict['dt_accelerationConstraint']
     config.dt_acousticConstraint = configDict['dt_acousticConstraint']
-    config.densityDiffusionTerm = DensityDiffusionScheme[configDict['densityDiffusionTerm']] if isinstance(configDict['densityDiffusionTerm'], str) else configDict['densityDiffusionTerm']
+    # config.densityDiffusionTerm = DensityDiffusionScheme[configDict['densityDiffusionTerm']] if isinstance(configDict['densityDiffusionTerm'], str) else configDict['densityDiffusionTerm']
     config.pressureForceTerm = PressureForceScheme[configDict['pressureForceTerm']] if isinstance(configDict['pressureForceTerm'], str) else configDict['pressureForceTerm']
     shiftPropsDict = configDict.get('shiftProperties', {})
     config.shiftProperties = ShiftProperties(

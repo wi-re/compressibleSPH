@@ -120,9 +120,10 @@ def buildConfig(
         samplingScheme=samplingScheme,
     ), getIntegrator(integrationScheme)
 
+import numpy as np
 
 def configurationToDict(config: SimulationConfig) -> Dict[str, Any]:
-    return {
+    exdict = {
         'device': str(config.device),
         'dtype': str(config.dtype),
         'domain': {
@@ -147,6 +148,11 @@ def configurationToDict(config: SimulationConfig) -> Dict[str, Any]:
         'laplacianMode': config.laplacianMode.name,
         'samplingScheme': config.samplingScheme.name,
     }
+    for key, value in exdict.items():
+        if isinstance(value, (torch.Tensor)):
+            exdict[key] = value.detach().cpu().numpy().tolist()
+    
+    return exdict
 
 def dictToConfig(
     configDict: Dict[str, Any]

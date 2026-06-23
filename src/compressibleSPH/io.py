@@ -73,8 +73,8 @@ def exportSimulationSystem(
     os.makedirs(outFolderPath, exist_ok=True)
     outFile = h5py.File(f'{exportPath}/trajectory/{tag}.h5', 'w')
 
-    outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) else scheme
-    outFile.attrs['time'] = system.t
+    outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme
+    outFile.attrs['time'] = system.t if isinstance(system.t, float) else system.t.cpu().item()
 
     if system.adjacency is not None:
         adjacencyGroup = outFile.create_group('adjacency')
@@ -195,6 +195,9 @@ def schemeNameToSimulationScheme(name: str) -> CompressibleSPHScheme:
         # print(f'Comparing {scheme.name.lower()} to {name.lower()}')
         if scheme.name.lower() == name.lower():
             return scheme
+    for scheme in WeaklyCompressibleSPHScheme:
+        if scheme.name.lower() == name.lower():
+            return scheme
     raise ValueError(f'Unsupported scheme name: {name}')
 
 
@@ -282,7 +285,7 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn):
     schemeCfg = export_fn(schemeConfig)
 
     exportDict = {
-        'scheme': scheme.name if isinstance(scheme, CompressibleSPHScheme) else scheme,
+        'scheme': scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme,
         'config': cfg,
         'schemeConfig': schemeCfg,
         'timestamp': currentTime,
