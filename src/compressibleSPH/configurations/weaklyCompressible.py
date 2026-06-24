@@ -90,6 +90,8 @@ def buildDefaultDiffusionParamsWeaklyCompressibleSPH() -> WeaklyCompressibleDiff
         densityDiffusionTerm=DensityDiffusionScheme.deltaSPH
     )
 
+from .surfaceDetection import SurfaceDetectionConfig, buildDefaultSurfaceDetectionConfig
+
 @dataclass
 class WeaklyCompressibleSPHConfig:
     fluid: fluidProperties = field(default_factory=buildDefaultFluidProperties, metadata={"description": "Fluid properties for the weakly compressible SPH simulation"})
@@ -118,6 +120,7 @@ class WeaklyCompressibleSPHConfig:
     regions: List[ParticleRegion] = field(default_factory=list, metadata={'description': 'List of particle regions in the simulation'})
     rigidBodies: List[RigidBody] = field(default_factory=list, metadata={'description': 'List of rigid bodies in the simulation'})
 
+    surfaceDetectionConfig: SurfaceDetectionConfig = field(default_factory=buildDefaultSurfaceDetectionConfig, metadata={'description': 'Configuration for surface detection module'})
 
 
 from typing import Dict, Any
@@ -171,6 +174,7 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
             'maxC': config.shiftProperties.maxC,
             'active': config.shiftProperties.active
         },
+        # 'surfaceDetectionConfig': surfaceDetectionConfigToDict(config.surfaceDetectionConfig) if config.surfaceDetectionConfig is not None else None
     }
 
 def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompressibleSPHConfig:

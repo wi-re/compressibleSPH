@@ -12,6 +12,7 @@ from .boundaryConditions import *
 from .deltaSPH import *
 from .density import *
 from .noise import *
+from .surfaceDetection import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -28,3 +29,4 @@ __all__.extend(boundaryConditions.__all__)
 __all__.extend(deltaSPH.__all__)
 __all__.extend(density.__all__)
 __all__.extend(noise.__all__)
+__all__.extend(surfaceDetection.__all__)
