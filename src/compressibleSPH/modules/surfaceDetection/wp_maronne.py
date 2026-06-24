@@ -89,13 +89,13 @@ def computeMaronneSurfaceDetection_Func_i(
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
     useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     
-    normals: vector(length=Any, dtype=scalar_t), # type: ignore
+    normals: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 
     # Dummy value to allow allocation
 ):
     # Initialize the output value
     out     = zero_like_warp(hi)
-    
+    ni = normals[i]
     # # Loop over neighbors to compute the gradient contribution from each neighbor    
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
@@ -122,39 +122,41 @@ def computeMaronneSurfaceDetection_Func_i(
 
         kernelXi = sphKernel_xi(kernel_int, dim)
 
-        T = xi + normals * hi / kernelXi
+        T = xi + ni * hi / kernelXi
         hij = hj
 
-        tau = vector(length=dim, dtype=scalar_t)
+        tau = ni * scalar_t(0.0)
         if dim == 2:
-            tau = vector(-normals[1], normals[0])
+            tau[0] = -ni[1]
+            tau[1] = ni[0]
         elif dim == 3:
-            tau = vector(
-                normals[1] * normals[2],
-                -normals[0] * normals[2],
-                normals[0] * normals[1]
-            )
+            tau[0] = ni[1] * ni[2]
+            tau[1] = -ni[0] * ni[2]
+            tau[2] = ni[0] * ni[1]
 
-        
         xij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
         rij = safe_sqrt(wp.dot(xij, xij))
 
-        if rij < hij:
+        if rij >= hij:
             continue
 
-        xjt = computeDistanceVec(tau, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        xjt = computeDistanceVec(xj, T, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        rjt = safe_sqrt(wp.dot(xjt, xjt))
 
         condA1 = rij >= safe_sqrt(scalar_t(2.0)) * hij / kernelXi
-        condA2 = safe_sqrt(wp.dot(xjt, xjt)) <= hij / kernelXi
+        condA2 = rjt <= hij / kernelXi
+        # condA2 = True
         condA = condA1 and condA2 and (i != j)
+        # condA = False
 
         condB1 = rij < safe_sqrt(scalar_t(2.0)) * hij / kernelXi    
-        condB2 = wp.abs(wp.dot(-normals, xjt)) + wp.abs(wp.dot(tau, xjt)) < hij / kernelXi
+        condB2 = wp.abs(wp.dot(ni, xjt)) + wp.abs(wp.dot(tau, xjt)) < hij / kernelXi
         condB = condB1 and condB2 and (i != j)
+        # condB = False
 
-        if not condA and not condB and safe_sqrt(wp.dot(normals, normals)) > scalar_t(0.5):
+        if (condA or condB) and safe_sqrt(wp.dot(ni, ni)) > scalar_t(0.5):
             
-            out += 1.0
+            out += scalar_t(1.0)
         
     return out
 
@@ -176,19 +178,19 @@ def computeMaronneSurfaceDetection_Func_Adjacency(
 
     mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
     
-    normals: vector(length=Any, dtype=scalar_t), # type: ignore
+    normals: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if opInt != 0:
         if not checkDirectionality_i(ki, opInt):
-            return zero_like_warp(queryState.positions)
+            return zero_like_warp(queryState.supports)
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     
-    out = zero_like_warp(queryState.positions)
+    out = zero_like_warp(queryState.supports)
     for o in range(numOffsets):
         beginIndex = wp.int32(0)
         numIndices = wp.int32(0)
@@ -293,7 +295,7 @@ def computeMaronneSurfaceDetection(
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             
         with record_function("warpSPH[computeMaronneSurfaceDetection] - Kernel Execution"):
-            return warpWrapper2(
+            result = warpWrapper2(
                 launcher = launch_kernel,
                 kernel   = computeMaronneSurfaceDetection_Kernel,
                 outputSizes  = outputSize,
@@ -310,7 +312,9 @@ def computeMaronneSurfaceDetection(
                 additionalArguments=(
                     surfaceNormals,
                 ),
-            )
+            ) < 0.5
+
+            return (result).to(dtype = queryParticles.positions.dtype)
 
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):

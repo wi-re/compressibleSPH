@@ -1,16 +1,16 @@
-from .wp_colorField import detectFreeSurfaceColorField
-from .colorFieldGradient import detectFreeSurfaceColorFieldGradient
+from .colorFieldDetection import detectFreeSurfaceColorField
+from .colorFieldGradientDetection import detectFreeSurfaceColorFieldGradient
 from .colorFieldCompute import computeColorField
 
 from .dilation import dilateSurface
-from .lambdaGrad import computeLambdaGrad
+from .lambdaGrad import computeLambdaGrad, computeNormalsLambdaGrad
 
-from .normalsMaronne import computeNormalsMaronne
+from .maronneNormals import computeNormalsMaronne
 
-from .wp_barecasco import computeBarecascoSurfaceDetectionWarp
-from .wp_maronne import computeMaronneSurfaceDetection
+from .barecascoDetection import detectFreeSurfaceBarecasco
+from .maronneDetection import detectFreeSurfaceMaronne
 
-from .wp_numNeighbors import countNeighborsWarp
+from .wrapper import detectFreeSurface
 
 __all__ = [
     'detectFreeSurfaceColorField',
@@ -18,8 +18,9 @@ __all__ = [
     'computeColorField',
     'dilateSurface',
     'computeLambdaGrad',
+    'computeNormalsLambdaGrad',
     'computeNormalsMaronne',
-    'computeBarecascoSurfaceDetectionWarp',
-    'computeMaronneSurfaceDetection',
-    'countNeighborsWarp'
+    'detectFreeSurfaceBarecasco',
+    'detectFreeSurfaceMaronne',
+    'detectFreeSurface',
 ]

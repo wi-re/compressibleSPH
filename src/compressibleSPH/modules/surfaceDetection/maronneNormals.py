@@ -41,7 +41,7 @@ from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from ...configurations.surfaceDetection import SurfaceDetectionConfig
 
-def computeNormalsMaronne(currentState: Any, L: torch.Tensor, lambdas: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
+def computeNormalsMaronne(currentState: Any, L: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     ones = currentState.positions.new_ones(currentState.positions.shape[0])
     term = warpOperation(
         currentState,
@@ -59,5 +59,5 @@ def computeNormalsMaronne(currentState: Any, L: torch.Tensor, lambdas: torch.Ten
     
     nu = torch.bmm(L, term.unsqueeze(-1)).squeeze(-1)
     n = -torch.nn.functional.normalize(nu, dim = -1)
-    lMin = torch.min(torch.abs(lambdas), dim = -1).values
-    return n, lMin
+    # lMin = torch.min(torch.abs(lambdas), dim = -1).values
+    return n

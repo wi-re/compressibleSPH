@@ -9,7 +9,7 @@ from .boundaryConditions import *
 from .weaklyCompressible import WeaklyCompressibleSPHConfig, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
 from .region import RegionType, ParticleRegion
 from .rigidBody import RigidBody
-from .surfaceDetection import SurfaceDetectionConfig
+from .surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
 
 
 __all__ = [
@@ -40,5 +40,7 @@ __all__ = [
     'RegionType',
     'ParticleRegion',
     'RigidBody',
-    'SurfaceDetectionConfig'
+    'SurfaceDetectionConfig',
+    'SurfaceDetectionScheme',
+    'NormalSource',
 ]

@@ -29,9 +29,28 @@ from ...enumTypes import *
 from ...configurations.surfaceDetection import SurfaceDetectionConfig
 
 
+from .colorFieldCompute import computeColorField
 
 from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-def detectFreeSurfaceColorFieldGradient(currentState: Any, colorField: torch.Tensor, colorGrad: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    xi = sphKernel_xi(config.kernel, config.dim)
-    fs = torch.linalg.norm(colorGrad, dim = -1) > surfaceConfig.colorFieldGradThreshold * currentState.supports / xi
-    return fs
+
+def detectFreeSurfaceColorFieldGradient(
+        currentState: Any, 
+        config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, 
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]], 
+        
+        
+        colorField: Optional[torch.Tensor] = None, colorFieldGradient: Optional[torch.Tensor] = None, 
+        
+        returnNormals: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+
+    if colorField is None or colorFieldGradient is None:
+        colorField, colorFieldGradient = computeColorField(
+            currentState,
+            config = config,
+            schemeConfig = schemeConfig,
+            adjacency = adjacency
+        )
+
+    xi = sphKernel_xi(config.kernel.value, config.dim)
+    fs = torch.linalg.norm(colorFieldGradient, dim = -1) > surfaceConfig.colorFieldGradThreshold * currentState.supports / xi
+    return fs if not returnNormals else (fs, -torch.nn.functional.normalize(colorFieldGradient, dim=-1))

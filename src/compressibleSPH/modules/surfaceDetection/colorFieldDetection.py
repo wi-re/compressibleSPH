@@ -14,12 +14,30 @@ from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from ...configurations.surfaceDetection import SurfaceDetectionConfig
 
-from .wp_sum import warpSum
-from .wp_numNeighbors import countNeighborsWarp
+from ..util.wp_sum import warpSum
+from ..util.wp_numNeighbors import countNeighborsWarp
 
+from .colorFieldCompute import computeColorField
 
 # @torch.jit.script
-def detectFreeSurfaceColorField(currentState: Any, colorField: torch.Tensor, numNeighbors: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
+def detectFreeSurfaceColorField(
+    currentState: Any, 
+    
+    config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, 
+    adjacency: Optional[Union[AdjacencyList, CompactHashMap]],
+
+    colorField: Optional[torch.Tensor] = None, colorFieldGradient: Optional[torch.Tensor] = None, 
+
+    returnNormals: bool = False) -> torch.Tensor:
+    if colorField is None or colorFieldGradient is None:
+        colorField, colorFieldGradient = computeColorField(
+            currentState,
+            config = config,
+            schemeConfig = schemeConfig,
+            adjacency = adjacency
+        )
+
+
     numNeighbors = countNeighborsWarp(
         currentState,
         OperationProperties(
@@ -53,4 +71,4 @@ def detectFreeSurfaceColorField(currentState: Any, colorField: torch.Tensor, num
     #     colorFieldMean = scatter_sum(colorField[j], i, dim = 0, dim_size = currentState.positions.shape[0]) / nj
     
     fs = torch.where((colorField < meanColorField) & (numNeighbors < config.targetNeighbors * surfaceConfig.colorFieldThreshold), 1., 0.)
-    return fs
+    return fs if not returnNormals else (fs, torch.nn.functional.normalize(colorFieldGradient, dim=-1))

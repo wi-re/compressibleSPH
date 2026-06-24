@@ -100,7 +100,8 @@ def computeBarecascoSurfaceDetection_Func_i_first(
         w_ij = computeKernelCRK(
             xi, xj,
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax
+            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            useCRK, Ai, Bi
         )
 
         
@@ -252,19 +253,20 @@ def computeBarecascoSurfaceDetection_Func_i_second(
         w_ij = computeKernelCRK(
             xi, xj,
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax
+            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            useCRK, Ai, Bi
         )
 
         if w_ij > 0.0:
-            dot = wp.dot(n_ij, coverVector)
+            dot = wp.dot(-n_ij, coverVector)
             angle = wp.acos(dot)
             condition = True
-            if (angle <= threshold / 2) and (i != j):
+            if (angle <= threshold / scalar_t(2.0)) and (i != j):
                 condition = False
-            if wp.linalg.norm(coverVector) <= 0.5:
+            if safe_sqrt(wp.dot(coverVector, coverVector)) <= scalar_t(0.5):
                 condition = False
-            if condition:
-                out += 1.0
+            if not condition:
+                out += scalar_t(1.0)
 
         # out += apparentVolume
         
@@ -294,14 +296,14 @@ def computeBarecascoSurfaceDetection_Func_Adjacency_second(
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if opInt != 0:
         if not checkDirectionality_i(ki, opInt):
-            return zero_like_warp(queryState.positions[i])
+            return zero_like_warp(queryState.supports[i])
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     
-    out = zero_like_warp(queryState.positions[i])
+    out = zero_like_warp(queryState.supports[i])
     for o in range(numOffsets):
         beginIndex = wp.int32(0)
         numIndices = wp.int32(0)
@@ -448,3 +450,4 @@ def computeBarecascoSurfaceDetectionWarp(
         #     )
 
     # return warp_result
+

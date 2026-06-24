@@ -18,7 +18,35 @@ from ...configurations.surfaceDetection import SurfaceDetectionConfig
 from .wp_dilate import dilateSurfaceMaskWarp
 
 
-def computeLambdaGrad(currentState: Any, lambdas: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], renormalizationState: RenormalizationState) -> torch.Tensor:
+def computeLambdaGrad(
+        currentState: Any, 
+        
+        
+        config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, 
+        
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]], 
+        
+        
+        lambdas: Optional[torch.Tensor] = None, 
+        renormalizationState: Optional[RenormalizationState] = None) -> torch.Tensor:
+    if lambdas is None or renormalizationState is None:
+        C, Evals, renormalizationState_ = computeRenormalizationMatrices(
+            queryParticles = currentState,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Gradient,
+                operationMode = OperationDirection.AllToAll,
+                supportMode = SupportScheme.SuperSymmetric
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
+            returnEigVals = True
+        )
+        lambdas_ = Evals[:,0]
+    else:
+        lambdas_ = lambdas
+        renormalizationState_ = renormalizationState
+
     return warpOperation(
         currentState,
         OperationProperties(
@@ -28,30 +56,28 @@ def computeLambdaGrad(currentState: Any, lambdas: torch.Tensor, config: Simulati
             operationMode = OperationDirection.AllToAll,
             gradientMode = GradientScheme.Difference
         ),
-        queryValues = lambdas,
+        queryValues = lambdas_,
         domain = config.domain,
         adjacency = adjacency,
-        renormalizationState = renormalizationState
+        renormalizationState = renormalizationState_
     )
 
-# from diffSPH.enums import KernelCorrectionScheme
-# @torch.jit.script
-# def computeLambdaGrad(
-#     particles : WeaklyCompressibleState,
-#     L: torch.Tensor,
-#     lambdas: torch.Tensor,
-#     neighborhood: Tuple[SparseNeighborhood, PrecomputedNeighborhood],
-#     supportScheme: SupportScheme = SupportScheme.Scatter
-# ):
-#     with record_function("[SPH] - [Surface Detection] - Compute Lambda Grad"):
-#         return torch.nn.functional.normalize(SPHOperationCompiled(
-#             particles,
-#             quantity = (lambdas, lambdas),
-#             neighborhood= neighborhood[0],
-#             kernelValues = neighborhood[1],
-#             operation= Operation.Gradient,
-#             gradientMode = GradientMode.Difference,
-#             supportScheme= supportScheme,
-#             correctionTerms=[KernelCorrectionScheme.gradientRenorm]
-#         ))
-#         # return sph_op(particles, particles, domain, wrappedKernel, sparseNeighborhood, operation = 'gradient', gradientMode = 'difference', supportScheme = supportScheme, correctionTerms=[KernelCorrectionScheme.gradientRenorm], quantity = (lambdas, lambdas))
+def computeNormalsLambdaGrad(
+        currentState: Any, 
+        
+        
+        config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, 
+        
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]], 
+        
+        
+        lambdas: Optional[torch.Tensor] = None, 
+        renormalizationState: Optional[RenormalizationState] = None) -> torch.Tensor:
+    lambdaGrad = computeLambdaGrad(
+        currentState,
+        config, schemeConfig, surfaceConfig,
+        adjacency,
+        lambdas = lambdas,
+        renormalizationState = renormalizationState
+    )
+    return -torch.nn.functional.normalize(lambdaGrad, dim=-1)
