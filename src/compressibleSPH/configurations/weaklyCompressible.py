@@ -24,6 +24,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 
+from .region import RegionType, ParticleRegion
+from .rigidBody import RigidBody
+
+
 @dataclass
 class fluidProperties:
     eosType: EquationOfState = field(default=EquationOfState.isoThermal,metadata={"description": "Type of equation of state"})
@@ -110,6 +114,9 @@ class WeaklyCompressibleSPHConfig:
     pressureForceTerm: PressureForceScheme = field(default=PressureForceScheme.nonConservative, metadata={'description': 'Pressure force term to use'})
 
     shiftProperties: ShiftProperties = field(default_factory=buildDefaultShiftProperties, metadata={'description': 'Properties for the delta-SPH shift'})
+
+    regions: List[ParticleRegion] = field(default_factory=list, metadata={'description': 'List of particle regions in the simulation'})
+    rigidBodies: List[RigidBody] = field(default_factory=list, metadata={'description': 'List of rigid bodies in the simulation'})
 
 
 

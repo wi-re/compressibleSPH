@@ -37,3 +37,10 @@ __all__.extend(['setupBasicCompressibleInitialState', 'sampleShockRegions1D'])
 
 from .sample.weaklyCompressible import setupBasicWeaklyCompressibleInitialState
 __all__.extend(['setupBasicWeaklyCompressibleInitialState'])
+
+from .initializers import *
+from .rigidBody import *
+from .regions import *
+__all__.extend(initializers.__all__)
+__all__.extend(rigidBody.__all__)
+__all__.extend(regions.__all__)

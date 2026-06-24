@@ -7,6 +7,9 @@ from .compSPHConfig import CompSPHConfig, compSPHConfigToDict, dictToCompSPHConf
 from .crkSPH import CRKViscosity, CRKSPHConfig, crkSPHConfigToDict, dictToCRKSPHConfig
 from .boundaryConditions import *
 from .weaklyCompressible import WeaklyCompressibleSPHConfig, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
+from .region import RegionType, ParticleRegion
+from .rigidBody import RigidBody
+
 
 __all__ = [
     'SimulationConfig',
@@ -32,5 +35,8 @@ __all__ = [
     'dictToCRKSPHConfig',
     'WeaklyCompressibleSPHConfig',
     'weaklyCompressibleConfigToDict',
-    'dictToWeaklyCompressibleConfig'
+    'dictToWeaklyCompressibleConfig',
+    'RegionType',
+    'ParticleRegion',
+    'RigidBody',
 ]

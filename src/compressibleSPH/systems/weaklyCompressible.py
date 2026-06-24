@@ -23,6 +23,8 @@ class WeaklyCompressibleState(BaseState):
     soundspeeds : torch.Tensor = constant(tags=('soundSpeed',), default=None)
     surfaceIndicators : torch.Tensor = constant(tags=('surfaceIndicator',), default=None)
 
+    ghostIndices : torch.Tensor = constant(tags=('ghostIndices',), default=None)
+    ghostOffsets : torch.Tensor = constant(tags=('ghostOffsets',), default=None)
 
 @dataclass
 class WeaklyCompressibleSystemUpdate:
