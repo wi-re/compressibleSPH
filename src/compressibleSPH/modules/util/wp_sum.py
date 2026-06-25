@@ -259,3 +259,25 @@ def warpSum(
         #     )
 
     return warp_result
+
+from ...configurations.simulationConfig import SimulationConfig
+def sumOverNeighbors(
+    currentState: ParticleState,
+    config: SimulationConfig, schemeConfig: Any,
+    values: torch.Tensor,
+    adjacency: Optional[Union[AdjacencyList, CompactHashMap]],
+):
+    return warpSum(
+        queryParticles = currentState,
+        operationProperties = OperationProperties(
+            kernel = config.kernel,
+            operation = WarpOperation.Divergence,
+            supportMode = SupportScheme.SuperSymmetric,
+            operationMode = OperationDirection.AllToAll,
+        ),
+        domain = config.domain,
+
+        queryValues = values,
+
+        adjacency = adjacency
+    )

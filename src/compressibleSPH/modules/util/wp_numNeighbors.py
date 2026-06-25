@@ -251,3 +251,23 @@ def countNeighborsWarp(
         #     )
 
     return warp_result
+
+
+from ...configurations.simulationConfig import SimulationConfig
+def countNeighbors(
+    queryState: Any,
+    config : SimulationConfig, schemeConfig: Any,
+    adjacency: Optional[Union[AdjacencyList, CompactHashMap]] = None,
+):
+    return countNeighborsWarp(
+        queryParticles = queryState,
+        operationProperties = OperationProperties(
+            kernel = config.kernel,
+            operation = WarpOperation.Gradient,
+            supportMode = SupportScheme.SuperSymmetric,
+            operationMode = OperationDirection.AllToAll,
+            gradientMode = GradientScheme.Naive
+        ),
+        domain = config.domain,
+        adjacency = adjacency
+    )

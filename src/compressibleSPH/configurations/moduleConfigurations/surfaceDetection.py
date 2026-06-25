@@ -37,7 +37,7 @@ class SurfaceDetectionConfig:
 
 def buildDefaultSurfaceDetectionConfig() -> SurfaceDetectionConfig:
     return SurfaceDetectionConfig(
-        active = True,
+        active = False,
         colorFieldThreshold = 0.75,
         colorFieldGradThreshold = 10.0,
         barecascoThreshold = 1.5,

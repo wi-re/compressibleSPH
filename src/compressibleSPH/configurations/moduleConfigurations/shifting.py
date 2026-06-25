@@ -30,6 +30,8 @@ class ShiftProperties:
     surfaceScaling: float = field(default=0.1, metadata={"description": "Scaling factor for the surface detection"})
     threshold: float = field(default=0.5, metadata={"description": "Threshold for shifting magnitude"})
 
+    projectQuantities: bool = field(default=False, metadata={"description": "Whether to project quantities after shifting"})
+
 def buildDefaultShiftProperties() -> ShiftProperties:
     return ShiftProperties(
         iterations=1,
@@ -41,5 +43,6 @@ def buildDefaultShiftProperties() -> ShiftProperties:
         projectionScheme=ShiftingProjectionScheme.dot,
         summationDensity=False,
         surfaceScaling=0.1,
-        threshold=0.5
+        threshold=0.5,
+        projectQuantities=False
     )

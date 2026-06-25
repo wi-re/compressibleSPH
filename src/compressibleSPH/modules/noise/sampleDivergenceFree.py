@@ -25,6 +25,44 @@ def generateNoiseInterpolator(fluidResolution, noiseResolution, domain: DomainDe
     return lambda x: torch.tensor(interpolator(x.cpu().numpy()).reshape(x.shape[0])).to(x.device)
 
 
+from ...utils.sdf import operatorDict
+
+def rampDivergenceFree(positions, noise, sdf_func, offset, d0 = 0.25):
+    sdf = sdf_func(positions)
+#     r = sdf / d0 /2  + 0.5
+    r = (sdf - offset) / d0 / 0.5 - 1
+#     ramped = r * r * (3 - 2 * r)
+    ramped = 15/8 * r - 10/8 * r**3 + 3/8 * r**5
+#     ramped = r
+    ramped[r >= 1] = 1
+    ramped[r <= -1] = -1
+#     ramped[r <= 0] = 0
+#     ramped[r <= -1] = -1
+    
+    # return sdf
+    return (ramped /2 + 0.5) * (noise)
+
+def generateRamp(perennialState, config, schemeConfig):
+    regions = config.regions
+    boundary_sdfs = [region.sdf for region in regions if region.type == RegionType.Boundary]
+    # print(boundary_sdfs)
+    combined_sdf = lambda x: boundary_sdfs[0](x)[0]
+    for sdf in boundary_sdfs[1:]:
+        combined_sdf = operatorDict['union'](combined_sdf, lambda x, sdf = sdf: sdf(x)[0])
+
+
+    buffer = 4
+    dx = perennialState.masses.mean().pow(1/perennialState.positions.shape[1]).cpu().item() / schemeConfig.fluid.restDensity**(1/perennialState.positions.shape[1])
+
+    ramp = rampDivergenceFree(perennialState.positions, torch.ones_like(perennialState.densities), combined_sdf, 
+                              offset = dx/2, 
+                              d0 = buffer * perennialState.supports)
+    
+    # print(f"Ramp min: {ramp.min().item()}, max: {ramp.max().item()}, mean: {ramp.mean().item()}")
+    return ramp
+
+
+from ...configurations.region import RegionType
 
 def sampleDivergenceFreeNoise(particleState, domain, config, schemeConfig, nxGrid, octaves = 3, lacunarity = 2, persistence = 0.5, baseFrequency = 1, tileable = True, kind = 'perlin', seed = 45906734):
     # neighborhood, neighbors = evaluateNeighborhood(particleState, domain, config['kernel'], verletScale = config['neighborhood']['verletScale'], mode =  SupportScheme.SuperSymmetric, priorNeighborhood=None)
@@ -38,8 +76,8 @@ def sampleDivergenceFreeNoise(particleState, domain, config, schemeConfig, nxGri
     noiseGen = generateNoiseInterpolator(nxGrid, nxGrid, domain, dim = domain.dim, octaves = octaves, lacunarity = lacunarity, persistence = persistence, baseFrequency = baseFrequency, tileable = tileable, kind = kind, seed = seed)
 
     dtype = particleState.positions.dtype
-    # ramp = generateRamp(particleState, config) if len([r for r in config['regions'] if r['type'] == 'boundary']) > 0 else 1
-    potential = noiseGen(particleState.positions).to(dtype) #* ramp
+    ramp = generateRamp(particleState, config, schemeConfig) if len([r for r in config.regions if r.type == RegionType.Boundary]) > 0 else 1
+    potential = noiseGen(particleState.positions).to(dtype) * ramp
 
     rho = computeDensities(particleState, config, schemeConfig, adjacency)
     priorDensity = particleState.densities.clone() 

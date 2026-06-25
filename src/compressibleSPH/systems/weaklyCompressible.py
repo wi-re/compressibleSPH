@@ -5,6 +5,7 @@ from typing import Optional
 from sphWarpCore import *
 
 from ..modules.shifting.delta import computeDeltaShift
+from ..modules.shifting.wrapper import solveShifting
 
 @dataclass
 class WeaklyCompressibleState(BaseState):
@@ -100,12 +101,19 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         config = kwargs.get('config', None)
         schemeConfig = kwargs.get('schemeConfig', None)
         if schemeConfig.shiftProperties.active:
-            shiftVector, self.adjacency = computeDeltaShift(
-                currentState = self.state,
+            # shiftVector, self.adjacency = computeDeltaShift(
+            #     currentState = self.state,
+            #     config = config,
+            #     schemeConfig = schemeConfig,
+            #     domain = config.domain,
+            #     adjacency = self.adjacency,
+            # )
+            shiftVector = solveShifting(
+                systemState = self.state,
                 config = config,
                 schemeConfig = schemeConfig,
-                domain = config.domain,
                 adjacency = self.adjacency,
+                dt = dt,
             )
             self.state.positions += shiftVector
 

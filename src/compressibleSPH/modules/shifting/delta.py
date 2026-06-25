@@ -9,11 +9,11 @@ import torch
 
 from compressibleSPH.sample.wp_deltaShift import computeDeltaShiftWarp
 
-def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency):
     # for i in tqdm(range(shiftIters), leave = False):
+def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, iters = -1):
     original_positions = currentState.positions.clone()
     original_densities = currentState.densities.clone()
-    for i in range(schemeConfig.shiftProperties.iterations):
+    for i in range(schemeConfig.shiftProperties.iterations if iters == -1 else iters):
             
         adjacency = buildVerletList(
             currentState, 

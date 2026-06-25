@@ -74,12 +74,12 @@ def initializeWeaklyCompressibleState(regions, config, verbose = True):
     
     for region in particleRegions:
         if region['type'] == 'fluid':
-            kinds.append(torch.zeros_like(region['particles'].masses, dtype = torch.int64))
-            materials.append(torch.ones_like(region['particles'].masses, dtype = torch.int64) * fluidMaterials)
+            kinds.append(torch.zeros_like(region['particles'].masses, dtype = torch.int32))
+            materials.append(torch.ones_like(region['particles'].masses, dtype = torch.int32) * fluidMaterials)
             fluidMaterials += 1
         elif region['type'] == 'boundary':
-            kinds.append(torch.ones_like(region['particles'].masses, dtype = torch.int64))
-            materials.append(torch.ones_like(region['particles'].masses, dtype = torch.int64)* boundaryMaterials)
+            kinds.append(torch.ones_like(region['particles'].masses, dtype = torch.int32))
+            materials.append(torch.ones_like(region['particles'].masses, dtype = torch.int32)* boundaryMaterials)
             boundaryMaterials += 1
             
     kinds = torch.cat(kinds, dim = 0)
@@ -187,10 +187,10 @@ def initializeState(regions, config, schemeConfig, SimulationState, verbose = Tr
 
 
 def initializeSimulation(regions, config, schemeConfig, SimulationSystem, SimulationState, verbose = True):
-    state = initializeState(regions, config, schemeConfig, SimulationState, verbose = verbose)
+    particleState = initializeState(regions, config, schemeConfig, SimulationState, verbose = verbose)
 
 
-    particleState = addBoundaryGhostParticles(regions, state)
+    particleState = addBoundaryGhostParticles(regions, particleState)
     # particleState, emitted = processInlets(particleState, config, config['domain'])
     # particleState.densities[:] = config['fluid']['rho0']
     # particleState.velocities = forcing(particleState.positions)
@@ -214,7 +214,7 @@ def initializeSimulation(regions, config, schemeConfig, SimulationSystem, Simula
     config.regions = regions
     
     compressibleSystem = SimulationSystem(
-        state=state, 
+        state=particleState, 
         adjacency = None, 
         domain = config.domain
     )

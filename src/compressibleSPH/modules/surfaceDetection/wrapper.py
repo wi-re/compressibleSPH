@@ -89,7 +89,7 @@ def detectFreeSurface(
     if surfaceConfig.active == False:
         fsm = torch.zeros(currentState.positions.shape[0], device = currentState.positions.device, dtype = currentState.positions.dtype)
         normals = torch.zeros_like(currentState.positions)
-        return fsm if not returnNormals else (fsm, normals)
+        return (fsm, fsm) if not returnNormals else (fsm, fsm, normals)
 
     normals, renormalizationState_ = computeNormals(
         currentState,
@@ -134,4 +134,13 @@ def detectFreeSurface(
     if surfaceConfig.normalSource == NormalSource.Native:
         normals = normals2
 
-    return fsm if not returnNormals else (fsm, normals)
+    fs = fsm.clone().to(dtype = currentState.positions.dtype, device = currentState.positions.device)
+    for i in range(surfaceConfig.expansionIterations):
+        fs = dilateSurface(
+            currentState, fs,
+            config, schemeConfig, surfaceConfig,
+            adjacency,
+            overrideIterations = 1
+        )
+
+    return (fsm, fs) if not returnNormals else (fsm, fs, normals)

@@ -18,6 +18,6 @@ __all__.extend(['SurfaceDetectionConfig', 'buildDefaultSurfaceDetectionConfig', 
 from .viscositySwitchParameters import ViscositySwitchConfig, viscositySwitchConfigToDict, dictToViscositySwitchConfig
 __all__.extend(['ViscositySwitchConfig', 'viscositySwitchConfigToDict', 'dictToViscositySwitchConfig'])
 
-from .weaklyCompressibleDiffusionParams import WeaklyCompressibleDiffusionParams, buildDefaultDiffusionParamsWeaklyCompressibleSPH
-__all__.extend(['WeaklyCompressibleDiffusionParams', 'buildDefaultDiffusionParamsWeaklyCompressibleSPH'])
+from .weaklyCompressibleDiffusionParams import WeaklyCompressibleDiffusionParams, buildDefaultDiffusionParamsWeaklyCompressibleSPH, wcDiffusionParamsToDict, dictToWCDiffusionParams
+__all__.extend(['WeaklyCompressibleDiffusionParams', 'buildDefaultDiffusionParamsWeaklyCompressibleSPH', 'wcDiffusionParamsToDict', 'dictToWCDiffusionParams'])
 
