@@ -10,13 +10,13 @@ from dataclasses import dataclass, field
 from typing import Optional
 from ..enumTypes import AdaptiveSupportScheme, ViscositySwitch, EquationOfState
 
-from .diffusionParameters import DiffusionParameters, buildDefaultDiffusionParamsCompressibleSPH, diffusionParamsToDict, dictToDiffusionParams
-from .viscositySwitchParameters import ViscositySwitchConfig, viscositySwitchConfigToDict, dictToViscositySwitchConfig
+from .moduleConfigurations.diffusionParameters import DiffusionParameters, buildDefaultDiffusionParamsCompressibleSPH, diffusionParamsToDict, dictToDiffusionParams
+from .moduleConfigurations.viscositySwitchParameters import ViscositySwitchConfig, viscositySwitchConfigToDict, dictToViscositySwitchConfig
 
 
 
 
-from .boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition
+from .moduleConfigurations.boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition
 from typing import List
 
 
@@ -27,70 +27,9 @@ from enum import Enum
 from .region import RegionType, ParticleRegion
 from .rigidBody import RigidBody
 
-
-@dataclass
-class fluidProperties:
-    eosType: EquationOfState = field(default=EquationOfState.isoThermal,metadata={"description": "Type of equation of state"})
-
-    restDensity: float = field(default = 1.0, metadata={"description": "Rest density of the fluid"})
-
-    polytropicExponent: Optional[float] = field(default=7.0, metadata={"description": "Polytropic exponent for polytropic EOS"})
-    kappa: Optional[float] = field(default=1.3, metadata={"description": "Kappa"})
-    gas_constant: Optional[float] = field(default=8.314, metadata={"description": "Gas constant"})
-    molarMass: Optional[float] = field(default=0.02897, metadata={"description": "Molar mass of the gas"})
-
-    fixedSoundSpeed: Optional[float] = field(default=10.0, metadata={"description": "Fixed sound speed"})
-
-def buildDefaultFluidProperties() -> fluidProperties:
-    return fluidProperties(
-        eosType=EquationOfState.isoThermal,
-        restDensity=1.0,
-        polytropicExponent=7.0,
-        kappa=1.3,
-        gas_constant=8.314,
-        molarMass=0.02897,
-        fixedSoundSpeed=10.0
-    )
-
-from ..enumTypes import DensityDiffusionScheme, PressureForceScheme
-
-@dataclass 
-class ShiftProperties:
-    iterations: int = field(default=1, metadata={"description": "Number of iterations for the delta-SPH shift"})
-    CFL: float = field(default=0.3, metadata={"description": "CFL number for the delta-SPH shift"})
-    computeMach: bool = field(default=False, metadata={"description": "Whether to compute Mach number for the delta-SPH shift"})
-    maxC: float = field(default=0.3, metadata={"description": "Maximum sound speed for the delta-SPH shift"})
-    active: bool = field(default=True, metadata={"description": "Whether to apply the delta-SPH shift"})
-
-def buildDefaultShiftProperties() -> ShiftProperties:
-    return ShiftProperties(
-        iterations=1,
-        CFL=0.3,
-        computeMach=False,
-        maxC=0.3,
-        active=True
-    )
-
-@dataclass
-class WeaklyCompressibleDiffusionParams():
-    inviscid : bool = field(default=True, metadata={"description": "Whether to use inviscid diffusion parameters"})
-    inviscidAlpha : float = field(default=0.01, metadata={"description": "Alpha value for inviscid diffusion"})
-
-    viscidNu : float = field(default=1e-3, metadata={"description": "Kinematic viscosity for viscous diffusion"})
-
-    densityDelta: float = field(default=0.1, metadata={"description": "Density diffusion coefficient for delta-SPH"})
-    densityDiffusionTerm: DensityDiffusionScheme = field(default=DensityDiffusionScheme.deltaSPH, metadata={'description': 'Density diffusion term to use'})
-
-def buildDefaultDiffusionParamsWeaklyCompressibleSPH() -> WeaklyCompressibleDiffusionParams:
-    return WeaklyCompressibleDiffusionParams(
-        inviscid=True,
-        inviscidAlpha=0.01,
-        viscidNu=1e-3,
-        densityDelta=0.1,
-        densityDiffusionTerm=DensityDiffusionScheme.deltaSPH
-    )
-
-from .surfaceDetection import SurfaceDetectionConfig, buildDefaultSurfaceDetectionConfig
+from .moduleConfigurations.surfaceDetection import SurfaceDetectionConfig, buildDefaultSurfaceDetectionConfig
+from .moduleConfigurations import *
+from ..enumTypes import *
 
 @dataclass
 class WeaklyCompressibleSPHConfig:
@@ -124,24 +63,6 @@ class WeaklyCompressibleSPHConfig:
 
 
 from typing import Dict, Any
-
-
-def wcDiffusionParamsToDict(diffusionParams: WeaklyCompressibleDiffusionParams) -> Dict[str, Any]:
-    return {
-        'inviscid': diffusionParams.inviscid,
-        'inviscidAlpha': diffusionParams.inviscidAlpha,
-        'viscidNu': diffusionParams.viscidNu,
-        'densityDelta': diffusionParams.densityDelta,
-        'densityDiffusionTerm': diffusionParams.densityDiffusionTerm.name if isinstance(diffusionParams.densityDiffusionTerm, Enum) else diffusionParams.densityDiffusionTerm
-    }
-def dictToWCDiffusionParams(diffusionParamsDict: Dict[str, Any]) -> WeaklyCompressibleDiffusionParams:
-    return WeaklyCompressibleDiffusionParams(
-        inviscid=diffusionParamsDict.get('inviscid', True),
-        inviscidAlpha=diffusionParamsDict.get('inviscidAlpha', 0.01),
-        viscidNu=diffusionParamsDict.get('viscidNu', 1e-3),
-        densityDelta=diffusionParamsDict.get('densityDelta', 0.1),
-        densityDiffusionTerm=DensityDiffusionScheme[diffusionParamsDict.get('densityDiffusionTerm', 'deltaSPH')] if isinstance(diffusionParamsDict.get('densityDiffusionTerm'), str) else diffusionParamsDict.get('densityDiffusionTerm', DensityDiffusionScheme.deltaSPH)
-    )
 
 
 def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[str, Any]:

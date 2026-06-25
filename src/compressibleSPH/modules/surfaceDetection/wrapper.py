@@ -24,7 +24,7 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from ...configurations.surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
+from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
 
 
 def computeNormals(

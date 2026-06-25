@@ -1,7 +1,7 @@
 import torch
 from sphWarpCore import *
 
-from ..deltaSPH.shift import computeDeltaShift
+from ..shifting.delta import computeDeltaShift
 
 def shuffleParticles(state, config, schemeConfig, shiftIters, jitterAmount = 0.01):
     priorPositions = state.positions.clone()

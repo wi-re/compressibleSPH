@@ -1,7 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
+from ...enumTypes import *
+from typing import Optional, Union, List
+from dataclasses import dataclass, field
+import torch
+from enum import Enum
 
-from ..enumTypes import ViscositySwitch
 
 
 @dataclass

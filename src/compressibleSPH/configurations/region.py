@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from .boundaryConditions import BoundaryConditionType, BoundaryCondition
+from .moduleConfigurations.boundaryConditions import BoundaryConditionType, BoundaryCondition
 from ..utils.sampling import ParticleSet
 
 class RegionType(Enum):

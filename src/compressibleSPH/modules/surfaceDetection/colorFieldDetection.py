@@ -12,7 +12,7 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from ...configurations.surfaceDetection import SurfaceDetectionConfig
+from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
 
 from ..util.wp_sum import warpSum
 from ..util.wp_numNeighbors import countNeighborsWarp

@@ -14,6 +14,7 @@ from .density import *
 from .noise import *
 from .surfaceDetection import *
 from .util import *
+from .shifting import *
 
 __all__ = []
 __all__.extend(adaptiveSupport.__all__)
@@ -32,3 +33,4 @@ __all__.extend(density.__all__)
 __all__.extend(noise.__all__)
 __all__.extend(surfaceDetection.__all__)
 __all__.extend(util.__all__)
+__all__.extend(shifting.__all__)

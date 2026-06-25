@@ -13,7 +13,7 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from ...configurations.surfaceDetection import SurfaceDetectionConfig
+from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
 
 from .wp_dilate import dilateSurfaceMaskWarp
 

@@ -39,7 +39,7 @@ from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameter
 
 from compressibleSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
-from ...configurations.surfaceDetection import SurfaceDetectionConfig
+from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
 
 def computeNormalsMaronne(currentState: Any, L: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     ones = currentState.positions.new_ones(currentState.positions.shape[0])

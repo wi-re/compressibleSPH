@@ -4,7 +4,7 @@ import torch
 from typing import Optional
 from sphWarpCore import *
 
-from ..modules.deltaSPH.shift import computeDeltaShift
+from ..modules.shifting.delta import computeDeltaShift
 
 @dataclass
 class WeaklyCompressibleState(BaseState):

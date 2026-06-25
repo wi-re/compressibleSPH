@@ -1,6 +1,10 @@
 from dataclasses import dataclass, field
-
+from ...enumTypes import *
+from typing import Optional, Union, List
+from dataclasses import dataclass, field
+import torch
 from enum import Enum
+
 
 class SurfaceDetectionScheme(Enum):
     ColorField = 0

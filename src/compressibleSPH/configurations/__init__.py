@@ -5,11 +5,12 @@ from .waveEquationConfig import CaseConfig as WaveCaseConfig
 from .compressibleConfig import CompressibleSPHConfig, compressibleConfigToDict, dictToCompressibleConfig
 from .compSPHConfig import CompSPHConfig, compSPHConfigToDict, dictToCompSPHConfig
 from .crkSPH import CRKViscosity, CRKSPHConfig, crkSPHConfigToDict, dictToCRKSPHConfig
-from .boundaryConditions import *
+from .moduleConfigurations.boundaryConditions import *
 from .weaklyCompressible import WeaklyCompressibleSPHConfig, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
 from .region import RegionType, ParticleRegion
 from .rigidBody import RigidBody
-from .surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
+from .moduleConfigurations.surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
+
 
 
 __all__ = [
@@ -44,3 +45,6 @@ __all__ = [
     'SurfaceDetectionScheme',
     'NormalSource',
 ]
+
+from .moduleConfigurations import *
+__all__.extend(moduleConfigurations.__all__)
