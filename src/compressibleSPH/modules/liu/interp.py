@@ -13,7 +13,10 @@ def interpolateLiuLiu(
     config: SimulationConfig,
     neighbor_threshold: int = 4,
     direction: OperationDirection = OperationDirection.AllToAll,
+    supportScale: float = 1.0
 ):
+    h = referenceParticles.supports.clone()
+    referenceParticles.supports = h * supportScale
 
     _, b, A_g, neighCounts = computeLiuMatricesWarp(
         queryPositions = queryPositions,
@@ -26,6 +29,7 @@ def interpolateLiuLiu(
         ),
         domain = config.domain,
     )
+    referenceParticles.supports = h
 
     A_g_inv = torch.zeros_like(A_g)
     A_g_inv[neighCounts > neighbor_threshold] = torch.linalg.pinv(A_g[neighCounts > neighbor_threshold])

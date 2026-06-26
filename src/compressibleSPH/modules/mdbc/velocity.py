@@ -128,7 +128,8 @@ def extendedVelocity(currentState: Any, config: SimulationConfig, schemeConfig: 
         referenceQuantities = uv,
         config = config,
         neighbor_threshold = 4,
-        direction = OperationDirection.FluidToGhost
+        direction = OperationDirection.FluidToGhost,
+        supportScale = 1.0
     ) for uv in uvs] # res[:,0], res[:,1:], neighCounts, A_g, b
 
 
@@ -150,7 +151,7 @@ def extendedVelocity(currentState: Any, config: SimulationConfig, schemeConfig: 
 
         threshold = 9
 
-        vel[ghostMask] = torch.where(numNeighbors > threshold, (u_interp - torch.einsum('nu, nu -> n',(-relPos), u_interp_grad)), vel[ghostMask])
+        vel[bIndices] = torch.where(numNeighbors > threshold, (u_interp - torch.einsum('nu, nu -> n',(-relPos), u_interp_grad)), vel[ghostMask])
 
     extendedVelocities = torch.stack(velocities, dim = -1)
     return extendedVelocities

@@ -27,7 +27,8 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         referenceQuantities = currentState.densities,
         config = config,
         neighbor_threshold = 4,
-        direction = OperationDirection.FluidToGhost
+        direction = OperationDirection.FluidToGhost,
+        supportScale = 1.0
     )
     # return res[:,0], res[:,1:], neighCounts
 

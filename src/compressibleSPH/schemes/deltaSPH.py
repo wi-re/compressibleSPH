@@ -82,6 +82,9 @@ def deltaSPH_step(
     dvdt += gravity
 
     # Revert boundary velocity
+
+    nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
+    dvdt += nopenshift / dt
     # currentState.velocities = currentVelocities
 
     # 16. build update
