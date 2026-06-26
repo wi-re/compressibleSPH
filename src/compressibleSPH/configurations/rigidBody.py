@@ -1,4 +1,4 @@
-from .moduleConfigurations.boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition
+from .moduleConfigurations.boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition, BCType
 import torch
 from dataclasses import dataclass, field
 
@@ -29,4 +29,4 @@ class RigidBody:
     
     sdf: callable
     bodyID: int = 0  
-    kind: BoundaryConditionType = BoundaryConditionType.constant
+    kind: BCType = BCType.constant

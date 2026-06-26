@@ -1,7 +1,7 @@
 __all__ = []
 
-from .boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition
-__all__.extend(['BoundaryCondition', 'BoundaryConditionType', 'boundaryConditionToDict', 'dictToBoundaryCondition'])
+from .boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition, BCType
+__all__.extend(['BoundaryCondition', 'BoundaryConditionType', 'boundaryConditionToDict', 'dictToBoundaryCondition', 'BCType'])
 
 from .diffusionParameters import DiffusionParameters, buildDefaultDiffusionParamsCompressibleSPH, diffusionParamsToDict, dictToDiffusionParams
 __all__.extend(['DiffusionParameters', 'buildDefaultDiffusionParamsCompressibleSPH', 'diffusionParamsToDict', 'dictToDiffusionParams'])
@@ -21,3 +21,5 @@ __all__.extend(['ViscositySwitchConfig', 'viscositySwitchConfigToDict', 'dictToV
 from .weaklyCompressibleDiffusionParams import WeaklyCompressibleDiffusionParams, buildDefaultDiffusionParamsWeaklyCompressibleSPH, wcDiffusionParamsToDict, dictToWCDiffusionParams
 __all__.extend(['WeaklyCompressibleDiffusionParams', 'buildDefaultDiffusionParamsWeaklyCompressibleSPH', 'wcDiffusionParamsToDict', 'dictToWCDiffusionParams'])
 
+from .gravity import GravityType, gravityConfiguration, buildDefaultGravityConfiguration, gravityConfigurationToDict, dictToGravityConfiguration
+__all__.extend(['GravityType', 'gravityConfiguration', 'buildDefaultGravityConfiguration', 'gravityConfigurationToDict', 'dictToGravityConfiguration'])

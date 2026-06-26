@@ -1,9 +1,9 @@
 import torch
-from ..systems.weaklyCompressible import WeaklyCompressibleState
+# from ..systems.weaklyCompressible import WeaklyCompressibleState
 from ..configurations.weaklyCompressible import RegionType, ParticleRegion
+from typing import Any, Optional, Union
 
-
-def addBoundaryGhostParticles(regions, particleState : WeaklyCompressibleState):
+def addBoundaryGhostParticles(regions, particleState : Any):
     device = particleState.positions.device
     dtype = particleState.positions.dtype
     
@@ -51,6 +51,7 @@ def addBoundaryGhostParticles(regions, particleState : WeaklyCompressibleState):
             # print(f"Added {offsets.shape[0]} ghost particles for boundary region {region}.")
             
     boundaryIndices = torch.cat(boundaryIndices, dim = 0)
+    WeaklyCompressibleState = type(particleState)
     return WeaklyCompressibleState(
         positions = torch.cat([particleState.positions, torch.cat(ghostPositions, dim = 0)], dim = 0),
         supports = torch.cat([particleState.supports, particleState.supports[boundaryIndices]], dim = 0),

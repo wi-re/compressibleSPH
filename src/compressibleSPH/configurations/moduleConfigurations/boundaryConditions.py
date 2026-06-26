@@ -4,6 +4,15 @@ from typing import Callable, List, Tuple, Dict, Any
 from compressibleSPH.utils.sdf import *
 import torch
 
+
+class BCType(Enum):
+    constant = 1
+    noSlip = 2
+    freeSlip = 3
+    extended = 4
+    zeros = 5
+
+
 class BoundaryConditionType(Enum):
     constant = "constant"
     dynamic = "dynamic"

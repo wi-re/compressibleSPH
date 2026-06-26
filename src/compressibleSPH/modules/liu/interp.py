@@ -12,15 +12,17 @@ def interpolateLiuLiu(
     referenceQuantities: torch.Tensor,
     config: SimulationConfig,
     neighbor_threshold: int = 4,
+    direction: OperationDirection = OperationDirection.AllToAll,
 ):
 
-    b, A_g, neighCounts = computeLiuMatricesWarp(
+    _, b, A_g, neighCounts = computeLiuMatricesWarp(
         queryPositions = queryPositions,
         referenceParticles = referenceParticles,
         referenceQuantities = referenceQuantities,
         operationProperties = OperationProperties(
             kernel = config.kernel,
             supportMode = SupportScheme.Scatter,
+            operationMode = direction,
         ),
         domain = config.domain,
     )
@@ -30,7 +32,7 @@ def interpolateLiuLiu(
 
     res = torch.matmul(A_g_inv, b.unsqueeze(2))[:,:,0]
 
-    return res[:,0], res[:,1:], neighCounts
+    return res[:,0], res[:,1:], neighCounts, A_g, b
 
 
 def liuExtend(

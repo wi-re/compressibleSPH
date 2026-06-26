@@ -4,6 +4,9 @@ import torch
 from typing import Optional
 from sphWarpCore import *
 
+from ..rigidBody.integrate import  integrateRigidBody
+from ..rigidBody.update import updateBodyParticlesWCSPH
+
 from ..modules.shifting.delta import computeDeltaShift
 from ..modules.shifting.wrapper import solveShifting
 
@@ -33,6 +36,7 @@ class WeaklyCompressibleSystemUpdate:
     dvdt: torch.Tensor = tagged(tags=('velocity_derivative',))
     drhodt: torch.Tensor = tagged(tags=('density_derivative',))
     passive: Optional[torch.Tensor] = tagged(tags=('passive_derivative',), default=None)
+
 
 @dataclass
 class WeaklyCompressibleSystem(BaseIntegrationSystem):
@@ -116,6 +120,12 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
                 dt = dt,
             )
             self.state.positions += shiftVector
+
+
+        
+        for rigidBody in schemeConfig.rigidBodies:
+            rigidBody = integrateRigidBody(rigidBody, 0, 0, dt)
+            self.systemState = updateBodyParticlesWCSPH(self.config['scheme'], self.systemState, rigidBody)
 
         # Information for artificial viscosity switches
         # self.state.divergence.copy_(lastState.divergence)

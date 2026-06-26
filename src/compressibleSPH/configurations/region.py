@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from .moduleConfigurations.boundaryConditions import BoundaryConditionType, BoundaryCondition
+from .moduleConfigurations.boundaryConditions import BoundaryConditionType, BoundaryCondition, BCType
 from ..utils.sampling import ParticleSet
 
 class RegionType(Enum):
@@ -17,4 +17,4 @@ class ParticleRegion:
     contour: list = None
 
     initialConditions: dict = None
-    kind: BoundaryConditionType = BoundaryConditionType.constant
+    kind: BCType = BCType.constant

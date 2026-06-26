@@ -23,6 +23,7 @@ def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig
         domain = config.domain,
         adjacency = adjacency,
         queryPressures = currentState.pressures,
-        pressureTerm = schemeConfig.pressureForceTerm
+        pressureTerm = schemeConfig.pressureForceTerm,
+        querySurfaceMask = currentState.surfaceIndicators,
     )
     return dvdt

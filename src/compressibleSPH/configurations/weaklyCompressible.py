@@ -61,6 +61,7 @@ class WeaklyCompressibleSPHConfig:
 
     surfaceDetectionConfig: SurfaceDetectionConfig = field(default_factory=buildDefaultSurfaceDetectionConfig, metadata={'description': 'Configuration for surface detection module'})
 
+    gravityConfig: gravityConfiguration = field(default_factory=buildDefaultGravityConfiguration, metadata={'description': 'Configuration for gravity module'})
 
 from typing import Dict, Any
 
@@ -96,6 +97,7 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
             'active': config.shiftProperties.active
         },
         # 'surfaceDetectionConfig': surfaceDetectionConfigToDict(config.surfaceDetectionConfig) if config.surfaceDetectionConfig is not None else None
+        'gravityConfig': gravityConfigurationToDict(config.gravityConfig)
     }
 
 def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompressibleSPHConfig:
@@ -128,5 +130,7 @@ def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompress
         maxC=shiftPropsDict.get('maxC', 0.3),
         active=shiftPropsDict.get('active', True)
     )
+    # config.surfaceDetectionConfig = dictToSurfaceDetectionConfig(configDict['surfaceDetectionConfig']) if configDict.get('surfaceDetectionConfig') is not None else None
+    config.gravityConfig = dictToGravityConfiguration(configDict['gravityConfig']) if configDict.get('gravityConfig') is not None else buildDefaultGravityConfiguration()
 
     return config

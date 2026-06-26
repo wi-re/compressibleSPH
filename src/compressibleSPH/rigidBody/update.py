@@ -1,7 +1,8 @@
 from .transformation import getTransformationMatrix
-from ..systems.weaklyCompressible import WeaklyCompressibleState
-from ..configurations.weaklyCompressible import RegionType, ParticleRegion, RigidBody, BoundaryConditionType
+# from ..systems.weaklyCompressible import WeaklyCompressibleState
+from ..configurations.weaklyCompressible import RegionType, ParticleRegion, RigidBody, BoundaryConditionType, BCType
 import torch
+from typing import Any, Optional, Union
 
 def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     T = getTransformationMatrix(rigidBody)
@@ -30,7 +31,7 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     updatedPositions[rigidBody.ghostParticleIndices] = ghostParticlePositions
 
     updatedVelocities = particleState.velocities.clone()
-    if rigidBody.kind != BoundaryConditionType.constant:
+    if rigidBody.kind != BCType.constant:
         # print('updating velocities')
         # print(particleVelocities)
         updatedVelocities[rigidBody.particleIndices] = particleVelocities
@@ -39,7 +40,7 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     updatedOffsets = particleState.ghostOffsets.clone()
     updatedOffsets[rigidBody.particleIndices] = offsets
     updatedOffsets[rigidBody.ghostParticleIndices] = offsets
-
+    WeaklyCompressibleState = type(particleState)
     return WeaklyCompressibleState(
         positions = updatedPositions,
         supports = particleState.supports,
