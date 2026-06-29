@@ -42,7 +42,7 @@ def computeLambdaGrad(
             adjacency = adjacency,
             returnEigVals = True
         )
-        lambdas_ = Evals[:,0]
+        lambdas_ = torch.min(torch.abs(Evals), dim=-1).values
     else:
         lambdas_ = lambdas
         renormalizationState_ = renormalizationState

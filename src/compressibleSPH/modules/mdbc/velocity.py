@@ -165,7 +165,8 @@ def zeroVelocity(currentState: Any, config: SimulationConfig, schemeConfig: Weak
 
 
 def computeBoundaryVelocities(currentState: Any, config: SimulationConfig, schemeConfig: WeaklyCompressibleSPHConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-
+    if not torch.any(currentState.kinds == 1):
+        return currentState.velocities
 
     materials = currentState.materials[currentState.kinds == 1]
     uniqueMaterials = torch.unique(materials)

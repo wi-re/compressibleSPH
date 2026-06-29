@@ -103,7 +103,7 @@ def computeVelocityDiffusionDeltaSPH_Func_i(
             mu_ij = scalar_t(0.0)
 
 
-        out += apparentVolume * mu_ij * factor * gradw_ij / rhoi# * hi
+        out += apparentVolume * mu_ij * factor * gradw_ij / ( (rhoj + rhoi) / scalar_t(2.0)) # * hi
         
     return out
 

@@ -65,7 +65,7 @@ def solveShifting(
             # ADD MDBC HERE
             
         if freeSurface:
-            fs, fsm, n = detectFreeSurface(systemState, config, schemeConfig, adjacency, returnNormals = True)
+            fs, fsm, n = detectFreeSurface(systemState, config, schemeConfig, schemeConfig.surfaceDetectionConfig, adjacency, returnNormals = True)
 
             C, Evals, renormalizationState_ = computeRenormalizationMatrices(
                 queryParticles = systemState,
@@ -86,6 +86,7 @@ def solveShifting(
         update, adjacency = computeDeltaShift(systemState, config, schemeConfig, domain, adjacency, iters = 1)
         
         if freeSurface:
+            # lMin = lMin * float(eval_kernelScale(config.kernel.value, config.dim))
             if projectionScheme == ShiftingProjectionScheme.dot:
                 result = update - torch.einsum('ij,ij->i', update, n).view(-1,1) * n
                 update[fsm > 0.5] = result[fsm > 0.5] * surfaceScaling

@@ -14,7 +14,7 @@ from ...enumTypes import *
 
 
 def computeMomentum(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    return warpOperation(
+    return -currentState.densities * warpOperation(
         currentState,
         OperationProperties(
             kernel = config.kernel,

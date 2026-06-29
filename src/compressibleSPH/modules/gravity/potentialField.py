@@ -21,7 +21,7 @@ def computePotentialFieldGravity(currentState: Any, config: SimulationConfig, sc
     maxD = config.domain.max
     periodic = config.domain.periodic
 
-    periodicPositions = getPeriodicPositions(x, minD, maxD, periodic)
+    periodicPositions = getPeriodicPositions(x, config.domain)
 
     origin = schemeConfig.gravityConfig.origin
     magnitude = schemeConfig.gravityConfig.magnitude

@@ -36,11 +36,11 @@ def buildDefaultShiftProperties() -> ShiftProperties:
     return ShiftProperties(
         iterations=1,
         CFL=0.3,
-        computeMach=False,
+        computeMach=True,
         maxC=0.3,
         active=True,
         scheme=ShiftingScheme.deltaSPH,
-        projectionScheme=ShiftingProjectionScheme.dot,
+        projectionScheme=ShiftingProjectionScheme.mat,
         summationDensity=False,
         surfaceScaling=0.1,
         threshold=0.5,

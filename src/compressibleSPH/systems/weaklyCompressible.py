@@ -121,6 +121,12 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
             )
             self.state.positions += shiftVector
 
+        initialRho = initialState.state.densities
+        midRho = returnValues[-1][1].densities
+        
+        drhodtMid = updateValues[-1].drhodt
+        epsilon = -dt * drhodtMid / midRho
+        self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
         
         for rigidBody in schemeConfig.rigidBodies:

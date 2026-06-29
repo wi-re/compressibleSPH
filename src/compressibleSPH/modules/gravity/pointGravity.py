@@ -28,7 +28,7 @@ def computePointGravity(currentState: Any, config: SimulationConfig, schemeConfi
     maxD = config.domain.max
     periodic = config.domain.periodic
 
-    periodicPositions = getPeriodicPositions(x, minD, maxD, periodic)
+    periodicPositions = getPeriodicPositions(x, config.domain)
     direction = origin - periodicPositions
     directionNorm = torch.norm(direction, dim=1, keepdim=True)
     directionNormalized = direction / (directionNorm + 1e-8)  # Avoid division by zero

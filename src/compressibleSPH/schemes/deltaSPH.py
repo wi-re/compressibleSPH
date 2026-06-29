@@ -94,6 +94,7 @@ def deltaSPH_step(
         drhodt = drhodt + drhodt_diss,
         passive = torch.zeros(currentState.densities.shape, device=currentState.densities.device, dtype=torch.bool)
     )
+    # update.drhodt = update.drhodt
 
     # 17. Enforce BCs on update
     enforceUpdates(update, currentSystem, config.dt, currentSystem.t, config, schemeConfig)

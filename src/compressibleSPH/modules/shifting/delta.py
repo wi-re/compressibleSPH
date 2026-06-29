@@ -22,16 +22,16 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
             verbose = False)
 
 
-        currentState.densities =warpOperation(
-            currentState,
-            operationProperties = OperationProperties(
-                operation=WarpOperation.Density,
-                kernel = config.kernel, 
-                supportMode = SupportScheme.Gather
-            ),
-            domain = domain,
-            adjacency = adjacency
-        )
+        # currentState.densities =warpOperation(
+        #     currentState,
+        #     operationProperties = OperationProperties(
+        #         operation=WarpOperation.Density,
+        #         kernel = config.kernel, 
+        #         supportMode = SupportScheme.Gather
+        #     ),
+        #     domain = domain,
+        #     adjacency = adjacency
+        # )
         # display(currentState)
 
         velocity_magnitudes = torch.linalg.vector_norm(currentState.velocities, dim=-1)
