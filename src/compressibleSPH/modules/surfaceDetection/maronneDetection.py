@@ -43,7 +43,7 @@ def detectFreeSurfaceMaronne(
         normals: Optional[torch.Tensor] = None, 
         
         returnNormals: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-    if renormalizationState is None and normals is None:
+    if renormalizationState is None:
         C, Evals, renormalizationState = computeRenormalizationMatrices(
             queryParticles = currentState,
             operationProperties = OperationProperties(

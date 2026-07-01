@@ -69,7 +69,6 @@ def computeNormals(
             renormalizationState_.renormalizationMatrices,
             config, schemeConfig, surfaceConfig,
             adjacency,
-            L = renormalizationState.renormalizationMatrices
         )
     elif surfaceConfig.normalSource == NormalSource.Native:
         normals = None
@@ -124,8 +123,8 @@ def detectFreeSurface(
             currentState,
             config, schemeConfig, surfaceConfig,
             adjacency,
-            # renormalizationState = renormalizationState_,
-            # normals = normals,
+            renormalizationState = renormalizationState_,
+            normals = normals,
             returnNormals = True
         )
     else:

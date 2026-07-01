@@ -109,20 +109,21 @@ def computeDeltaShift_Func_i(
         k = w_ij / W_0
 
         term = (1.0 + R * wp.pow(k, wp.float32(n)))
-        densityTerm = mj / (rhoi + rhoj)
+        densityTerm =0.5 * mj / (rhoi + rhoj)
 
         phi_ij = 1.0        
         scalarTerm = term * densityTerm * phi_ij
 
         shiftAmount = scalarTerm * gradw_ij
 
+
         Ma = wp.float32(0.1)
         if computeMach:
             Ma = c_max
         h2 = (hi / eval_kernelScale(kernel_int, dim) * 2.0)
-        shiftScaling = -CFL * Ma * h2 * h2
+        shiftScaling = -CFL * Ma * h2 #* h2
         
-        out += shiftScaling * shiftAmount
+        out += shiftAmount
     return out
 
 from sphWarpCore.operations_grid.grid_util import checkOffset

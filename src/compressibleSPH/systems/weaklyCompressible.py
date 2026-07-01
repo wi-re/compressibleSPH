@@ -112,14 +112,63 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
             #     domain = config.domain,
             #     adjacency = self.adjacency,
             # )
-            shiftVector = solveShifting(
+            dx = solveShifting(
                 systemState = self.state,
                 config = config,
                 schemeConfig = schemeConfig,
                 adjacency = self.adjacency,
                 dt = dt,
             )
-            self.state.positions += shiftVector
+            # print(f"Applied shifting update with max shift magnitude: {dx.norm(dim=1).max().item()}")
+
+            du = dx / dt
+            rho = self.state.densities
+            u = self.state.velocities
+
+            drhodt_shift = warpOperation(
+                self.state,
+                operationProperties = OperationProperties(
+                    operation=WarpOperation.Divergence,
+                    kernel = config.kernel, 
+                    supportMode = SupportScheme.Gather,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Summation
+                ),
+                queryValues = rho.view(-1,1) * du,
+                domain = config.domain,
+                adjacency = self.adjacency
+            )
+
+            dudt = -u * warpOperation(
+                self.state,
+                operationProperties = OperationProperties(
+                    operation=WarpOperation.Divergence,
+                    kernel = config.kernel, 
+                    supportMode = SupportScheme.Gather,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Difference
+                ),
+                queryValues =  du,
+                domain = config.domain,
+                adjacency = self.adjacency
+            ).view(-1,1)
+
+            duCross = warpOperation(
+                self.state,
+                operationProperties = OperationProperties(
+                    operation=WarpOperation.Divergence,
+                    kernel = config.kernel, 
+                    supportMode = SupportScheme.Gather,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Difference
+                ),
+                queryValues =  torch.einsum('ij,ik->ikj', u, du),
+                domain = config.domain,
+                adjacency = self.adjacency
+            )
+
+
+
 
         initialRho = initialState.state.densities
         midRho = returnValues[-1][1].densities
@@ -128,7 +177,11 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         epsilon = -dt * drhodtMid / midRho
         self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
-        
+        if schemeConfig.shiftProperties.active:
+            self.state.densities += drhodt_shift * dt
+            self.state.velocities += (dudt + duCross) * dt
+            self.state.positions += dx
+
         for rigidBody in schemeConfig.rigidBodies:
             rigidBody = integrateRigidBody(rigidBody, 0, 0, dt)
             self.systemState = updateBodyParticlesWCSPH(self.config['scheme'], self.systemState, rigidBody)

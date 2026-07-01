@@ -84,7 +84,9 @@ def solveShifting(
             fs = fsm = n = lMin = None
 
         update, adjacency = computeDeltaShift(systemState, config, schemeConfig, domain, adjacency, iters = 1)
-        
+        # print(f"Iteration {i} [inside solveShifting], max shift magnitude: {update.norm(dim=1).max().item()}")
+
+
         if freeSurface:
             # lMin = lMin * float(eval_kernelScale(config.kernel.value, config.dim))
             if projectionScheme == ShiftingProjectionScheme.dot:
@@ -95,22 +97,83 @@ def solveShifting(
                 nMat = torch.einsum('ij, ik -> ikj', n, n)
                 M = torch.diag_embed(systemState.positions.new_ones(systemState.positions.shape)) - nMat
                 result = torch.bmm(M, update.unsqueeze(-1)).squeeze(-1)
-                update[fsm > 0.5] = result[fsm > 0.5]
+                
+                # update[fsm > 0.5] = result[fsm > 0.5] * surfaceScaling * 5.0
+                update[fsm > 0.5] = (lMin**2.0).view(-1,1)[fsm > 0.5] * result[fsm > 0.5]
+                # update[fs > 0.5] = result[fs> 0.5] * surfaceScaling
                 update[lMin < 0.4] = 0
-                update[fs > 0.5] = update[fs> 0.5] * surfaceScaling
             else:
                 update[fsm > 0.5] = 0
                 update[lMin < 0.4] = 0
                 update[fs > 0.5] = 0
             
-        update = torch.clamp(update, -shiftingThreshold * spacing, shiftingThreshold * spacing)
+        # update = torch.clamp(update, -shiftingThreshold * spacing, shiftingThreshold * spacing)
         update[systemState.kinds != 0] = 0
 
-        systemState.positions += update
+        systemState.positions += update# * dt
                     
     dx = systemState.positions - initialPositions
     systemState.positions = initialPositions
     systemState.densities = initialDensities
     
+    # adjacency = buildVerletList(
+    #     systemState, 
+    #     config.domain, verletScale = config.verletScale, supportMode = SupportScheme.SuperSymmetric,
+    #     priorNeighborhood = adjacency,
+    #     verbose = False)
+    
+    # du = dx / dt
+    # rho = systemState.densities
+
+    # drhodt_shift = warpOperation(
+    #     systemState,
+    #     operationProperties = OperationProperties(
+    #         operation=WarpOperation.Divergence,
+    #         kernel = config.kernel, 
+    #         supportMode = SupportScheme.Gather,
+    #         operationMode = OperationDirection.AllToAll,
+    #         gradientMode = GradientScheme.Summation
+    #     ),
+    #     queryValues = rho.view(-1,1) * du,
+    #     domain = domain,
+    #     adjacency = adjacency
+    # )
+
+    # dudt = rho.view(-1,1) * warpOperation(
+    #     systemState,
+    #     operationProperties = OperationProperties(
+    #         operation=WarpOperation.Divergence,
+    #         kernel = config.kernel, 
+    #         supportMode = SupportScheme.Gather,
+    #         operationMode = OperationDirection.AllToAll,
+    #         gradientMode = GradientScheme.Difference
+    #     ),
+    #     queryValues =  du,
+    #     domain = domain,
+    #     adjacency = adjacency
+    # )
+
+    # u3 = du.new_zeros((systemState.positions.shape[0], 3))
+    # du3 = du.new_zeros((systemState.positions.shape[0], 3))
+    # u3[:,:systemState.positions.shape[1]] = systemState.velocities
+    # du3[:,:systemState.positions.shape[1]] = du
+    # u_cross_du = torch.cross(u3, du3, dim = -1)
+    # u_cross_du = u_cross_du[:,2]
+
+    # duCross = rho.view(-1,1) * warpOperation(
+    #     systemState,
+    #     operationProperties = OperationProperties(
+    #         operation=WarpOperation.Divergence,
+    #         kernel = config.kernel, 
+    #         supportMode = SupportScheme.Gather,
+    #         operationMode = OperationDirection.AllToAll,
+    #         gradientMode = GradientScheme.Summation
+    #     ),
+    #     queryValues =  u_cross_du,
+    #     domain = domain,
+    #     adjacency = adjacency
+    # )
+
+
     return dx
             

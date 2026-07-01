@@ -4,7 +4,7 @@ from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompres
 from ...configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
 from typing import Optional
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi
+from sphWarpCore.kernels.wp_kernel import sphKernel_xi, sphKernelScale
 from ...modules.eos import idealGasEOS
 import torch
 import warp as wp
@@ -28,7 +28,7 @@ def computeTimestep(
     alpha = compParams.diffusionParams.inviscidAlpha
     c_s = compParams.fluid.fixedSoundSpeed
     particleSupport = system.state.supports.min()
-    kernelScale = sphKernel_xi(config.kernel.value, config.dim)
+    kernelScale = float(sphKernelScale(config.kernel.value, config.dim))
 
     dtype =  config.dtype
     device = config.device

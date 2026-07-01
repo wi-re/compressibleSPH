@@ -94,9 +94,23 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
             'CFL': config.shiftProperties.CFL,
             'computeMach': config.shiftProperties.computeMach,
             'maxC': config.shiftProperties.maxC,
-            'active': config.shiftProperties.active
+            'active': config.shiftProperties.active,
+            'scheme': config.shiftProperties.scheme.name,
+            'projectionScheme': config.shiftProperties.projectionScheme.name,
+            'summationDensity': config.shiftProperties.summationDensity,
+            'surfaceScaling': config.shiftProperties.surfaceScaling,
+            'threshold': config.shiftProperties.threshold,
+            'projectQuantities': config.shiftProperties.projectQuantities,
         },
-        # 'surfaceDetectionConfig': surfaceDetectionConfigToDict(config.surfaceDetectionConfig) if config.surfaceDetectionConfig is not None else None
+        'surfaceDetectionConfig': {
+            'active': config.surfaceDetectionConfig.active,
+            'colorFieldThreshold': config.surfaceDetectionConfig.colorFieldThreshold,
+            'colorFieldGradThreshold': config.surfaceDetectionConfig.colorFieldGradThreshold,
+            'barecascoThreshold': config.surfaceDetectionConfig.barecascoThreshold,
+            'expansionIterations': config.surfaceDetectionConfig.expansionIterations,
+            'scheme': config.surfaceDetectionConfig.scheme.name,
+            'normalSource': config.surfaceDetectionConfig.normalSource.name,
+        },
         'gravityConfig': gravityConfigurationToDict(config.gravityConfig)
     }
 
@@ -128,9 +142,25 @@ def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompress
         CFL=shiftPropsDict.get('CFL', 0.3),
         computeMach=shiftPropsDict.get('computeMach', False),
         maxC=shiftPropsDict.get('maxC', 0.3),
-        active=shiftPropsDict.get('active', True)
+        active=shiftPropsDict.get('active', True),
+        scheme=ShiftingScheme[shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH.name)] if isinstance(shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH.name), str) else shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH),
+        projectionScheme=ShiftingProjectionScheme[shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot.name)] if isinstance(shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot.name), str) else shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot),
+        summationDensity=shiftPropsDict.get('summationDensity', False),
+        surfaceScaling=shiftPropsDict.get('surfaceScaling', 0.1),
+        threshold=shiftPropsDict.get('threshold', 0.5),
+        projectQuantities=shiftPropsDict.get('projectQuantities', False),
     )
-    # config.surfaceDetectionConfig = dictToSurfaceDetectionConfig(configDict['surfaceDetectionConfig']) if configDict.get('surfaceDetectionConfig') is not None else None
+    surfaceConfigDict = configDict.get('surfaceDetectionConfig')
+    if surfaceConfigDict is not None:
+        config.surfaceDetectionConfig = SurfaceDetectionConfig(
+            active=surfaceConfigDict.get('active', buildDefaultSurfaceDetectionConfig().active),
+            colorFieldThreshold=surfaceConfigDict.get('colorFieldThreshold', buildDefaultSurfaceDetectionConfig().colorFieldThreshold),
+            colorFieldGradThreshold=surfaceConfigDict.get('colorFieldGradThreshold', buildDefaultSurfaceDetectionConfig().colorFieldGradThreshold),
+            barecascoThreshold=surfaceConfigDict.get('barecascoThreshold', buildDefaultSurfaceDetectionConfig().barecascoThreshold),
+            expansionIterations=surfaceConfigDict.get('expansionIterations', buildDefaultSurfaceDetectionConfig().expansionIterations),
+            scheme=SurfaceDetectionScheme[surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme.name)] if isinstance(surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme.name), str) else surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme),
+            normalSource=NormalSource[surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource.name)] if isinstance(surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource.name), str) else surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource),
+        )
     config.gravityConfig = dictToGravityConfiguration(configDict['gravityConfig']) if configDict.get('gravityConfig') is not None else buildDefaultGravityConfiguration()
 
     return config
