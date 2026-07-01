@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compressibleSPH"
+version = "0.1.5"
+description = "GPU-accelerated SPH neighbor search and operators built with NVIDIA Warp and PyTorch"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["sph", "warp", "pytorch", "fluid-simulation", "neighbor-search", "crksph"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "torch",
+    "warp-lang",
+    "numpy",
+]
+
+[project.optional-dependencies]
+notebooks = [
+    "matplotlib",
+    "ipympl",
+    "ipywidgets",
+]
+dev = [
+    "pytest",
+    "build",
+    "twine",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
