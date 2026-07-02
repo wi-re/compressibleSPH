@@ -36,10 +36,10 @@ from integrators.integration import *
 from sphWarpCore import *
 
 # This library
-from compressibleSPH import *
+from warpSPH import *
 # end of boilerplate imports
 
-from compressibleSPH.caseUtils import *
+from warpSPH.caseUtils import *
 
 
 

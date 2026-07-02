@@ -1,0 +1,108 @@
+from ...configurations.compressibleConfig import CompressibleSPHConfig
+
+from .wp_omega import computeOmegaWarp
+from ...systems.baseState import *
+from sphWarpCore import *
+from ...configurations import SimulationConfig
+from ...utils.support import volumeToSupportHelper, nH_to_n_h
+from torch.profiler import profile, record_function, ProfilerActivity
+
+def computeH(rho, m, targetNeighbors, dim):
+    safe_rho = torch.clamp(torch.nan_to_num(rho, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
+    V = m / safe_rho
+    return volumeToSupportHelper(V, targetNeighbors, dim)
+    return targetNeighbors / 2 * V
+
+def F(h, rho, m, targetNeighbors, dim):
+    return h - computeH(rho, m, targetNeighbors, dim)
+from sphWarpCore.enumTypes import SupportScheme
+
+def evaluateOptimalSupportMonaghan(
+        particleState: BaseState,
+        config: SimulationConfig,
+        compParams: CompressibleSPHConfig,
+        supportScheme: SupportScheme = SupportScheme.Scatter,
+        adjacency: Optional[AdjacencyList] = None,
+):
+    with record_function("evaluateOptimalSupport"):
+        rhos = [particleState.densities]
+        supports = [particleState.supports]
+
+        # verletScale = 2**(1/particleState.positions.shape[1])
+        verletScale = config.verletScale
+        # nIter = 16
+        nIter = compParams.adaptiveSupportIterations
+        # hThreshold = 1e-3
+        hThreshold = compParams.adaptiveSupportThreshold
+
+        hMin = particleState.supports.min()
+        hMax = particleState.supports.max()
+
+        iterState = particleState#.initializeNewState()
+        originalDensities = iterState.densities.clone()
+        # adjacency = None
+
+        for i in range(nIter):
+            with record_function(f"[evalOS] Iteration {i}"):
+                with record_function("[evalOS] buildVerletList"):
+                    adjacency = buildVerletList(iterState, domain = config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric, priorNeighborhood=adjacency, verbose=False)
+
+                iterState.densities = warpOperation(
+                    iterState,
+                    OperationProperties(
+                        kernel = config.kernel,
+                        operation = WarpOperation.Density,
+                        supportMode = supportScheme,
+                    ),
+                    domain = config.domain,
+                    adjacency=adjacency
+                )
+                h_prev = iterState.supports
+
+                safe_rho = torch.clamp(torch.nan_to_num(iterState.densities, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
+                F_ = F(h_prev, safe_rho, iterState.masses, targetNeighbors = config.targetNeighbors, dim = config.dim)
+                dFdh_ = computeOmegaWarp(iterState, 
+                        OperationProperties(
+                            kernel = config.kernel,
+                            supportMode = supportScheme,
+                        ),
+                        domain = config.domain,
+                        adjacency=adjacency)
+                dFdh_safe = torch.nan_to_num(dFdh_, nan=0.0, posinf=0.0, neginf=0.0)
+                step = F_ / (dFdh_safe + 1e-6)
+                step = torch.nan_to_num(step, nan=0.0, posinf=0.0, neginf=0.0)
+                h_new = h_prev - step
+                h_new = torch.where(torch.isfinite(h_new), h_new, h_prev)
+
+                h_new = h_new.clamp(min = hMin * 0.25, max = hMax * 4.0)
+                hMin = h_new.min()
+                hMax = h_new.max()
+
+                h_diff = h_new - h_prev
+                h_ratio = h_new / (h_prev + 1e-6)
+                iterState.supports = h_new
+
+                rhos.append(iterState.densities)
+                supports.append(iterState.supports)
+                        
+                # print(f'Iteration: {i} | h_ratio: {h_ratio.min()} | {h_ratio.max()} | {h_ratio.mean()}')
+                # print(f'Densities: {iterState.densities.min()} | {iterState.densities.max()} | {iterState.densities.mean()}')
+                # print(f'Supports: {h_new.min()} | {h_new.max()} | {h_new.mean()}')
+                # print(f'Iteration: {i} | Support: {h_new.min()} | {h_new.max()} | {h_new.mean()} | Ratio: {h_ratio.min()} | {h_ratio.max()} | {h_ratio.mean()}')
+                if (h_ratio - 1).abs().max() < hThreshold:
+                    # print('Stopping Early')
+                    break
+
+        adjacency = buildVerletList(iterState, domain = config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric, priorNeighborhood=adjacency, verbose=False)
+        densities = warpOperation(
+            iterState,
+            OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Density,
+                supportMode = supportScheme,
+            ),
+            domain = config.domain,
+            adjacency=adjacency
+        )
+        particleState.densities = originalDensities
+        return densities, iterState.supports, adjacency, rhos, supports
