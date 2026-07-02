@@ -15,21 +15,22 @@ from ...enumTypes import *
 from .wp_densityDelta import computeDensityDiffusionDeltaSPH
 
 def computeDensityDiffusion(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], gradRho: Optional[torch.Tensor], gradRhoL: Optional[torch.Tensor]) -> torch.Tensor:
-    delta = schemeConfig.diffusionParams.densityDelta
-    xi = sphKernel_xi(config.kernel.value, config.dim)
-    drhodt_scaling = delta * currentState.supports / xi * schemeConfig.fluid.fixedSoundSpeed
-    drhodt_diss = drhodt_scaling * computeDensityDiffusionDeltaSPH(
-        currentState,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Divergence,
-            supportMode = SupportScheme.SuperSymmetric,
-            operationMode = OperationDirection.AllToAll,
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-        queryGradRho = gradRho,
-        queryGradRhoL = gradRhoL,
-        densityScheme = schemeConfig.diffusionParams.densityDiffusionTerm
-    )
-    return drhodt_diss
+    with record_function("[warpSPH] - (deltaSPH) - computeDensityDiffusion"):
+        delta = schemeConfig.diffusionParams.densityDelta
+        xi = sphKernel_xi(config.kernel.value, config.dim)
+        drhodt_scaling = delta * currentState.supports / xi * schemeConfig.fluid.fixedSoundSpeed
+        drhodt_diss = drhodt_scaling * computeDensityDiffusionDeltaSPH(
+            currentState,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Divergence,
+                supportMode = SupportScheme.SuperSymmetric,
+                operationMode = OperationDirection.AllToAll,
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
+            queryGradRho = gradRho,
+            queryGradRhoL = gradRhoL,
+            densityScheme = schemeConfig.diffusionParams.densityDiffusionTerm
+        )
+        return drhodt_diss

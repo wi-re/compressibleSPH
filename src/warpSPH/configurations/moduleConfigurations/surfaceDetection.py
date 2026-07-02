@@ -4,6 +4,7 @@ from typing import Optional, Union, List
 from dataclasses import dataclass, field
 import torch
 from enum import Enum
+import numpy as np
 
 
 class SurfaceDetectionScheme(Enum):
@@ -40,9 +41,9 @@ def buildDefaultSurfaceDetectionConfig() -> SurfaceDetectionConfig:
         active = False,
         colorFieldThreshold = 0.75,
         colorFieldGradThreshold = 10.0,
-        barecascoThreshold = 1.5,
+        barecascoThreshold = np.pi/3,
         expansionIterations = 1,
 
-        scheme = SurfaceDetectionScheme.ColorFieldGrad,
-        normalSource = NormalSource.ColorFieldGrad
+        scheme = SurfaceDetectionScheme.Barecasco,
+        normalSource = NormalSource.LambdaGrad
     )

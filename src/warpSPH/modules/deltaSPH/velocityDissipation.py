@@ -16,20 +16,21 @@ from ...enumTypes import *
 from .wp_densityDelta import computeDensityDiffusionDeltaSPH
 
 def computeVelocityDiffusion(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    dvdt_diss = computeVelocityDiffusionDeltaSPH(
-        currentState,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Laplacian,
-            supportMode = SupportScheme.SuperSymmetric,
-            operationMode = OperationDirection.AllToAll,
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-        queryVelocities = currentState.velocities,
-        inviscid = schemeConfig.diffusionParams.inviscid,
-        c_s = schemeConfig.fluid.fixedSoundSpeed,
-        alpha = schemeConfig.diffusionParams.inviscidAlpha,
-        nu = schemeConfig.diffusionParams.viscidNu,
-    )
-    return dvdt_diss
+    with record_function("[warpSPH] - (deltaSPH) - computeVelocityDiffusion"):
+        dvdt_diss = computeVelocityDiffusionDeltaSPH(
+            currentState,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Laplacian,
+                supportMode = SupportScheme.SuperSymmetric,
+                operationMode = OperationDirection.AllToAll,
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
+            queryVelocities = currentState.velocities,
+            inviscid = schemeConfig.diffusionParams.inviscid,
+            c_s = schemeConfig.fluid.fixedSoundSpeed,
+            alpha = schemeConfig.diffusionParams.inviscidAlpha,
+            nu = schemeConfig.diffusionParams.viscidNu,
+        )
+        return dvdt_diss

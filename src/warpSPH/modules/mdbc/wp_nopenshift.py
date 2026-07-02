@@ -496,18 +496,18 @@ def computeMdbcNoPenShift(currentState: Any, config: Any, schemeConfig: Any, adj
     if not torch.any(currentState.kinds == 1):
         # No boundary particles, return zero shift
         return torch.zeros_like(currentState.velocities)
-    
-    nopenshift = computeMdbcNoPenShiftWarp(
-        currentState,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Interpolate,
-            supportMode = SupportScheme.Gather,
-            operationMode = OperationDirection.BoundaryToFluid,
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-        queryOffsets = currentState.ghostOffsets,
-        queryVelocities = currentState.velocities
-    )
-    return nopenshift[0]
+    with record_function("warpSPH - (mdbc) - computeMdbcNoPenShift"):
+        nopenshift = computeMdbcNoPenShiftWarp(
+            currentState,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Interpolate,
+                supportMode = SupportScheme.Gather,
+                operationMode = OperationDirection.BoundaryToFluid,
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
+            queryOffsets = currentState.ghostOffsets,
+            queryVelocities = currentState.velocities
+        )
+        return nopenshift[0]

@@ -14,18 +14,19 @@ from ...enumTypes import *
 
 
 def computeGradRho(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    return warpOperation(
-            currentState,
-            OperationProperties(
-                kernel = config.kernel,
-                operation = WarpOperation.Gradient,
-                supportMode = SupportScheme.SuperSymmetric,
-                operationMode = OperationDirection.AllToAll,
-                gradientMode = GradientScheme.Naive
-            ),
-            queryValues = currentState.densities,
-            # queryValues = testQuantity,
-            domain = config.domain,
-            adjacency = adjacency,
-            # renormalizationState = RenormalizationState(C=C, eigVals=Evals, L=L)
-        )
+    with record_function("[warpSPH] - computeGradRho"):
+        return warpOperation(
+                currentState,
+                OperationProperties(
+                    kernel = config.kernel,
+                    operation = WarpOperation.Gradient,
+                    supportMode = SupportScheme.SuperSymmetric,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Naive
+                ),
+                queryValues = currentState.densities,
+                # queryValues = testQuantity,
+                domain = config.domain,
+                adjacency = adjacency,
+                # renormalizationState = RenormalizationState(C=C, eigVals=Evals, L=L)
+            )

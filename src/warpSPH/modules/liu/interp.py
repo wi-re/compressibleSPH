@@ -15,28 +15,29 @@ def interpolateLiuLiu(
     direction: OperationDirection = OperationDirection.AllToAll,
     supportScale: float = 1.0
 ):
-    h = referenceParticles.supports.clone()
-    referenceParticles.supports = h * supportScale
+    with record_function("[warpSPH] - interpolateLiuLiu"):
+        h = referenceParticles.supports.clone()
+        referenceParticles.supports = h * supportScale
 
-    _, b, A_g, neighCounts = computeLiuMatricesWarp(
-        queryPositions = queryPositions,
-        referenceParticles = referenceParticles,
-        referenceQuantities = referenceQuantities,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            supportMode = SupportScheme.Scatter,
-            operationMode = direction,
-        ),
-        domain = config.domain,
-    )
-    referenceParticles.supports = h
+        _, b, A_g, neighCounts = computeLiuMatricesWarp(
+            queryPositions = queryPositions,
+            referenceParticles = referenceParticles,
+            referenceQuantities = referenceQuantities,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                supportMode = SupportScheme.Scatter,
+                operationMode = direction,
+            ),
+            domain = config.domain,
+        )
+        referenceParticles.supports = h
 
-    A_g_inv = torch.zeros_like(A_g)
-    A_g_inv[neighCounts > neighbor_threshold] = torch.linalg.pinv(A_g[neighCounts > neighbor_threshold])
+        A_g_inv = torch.zeros_like(A_g)
+        A_g_inv[neighCounts > neighbor_threshold] = torch.linalg.pinv(A_g[neighCounts > neighbor_threshold])
 
-    res = torch.matmul(A_g_inv, b.unsqueeze(2))[:,:,0]
+        res = torch.matmul(A_g_inv, b.unsqueeze(2))[:,:,0]
 
-    return res[:,0], res[:,1:], neighCounts, A_g, b
+        return res[:,0], res[:,1:], neighCounts, A_g, b
 
 
 def liuExtend(

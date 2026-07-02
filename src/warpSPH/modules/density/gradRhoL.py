@@ -15,36 +15,38 @@ from ...enumTypes import *
 
 
 def computeCovariance(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    C, Evals, L = computeRenormalizationMatrices(
-        queryParticles = currentState,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Gradient,
-            operationMode = OperationDirection.AllToAll,
-            supportMode = SupportScheme.SuperSymmetric
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-        returnEigVals = True
-    )
-    return C, Evals, L
-
-def computeGradRhoL(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], L: Optional[RenormalizationState]) -> torch.Tensor:
-    if L is None:
-        C, Evals, L = computeCovariance(currentState, config, schemeConfig, adjacency)
-
-    return warpOperation(
-            currentState,
-            OperationProperties(
+    with record_function("[warpSPH] - computeCovariance"):
+        C, Evals, L = computeRenormalizationMatrices(
+            queryParticles = currentState,
+            operationProperties = OperationProperties(
                 kernel = config.kernel,
                 operation = WarpOperation.Gradient,
-                supportMode = SupportScheme.SuperSymmetric,
                 operationMode = OperationDirection.AllToAll,
-                gradientMode = GradientScheme.Difference
+                supportMode = SupportScheme.SuperSymmetric
             ),
-            queryValues = currentState.densities,
-            # queryValues = testQuantity,
             domain = config.domain,
             adjacency = adjacency,
-            renormalizationState = L
+            returnEigVals = True
         )
+        return C, Evals, L
+
+def computeGradRhoL(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], L: Optional[RenormalizationState]) -> torch.Tensor:
+    with record_function("[warpSPH] - (deltaSPH) - computeGradRhoL"):
+        if L is None:
+            C, Evals, L = computeCovariance(currentState, config, schemeConfig, adjacency)
+
+        return warpOperation(
+                currentState,
+                OperationProperties(
+                    kernel = config.kernel,
+                    operation = WarpOperation.Gradient,
+                    supportMode = SupportScheme.SuperSymmetric,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Difference
+                ),
+                queryValues = currentState.densities,
+                # queryValues = testQuantity,
+                domain = config.domain,
+                adjacency = adjacency,
+                renormalizationState = L
+            )

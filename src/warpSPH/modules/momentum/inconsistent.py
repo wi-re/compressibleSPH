@@ -14,17 +14,18 @@ from ...enumTypes import *
 
 
 def computeMomentum(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    return -currentState.densities * warpOperation(
-        currentState,
-        OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Divergence,
-            supportMode = SupportScheme.SuperSymmetric,
-            operationMode = OperationDirection.AllToAll,
-            gradientMode = GradientScheme.Difference
-        ),
-        queryValues = currentState.velocities,
-        domain = config.domain,
-        adjacency = adjacency,
-        consistentDivergence = False
-    )
+    with record_function("[warpSPH] - computeMomentum"):
+        return -currentState.densities * warpOperation(
+            currentState,
+            OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Divergence,
+                supportMode = SupportScheme.SuperSymmetric,
+                operationMode = OperationDirection.AllToAll,
+                gradientMode = GradientScheme.Difference
+            ),
+            queryValues = currentState.velocities,
+            domain = config.domain,
+            adjacency = adjacency,
+            consistentDivergence = False
+        )

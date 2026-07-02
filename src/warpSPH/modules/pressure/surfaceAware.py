@@ -14,16 +14,17 @@ from ...enumTypes import *
 from .wp_surfaceAware import computePressureSurfaceAwareWarp
 
 def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    dvdt = - computePressureSurfaceAwareWarp(
-        currentState,
-        operationProperties = OperationProperties(
-            kernel = config.kernel,
-            supportMode = SupportScheme.SuperSymmetric,
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
-        queryPressures = currentState.pressures,
-        pressureTerm = schemeConfig.pressureForceTerm,
-        querySurfaceMask = currentState.surfaceIndicators,
-    ) / currentState.densities.view(-1,1)
-    return dvdt
+    with record_function("[warpSPH] - computePressureForceSurfaceAware"):
+        dvdt = - computePressureSurfaceAwareWarp(
+            currentState,
+            operationProperties = OperationProperties(
+                kernel = config.kernel,
+                supportMode = SupportScheme.SuperSymmetric,
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
+            queryPressures = currentState.pressures,
+            pressureTerm = schemeConfig.pressureForceTerm,
+            querySurfaceMask = currentState.surfaceIndicators,
+        ) / currentState.densities.view(-1,1)
+        return dvdt

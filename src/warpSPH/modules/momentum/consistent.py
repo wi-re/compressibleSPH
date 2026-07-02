@@ -11,7 +11,7 @@ def computeMomentumConsistent_warp(
     adjacency: Optional[AdjacencyList] = None,
     gradH: Optional[GradHState] = None,
 ):
-    with record_function("warpSPH[computeMomentumConsistent]"):
+    with record_function("warpSPH - computeMomentumConsistent"):
         densities = state.densities 
         omega = gradH.queryOmegas if gradH is not None else None
         

@@ -16,11 +16,11 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
     original_densities = currentState.densities.clone()
     for i in range(schemeConfig.shiftProperties.iterations if iters == -1 else iters):
             
-        adjacency = buildVerletList(
-            currentState, 
-            config.domain, verletScale = config.verletScale, supportMode = SupportScheme.SuperSymmetric,
-            priorNeighborhood = adjacency,
-            verbose = False)
+        # adjacency = buildVerletList(
+        #     currentState, 
+        #     config.domain, verletScale = config.verletScale, supportMode = SupportScheme.SuperSymmetric,
+        #     priorNeighborhood = adjacency,
+        #     verbose = False)
 
 
         # currentState.densities =warpOperation(
@@ -62,7 +62,7 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
             adjacency = adjacency,
 
             CFL = schemeConfig.shiftProperties.CFL, computeMach = schemeConfig.shiftProperties.computeMach, c_max = c_max.cpu().item(),
-            rho0 = 1.0, dx = config.dx.item(),
+            rho0 = 1.0, dx = config.dx if not isinstance(config.dx, torch.Tensor) else config.dx.cpu().item()
         ) #* schemeConfig.fluid.fixedSoundSpeed * config.dt
         # The compute function returns the unscaled term
         # \sum_j m_j * [ 2 / (rho_i + rho_j) ] * [ 1 + R * (w_ij / W_0)^n ] * gradW_ij

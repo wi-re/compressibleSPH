@@ -9,6 +9,7 @@ from ..rigidBody.update import updateBodyParticlesWCSPH
 
 from ..modules.shifting.delta import computeDeltaShift
 from ..modules.shifting.wrapper import solveShifting
+from torch.profiler import profile, record_function, ProfilerActivity
 
 @dataclass
 class WeaklyCompressibleState(BaseState):
@@ -26,6 +27,8 @@ class WeaklyCompressibleState(BaseState):
     pressures : torch.Tensor = constant(tags=('damping',), default=None)
     soundspeeds : torch.Tensor = constant(tags=('soundSpeed',), default=None)
     surfaceIndicators : torch.Tensor = constant(tags=('surfaceIndicator',), default=None)
+    surfaceNormals : torch.Tensor = constant(tags=('surfaceNormal',), default=None)
+    surfaceLambdas : torch.Tensor = constant(tags=('surfaceLambda',), default=None)
 
     ghostIndices : torch.Tensor = constant(tags=('ghostIndices',), default=None)
     ghostOffsets : torch.Tensor = constant(tags=('ghostOffsets',), default=None)
@@ -92,6 +95,16 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         else:
             self.state.surfaceIndicators = lastState.surfaceIndicators.clone() if lastState.surfaceIndicators is not None else None
 
+        if self.state.surfaceNormals is not None and lastState.surfaceNormals is not None:
+            self.state.surfaceNormals.copy_(lastState.surfaceNormals)
+        else:
+            self.state.surfaceNormals = lastState.surfaceNormals.clone() if lastState.surfaceNormals is not None else None
+
+        if self.state.surfaceLambdas is not None and lastState.surfaceLambdas is not None:
+            self.state.surfaceLambdas.copy_(lastState.surfaceLambdas)
+        else:
+            self.state.surfaceLambdas = lastState.surfaceLambdas.clone() if lastState.surfaceLambdas is not None else None
+
         velocity_magnitudes = torch.linalg.vector_norm(self.state.velocities, dim=-1)
         finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
         max_velocity_magnitude = (
@@ -112,60 +125,76 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
             #     domain = config.domain,
             #     adjacency = self.adjacency,
             # )
-            dx = solveShifting(
-                systemState = self.state,
-                config = config,
-                schemeConfig = schemeConfig,
-                adjacency = self.adjacency,
-                dt = dt,
-            )
-            # print(f"Applied shifting update with max shift magnitude: {dx.norm(dim=1).max().item()}")
+            with record_function("[warpSPH] - [deltaSPH] - solve shifting"):
+                dx = solveShifting(
+                    systemState = self.state,
+                    config = config,
+                    schemeConfig = schemeConfig,
+                    adjacency = self.adjacency,
+                    dt = dt,
+                )
+                # print(f"Applied shifting update with max shift magnitude: {dx.norm(dim=1).max().item()}")
 
-            du = dx / dt
-            rho = self.state.densities
-            u = self.state.velocities
+                du = dx / dt
+                rho = self.state.densities
+                u = self.state.velocities
 
-            drhodt_shift = warpOperation(
-                self.state,
-                operationProperties = OperationProperties(
-                    operation=WarpOperation.Divergence,
-                    kernel = config.kernel, 
-                    supportMode = SupportScheme.Gather,
-                    operationMode = OperationDirection.AllToAll,
-                    gradientMode = GradientScheme.Summation
-                ),
-                queryValues = rho.view(-1,1) * du,
-                domain = config.domain,
-                adjacency = self.adjacency
-            )
+                if schemeConfig.shiftProperties.correctdrhodt:
+                    with record_function("[warpSPH] - [deltaSPH] - compute drhodt_shift"):
+                        drhodt_shift = warpOperation(
+                            self.state,
+                            operationProperties = OperationProperties(
+                                operation=WarpOperation.Divergence,
+                                kernel = config.kernel, 
+                                supportMode = SupportScheme.Gather,
+                                operationMode = OperationDirection.AllToAll,
+                                gradientMode = GradientScheme.Summation
+                            ),
+                            queryValues = rho.view(-1,1) * du,
+                            domain = config.domain,
+                            adjacency = self.adjacency
+                        ) - rho * warpOperation(
+                            self.state,
+                            operationProperties = OperationProperties(
+                                operation=WarpOperation.Divergence,
+                                kernel = config.kernel, 
+                                supportMode = SupportScheme.Gather,
+                                operationMode = OperationDirection.AllToAll,
+                                gradientMode = GradientScheme.Difference
+                            ),
+                            queryValues = du,
+                            domain = config.domain,
+                            adjacency = self.adjacency
+                        )
+                if schemeConfig.shiftProperties.correctdvdt:
+                    with record_function("[warpSPH] - [deltaSPH] - compute dudt shift"):
+                        dudt = -u * warpOperation(
+                            self.state,
+                            operationProperties = OperationProperties(
+                                operation=WarpOperation.Divergence,
+                                kernel = config.kernel, 
+                                supportMode = SupportScheme.Gather,
+                                operationMode = OperationDirection.AllToAll,
+                                gradientMode = GradientScheme.Difference
+                            ),
+                            queryValues =  du,
+                            domain = config.domain,
+                            adjacency = self.adjacency
+                        ).view(-1,1)
 
-            dudt = -u * warpOperation(
-                self.state,
-                operationProperties = OperationProperties(
-                    operation=WarpOperation.Divergence,
-                    kernel = config.kernel, 
-                    supportMode = SupportScheme.Gather,
-                    operationMode = OperationDirection.AllToAll,
-                    gradientMode = GradientScheme.Difference
-                ),
-                queryValues =  du,
-                domain = config.domain,
-                adjacency = self.adjacency
-            ).view(-1,1)
-
-            duCross = warpOperation(
-                self.state,
-                operationProperties = OperationProperties(
-                    operation=WarpOperation.Divergence,
-                    kernel = config.kernel, 
-                    supportMode = SupportScheme.Gather,
-                    operationMode = OperationDirection.AllToAll,
-                    gradientMode = GradientScheme.Difference
-                ),
-                queryValues =  torch.einsum('ij,ik->ikj', u, du),
-                domain = config.domain,
-                adjacency = self.adjacency
-            )
+                        duCross = warpOperation(
+                            self.state,
+                            operationProperties = OperationProperties(
+                                operation=WarpOperation.Divergence,
+                                kernel = config.kernel, 
+                                supportMode = SupportScheme.Gather,
+                                operationMode = OperationDirection.AllToAll,
+                                gradientMode = GradientScheme.Summation
+                            ),
+                            queryValues =  torch.einsum('ij,ik->ijk', u, du),
+                            domain = config.domain,
+                            adjacency = self.adjacency
+                        )
 
 
 
@@ -178,8 +207,10 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
         if schemeConfig.shiftProperties.active:
-            self.state.densities += drhodt_shift * dt
-            self.state.velocities += (dudt + duCross) * dt
+            if schemeConfig.shiftProperties.correctdrhodt:
+                self.state.densities += drhodt_shift * dt
+            if schemeConfig.shiftProperties.correctdvdt:
+                self.state.velocities += (dudt + duCross) * dt
             self.state.positions += dx
 
         for rigidBody in schemeConfig.rigidBodies:

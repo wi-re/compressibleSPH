@@ -32,6 +32,11 @@ class ShiftProperties:
 
     projectQuantities: bool = field(default=False, metadata={"description": "Whether to project quantities after shifting"})
 
+    correctdrhodt: bool = field(default=False, metadata={"description": "Whether to correct drhodt after shifting"})
+    correctdvdt: bool = field(default=False, metadata={"description": "Whether to correct dvdt after shifting"})
+
+    reuseNormals: bool = field(default=True, metadata={"description": "Whether to reuse normals from previous iteration for surface detection"})
+
 def buildDefaultShiftProperties() -> ShiftProperties:
     return ShiftProperties(
         iterations=1,

@@ -24,7 +24,7 @@ def evaluateOptimalSupportMonaghan(
         supportScheme: SupportScheme = SupportScheme.Scatter,
         adjacency: Optional[AdjacencyList] = None,
 ):
-    with record_function("evaluateOptimalSupport"):
+    with record_function("[warpSPH] - evaluateOptimalSupport - Monaghan"):
         rhos = [particleState.densities]
         supports = [particleState.supports]
 

@@ -11,7 +11,7 @@ def pressureForce_warp(
     adjacency: Optional[AdjacencyList] = None,
     gradH: Optional[GradHState] = None,
 ):
-    with record_function("warpSPH[pressureForceSymmetric]"):
+    with record_function("warpSPH - pressureForceSymmetric"):
         return -warpOperation(
             state,
             OperationProperties(

@@ -18,14 +18,15 @@ from .pointGravity import computePointGravity
 from .potentialField import computePotentialFieldGravity
 
 def computeGravity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    if schemeConfig.gravityConfig.active is False:
-        return torch.zeros_like(currentState.velocities)
-    gravityType = schemeConfig.gravityConfig.type
-    if gravityType == GravityType.Directional:
-        return computeDirectionalGravity(currentState, config, schemeConfig, adjacency)
-    elif gravityType == GravityType.PointSource:
-        return computePointGravity(currentState, config, schemeConfig, adjacency)
-    elif gravityType == GravityType.PotentialField:
-        return computePotentialFieldGravity(currentState, config, schemeConfig, adjacency)
-    else:
-        raise ValueError(f"Unsupported gravity type: {gravityType}")
+    with record_function("[warpSPH] - computeGravity"):
+        if schemeConfig.gravityConfig.active is False:
+            return torch.zeros_like(currentState.velocities)
+        gravityType = schemeConfig.gravityConfig.type
+        if gravityType == GravityType.Directional:
+            return computeDirectionalGravity(currentState, config, schemeConfig, adjacency)
+        elif gravityType == GravityType.PointSource:
+            return computePointGravity(currentState, config, schemeConfig, adjacency)
+        elif gravityType == GravityType.PotentialField:
+            return computePotentialFieldGravity(currentState, config, schemeConfig, adjacency)
+        else:
+            raise ValueError(f"Unsupported gravity type: {gravityType}")

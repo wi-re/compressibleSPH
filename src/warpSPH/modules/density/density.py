@@ -14,13 +14,14 @@ from ...enumTypes import *
 
 
 def computeDensities(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    return warpOperation(
-        currentState,
-        OperationProperties(
-            kernel = config.kernel,
-            operation = WarpOperation.Density,
-            supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
-        ),
-        domain = config.domain,
-        adjacency = adjacency,
+    with record_function("[warpSPH] - computeDensities"):
+        return warpOperation(
+            currentState,
+            OperationProperties(
+                kernel = config.kernel,
+                operation = WarpOperation.Density,
+                supportMode = SupportScheme.Gather, # cullen switch E.1 in the CRK paper uses gather for density estimation
+            ),
+            domain = config.domain,
+            adjacency = adjacency,
     )

@@ -1,4 +1,5 @@
 from ...enumTypes import *
+from torch.profiler import profile, record_function, ProfilerActivity
 
 def stiffTaitEOS(rho, rho0: float, c_s: float, polytropicExponent: float):
 
@@ -18,23 +19,24 @@ def murnaghanEOS(rho, rho0: float, kappa: float, exponent: float):
 
 
 def weaklyCompressibleEOS(particleState, schemeConfig):
-    rho0 = schemeConfig.fluid.restDensity
-    c_s = schemeConfig.fluid.fixedSoundSpeed
-    
-    eosType = schemeConfig.fluid.eosType
-    kappa = schemeConfig.fluid.kappa
-    polytropicExponent = schemeConfig.fluid.polytropicExponent
+    with record_function("[warpSPH] - weaklyCompressibleEOS"):
+        rho0 = schemeConfig.fluid.restDensity
+        c_s = schemeConfig.fluid.fixedSoundSpeed
+        
+        eosType = schemeConfig.fluid.eosType
+        kappa = schemeConfig.fluid.kappa
+        polytropicExponent = schemeConfig.fluid.polytropicExponent
 
-    
-    if eosType == EquationOfState.stiffTait:
-        return stiffTaitEOS(particleState.densities, rho0, c_s, polytropicExponent)
-    elif eosType == EquationOfState.Tait:
-        return TaitEOS(particleState.densities, rho0, kappa)
-    elif eosType == EquationOfState.isoThermal:
-        return isoThermalEOS(particleState.densities, rho0, c_s)
-    elif eosType == EquationOfState.Polytropic:
-        return polytropicEOS(particleState.densities, polytropicExponent, kappa)
-    elif eosType == EquationOfState.Murnaghan:
-        return murnaghanEOS(particleState.densities, rho0, kappa, polytropicExponent)
-    else:
-        raise ValueError('EOS type not recognized')
+        
+        if eosType == EquationOfState.stiffTait:
+            return stiffTaitEOS(particleState.densities, rho0, c_s, polytropicExponent)
+        elif eosType == EquationOfState.Tait:
+            return TaitEOS(particleState.densities, rho0, kappa)
+        elif eosType == EquationOfState.isoThermal:
+            return isoThermalEOS(particleState.densities, rho0, c_s)
+        elif eosType == EquationOfState.Polytropic:
+            return polytropicEOS(particleState.densities, polytropicExponent, kappa)
+        elif eosType == EquationOfState.Murnaghan:
+            return murnaghanEOS(particleState.densities, rho0, kappa, polytropicExponent)
+        else:
+            raise ValueError('EOS type not recognized')
