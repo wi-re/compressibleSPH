@@ -137,7 +137,7 @@ def configurationToDict(config: SimulationConfig) -> Dict[str, Any]:
         'kernel': config.kernel.name,
         'integrationScheme': config.integrationScheme.name,
         'cflFactor': config.cflFactor,
-        'dt': config.dt,
+        'dt': config.dt if not isinstance(config.dt, torch.Tensor) else config.dt.detach().cpu().item(),
         'minDt': config.minDt,
         'maxDt': config.maxDt,
         'dtGrowthFactor': config.dtGrowthFactor,

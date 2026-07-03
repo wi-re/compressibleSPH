@@ -74,7 +74,7 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
         'kappa': config.fluid.kappa,
         'gas_constant': config.fluid.gas_constant,
         'molarMass': config.fluid.molarMass,
-        'fixedSoundSpeed': config.fluid.fixedSoundSpeed,
+        'fixedSoundSpeed': config.fluid.fixedSoundSpeed if not isinstance(config.fluid.fixedSoundSpeed, torch.Tensor) else config.fluid.fixedSoundSpeed.detach().cpu().item(),
 
         'adaptiveSupportScheme': config.adaptiveSupportScheme.name,
         'adaptiveSupportIterations': config.adaptiveSupportIterations,

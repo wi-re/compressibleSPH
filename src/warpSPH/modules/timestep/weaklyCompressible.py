@@ -79,4 +79,32 @@ def computeTimestep(
         new_dt = torch.min(new_dt, dt_c)
     new_dt = torch.min(new_dt, torch.tensor(maxDt, dtype = dtype, device = device))
     new_dt = torch.max(new_dt, torch.tensor(minDt, dtype = dtype, device = device))
+    if dt is not None and new_dt > dt:
+        new_dt = torch.clamp(new_dt, max=config.dtGrowthFactor * dt)
     return new_dt
+
+
+def setupWeaklyCompressibleTimestep(
+        config, schemeConfig, compressibleSystem, targetDt, verbose = True
+):
+    dx = config.dx
+    c0 = 0.3 * volumeToSupportHelper(dx**2, config.targetNeighbors, 2) / float(sphKernelScale(config.kernel.value, 2)) / targetDt
+    if verbose:
+        print(f'Computed c0: {c0}, target c0: {schemeConfig.fluid.fixedSoundSpeed}, diff: {abs(c0 - schemeConfig.fluid.fixedSoundSpeed)}')
+        
+    dt = computeTimestep(
+        system = compressibleSystem,
+        config = config,
+        compParams = schemeConfig,
+        dt = 1e-4,
+        systemUpdate = None,
+    )
+    if verbose:
+        print(f'Computed dt: {dt}, target dt: {targetDt}, diff: {abs(dt - targetDt)}')
+    uMax = torch.max(torch.linalg.norm(compressibleSystem.state.velocities, dim=1))
+    if verbose:
+        print(f'Max velocity: {uMax}, CFL: {uMax * dt / dx}, Max Mach: {uMax / c0}')
+    if uMax / c0 > 0.1:
+        print(f'Warning: Max Mach number ({uMax / c0:.2f}) is greater than 0.1, which may lead to instability in the simulation. Consider changing the relevant parameters.')
+
+    return c0, dt

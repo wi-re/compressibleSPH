@@ -8,7 +8,7 @@ def addBoundaryGhostParticles(regions, particleState : Any):
     dtype = particleState.positions.dtype
     
     if not torch.any(particleState.kinds == 1):
-        print("No fluid particles found. Returning original state.")
+        # print("No Boundary particles found. Returning original state.")
         return particleState
     
     ghostIndices = particleState.positions.new_ones(particleState.positions.shape[0], dtype = torch.int64) * -1
