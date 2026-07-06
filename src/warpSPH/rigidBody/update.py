@@ -31,7 +31,7 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     updatedPositions[rigidBody.ghostParticleIndices] = ghostParticlePositions
 
     updatedVelocities = particleState.velocities.clone()
-    if rigidBody.kind != BCType.constant:
+    if rigidBody.kind == BCType.constant:
         # print('updating velocities')
         # print(particleVelocities)
         updatedVelocities[rigidBody.particleIndices] = particleVelocities

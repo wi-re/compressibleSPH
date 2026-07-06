@@ -215,7 +215,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
 
         for rigidBody in schemeConfig.rigidBodies:
             rigidBody = integrateRigidBody(rigidBody, 0, 0, dt)
-            self.systemState = updateBodyParticlesWCSPH(self.config['scheme'], self.systemState, rigidBody)
+            self.state = updateBodyParticlesWCSPH(self.state, rigidBody)
 
         # Information for artificial viscosity switches
         # self.state.divergence.copy_(lastState.divergence)

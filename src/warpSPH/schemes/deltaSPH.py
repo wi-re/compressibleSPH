@@ -47,6 +47,11 @@ def deltaSPH_step(
         # print(f'Fluid density stats: min={currentState.densities[currentState.kinds == 0].min().item()}, max={currentState.densities[currentState.kinds == 0].max().item()}, mean={currentState.densities[currentState.kinds == 0].mean().item()}')
         # print(f'Boundary density stats: min={currentState.densities[currentState.kinds == 1].min().item()}, max={currentState.densities[currentState.kinds == 1].max().item()}, mean={currentState.densities[currentState.kinds == 1].mean().item()}')
     # 4. enforce BCs
+    with record_function("[warpSPH] - [deltaSPH - 06] - compute boundary velocities"):
+        currentVelocities = currentState.velocities.clone()
+        currentState.velocities = computeBoundaryVelocities(currentState, config, schemeConfig, adjacency)
+    
+
     # with TimedBlock('enforce BCs', use_cuda=True, device=config.device) as tb_bcs:
     with record_function("[warpSPH] - [deltaSPH - 04] - enforce BCs"):
         enforceDirichlet(currentSystem, currentSystem.t, config.dt, config, schemeConfig)
@@ -56,10 +61,7 @@ def deltaSPH_step(
         currentState.pressures = weaklyCompressibleEOS(currentState, schemeConfig)
     # 6. Skipped boundary velocity computation since no boundaries are present
     # with TimedBlock('compute boundary velocities', use_cuda=True, device=config.device) as tb_boundary_velocities:
-    with record_function("[warpSPH] - [deltaSPH - 06] - compute boundary velocities"):
-        currentVelocities = currentState.velocities.clone()
-        currentState.velocities = computeBoundaryVelocities(currentState, config, schemeConfig, adjacency)
-    
+
     # 7. Compute Covariance Matrices for gradRho_l terms
     # Done in gradRhoL for now
     # 8. Run surface detection (only if free surface)
