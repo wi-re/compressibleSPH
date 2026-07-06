@@ -51,7 +51,7 @@ def generateRamp(perennialState, config, schemeConfig):
         combined_sdf = operatorDict['union'](combined_sdf, lambda x, sdf = sdf: sdf(x)[0])
 
 
-    buffer = 4
+    buffer = schemeConfig.bandwith
     dx = perennialState.masses.mean().pow(1/perennialState.positions.shape[1]).cpu().item() / schemeConfig.fluid.restDensity**(1/perennialState.positions.shape[1])
 
     ramp = rampDivergenceFree(perennialState.positions, torch.ones_like(perennialState.densities), combined_sdf, 

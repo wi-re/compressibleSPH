@@ -63,6 +63,8 @@ class WeaklyCompressibleSPHConfig:
 
     gravityConfig: gravityConfiguration = field(default_factory=buildDefaultGravityConfiguration, metadata={'description': 'Configuration for gravity module'})
 
+    bandwith: float = field(default=10.0, metadata={'description': 'Bandwith for the divergence-free noise sampling module'})
+
 from typing import Dict, Any
 
 
@@ -87,6 +89,7 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
         'dt_viscosityConstraint': config.dt_viscosityConstraint,
         'dt_accelerationConstraint': config.dt_accelerationConstraint,
         'dt_acousticConstraint': config.dt_acousticConstraint,
+        'bandwith': config.bandwith,
 
         'pressureForceTerm': config.pressureForceTerm.name,
         'shiftProperties': {
@@ -136,6 +139,7 @@ def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompress
     config.dt_acousticConstraint = configDict['dt_acousticConstraint']
     # config.densityDiffusionTerm = DensityDiffusionScheme[configDict['densityDiffusionTerm']] if isinstance(configDict['densityDiffusionTerm'], str) else configDict['densityDiffusionTerm']
     config.pressureForceTerm = PressureForceScheme[configDict['pressureForceTerm']] if isinstance(configDict['pressureForceTerm'], str) else configDict['pressureForceTerm']
+    config.bandwith = configDict.get('bandwith', 10.0)
     shiftPropsDict = configDict.get('shiftProperties', {})
     config.shiftProperties = ShiftProperties(
         iterations=shiftPropsDict.get('iterations', 1),

@@ -43,6 +43,9 @@ def deltaSPH_step(
     # with TimedBlock('compute mDBC density', use_cuda=True, device=config.device) as tb_mdbc:
     with record_function("[warpSPH] - [deltaSPH - 03] - compute mDBC density"):
         currentState.densities = computeMdbcDensity(currentState, config, schemeConfig, adjacency)
+
+        # print(f'Fluid density stats: min={currentState.densities[currentState.kinds == 0].min().item()}, max={currentState.densities[currentState.kinds == 0].max().item()}, mean={currentState.densities[currentState.kinds == 0].mean().item()}')
+        # print(f'Boundary density stats: min={currentState.densities[currentState.kinds == 1].min().item()}, max={currentState.densities[currentState.kinds == 1].max().item()}, mean={currentState.densities[currentState.kinds == 1].mean().item()}')
     # 4. enforce BCs
     # with TimedBlock('enforce BCs', use_cuda=True, device=config.device) as tb_bcs:
     with record_function("[warpSPH] - [deltaSPH - 04] - enforce BCs"):

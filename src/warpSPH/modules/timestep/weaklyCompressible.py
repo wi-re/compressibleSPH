@@ -69,7 +69,10 @@ def computeTimestep(
         # print(f'\tViscosity: {dt_v}, Acoustic: {dt_c}, Acceleration: {dt_a}')
 
     # dt = config['timestep']['dt']
-    dt = torch.tensor(dt, dtype = dtype, device = device) if not isinstance(dt, torch.Tensor) else dt
+    if dt is None:
+        dt = torch.tensor(maxDt, dtype = dtype, device = device)
+    else:
+        dt = torch.tensor(dt, dtype = dtype, device = device) if not isinstance(dt, torch.Tensor) else dt
     new_dt = dt
     if compParams.dt_viscosityConstraint:
         new_dt = dt_v
@@ -92,11 +95,12 @@ def setupWeaklyCompressibleTimestep(
     if verbose:
         print(f'Computed c0: {c0}, target c0: {schemeConfig.fluid.fixedSoundSpeed}, diff: {abs(c0 - schemeConfig.fluid.fixedSoundSpeed)}')
         
+    schemeConfig.fluid.fixedSoundSpeed = c0
     dt = computeTimestep(
         system = compressibleSystem,
         config = config,
         compParams = schemeConfig,
-        dt = 1e-4,
+        dt = None,
         systemUpdate = None,
     )
     if verbose:
@@ -107,4 +111,5 @@ def setupWeaklyCompressibleTimestep(
     if uMax / c0 > 0.1:
         print(f'Warning: Max Mach number ({uMax / c0:.2f}) is greater than 0.1, which may lead to instability in the simulation. Consider changing the relevant parameters.')
 
+    config.dt = dt
     return c0, dt

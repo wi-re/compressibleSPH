@@ -35,6 +35,8 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
         # )
         # display(currentState)
 
+        c0 = schemeConfig.fluid.fixedSoundSpeed if schemeConfig.fluid.fixedSoundSpeed is not None else 1.0
+
         velocity_magnitudes = torch.linalg.vector_norm(currentState.velocities, dim=-1)
         finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
         v_max = (
@@ -42,8 +44,10 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
             if finite_velocity_magnitudes.numel() > 0
             else torch.tensor(float('nan'), device=currentState.velocities.device)
         )
-        c_max = v_max / schemeConfig.fluid.fixedSoundSpeed
+        c_max = v_max / c0
         h_min = currentState.supports.min()
+        if c_max < 1e-6:
+            c_max = torch.tensor(0.1, device=currentState.velocities.device)
         # print(f'Iteration {i}, max velocity: {v_max.item()}, min support: {h_min.item()}, c_max: {c_max.item()}')
 
 
@@ -68,7 +72,6 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
         # \sum_j m_j * [ 2 / (rho_i + rho_j) ] * [ 1 + R * (w_ij / W_0)^n ] * gradW_ij
         # The scaling factor is applied here to get the final shift amount
         Ma = c_max
-        c0 = schemeConfig.fluid.fixedSoundSpeed
         CFL = schemeConfig.shiftProperties.CFL
         kernelScale = float(sphKernelScale(config.kernel.value, config.dim))
         h = currentState.supports / kernelScale
@@ -82,7 +85,7 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
         # The scaling factor here is
         # - Ma * c0 * 2 h
         # Note that the acoustic time step is dt = CFL * h / c0, so the scaling factor is equivalent to the delta^+ scaling factor for a fixed time conservative timestep
-        scalingMichel = - Ma * c0 * 2 * h * dt
+        # scalingMichel = - Ma * c0 * 2 * h * dt
 
         dt_c = schemeConfig.shiftProperties.CFL * h.min().cpu().item() / c0# / kernelScale
 

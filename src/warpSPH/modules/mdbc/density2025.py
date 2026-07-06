@@ -71,4 +71,6 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
 
         mergedDensitities = currentState.densities.clone()
         mergedDensitities[bIndices] = boundaryDensity[bIndices]
+
+        # print(f'Mdbc densities: min={boundaryDensity[bIndices].min():.3g}, max={boundaryDensity[bIndices].max():.3g}, mean={boundaryDensity[bIndices].mean():.3g}')
         return mergedDensitities

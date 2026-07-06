@@ -5,6 +5,7 @@ from sphWarpCore.enumTypes import *
 from sphWarpCore import *
 from typing import Any
 from ...configurations.simulationConfig import SimulationConfig
+from torch.profiler import record_function
 
 def interpolateLiuLiu(
     queryPositions: torch.Tensor,
