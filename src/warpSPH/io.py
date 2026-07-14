@@ -285,7 +285,7 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn):
     schemeCfg = export_fn(schemeConfig)
 
     exportDict = {
-        'scheme': scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme,
+        'scheme': scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) or isinstance(scheme, IncompressibleSPHScheme) else scheme,
         'config': cfg,
         'schemeConfig': schemeCfg,
         'timestamp': currentTime,
@@ -337,3 +337,13 @@ def parseCompressibleSPHScheme(schemeName):
         if scheme.name.lower() == schemeName.lower():
             return scheme
     raise ValueError(f"Invalid compressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in CompressibleSPHScheme]}")
+def parseIncompressibleSPHScheme(schemeName):
+    for scheme in IncompressibleSPHScheme:
+        if scheme.name.lower() == schemeName.lower():
+            return scheme
+    raise ValueError(f"Invalid incompressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in IncompressibleSPHScheme]}")
+def parseWeaklyCompressibleSPHScheme(schemeName):
+    for scheme in WeaklyCompressibleSPHScheme:
+        if scheme.name.lower() == schemeName.lower():
+            return scheme
+    raise ValueError(f"Invalid weakly compressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in WeaklyCompressibleSPHScheme]}")

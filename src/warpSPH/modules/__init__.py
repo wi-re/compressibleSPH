@@ -18,6 +18,7 @@ from .shifting import *
 from .gravity import *
 from .mdbc import *
 from .timestep import *
+from .incompressible import *
 
 
 __all__ = []
@@ -41,3 +42,4 @@ __all__.extend(shifting.__all__)
 __all__.extend(gravity.__all__)
 __all__.extend(mdbc.__all__)
 __all__.extend(timestep.__all__)
+__all__.extend(incompressible.__all__)

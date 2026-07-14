@@ -37,6 +37,9 @@ class CompressibleSPHScheme(Enum):
 class WeaklyCompressibleSPHScheme(Enum):
     deltaSPH = 0
 
+@torch.jit.script
+class IncompressibleSPHScheme(Enum):
+    divergenceFree = 0
 
 
 class EquationOfState(Enum):

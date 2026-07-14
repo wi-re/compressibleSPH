@@ -214,8 +214,8 @@ class IncompressibleSystem(BaseIntegrationSystem):
         if schemeConfig.shiftProperties.active:
             # if schemeConfig.shiftProperties.correctdrhodt:
             #     self.state.densities += drhodt_shift * dt
-            # if schemeConfig.shiftProperties.correctdvdt:
-            #     self.state.velocities += (dudt + duCross) * dt
+            if schemeConfig.shiftProperties.correctdvdt:
+                self.state.velocities += (dudt + duCross) * dt
             self.state.positions += dx
 
         for rigidBody in schemeConfig.rigidBodies:

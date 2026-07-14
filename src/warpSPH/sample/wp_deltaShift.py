@@ -13,13 +13,13 @@ def computeDeltaShift_Func_i(
     i : wp.int32,  dim: wp.int32, 
 
     # SPH properties for the query set (indexed by i)
-    xi: vector(dtype = wp.float32, length=Any), hi: wp.float32, mi: wp.float32, rhoi: wp.float32, # type: ignore
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
 
     # SPH properties for the reference set (indexed by j in the neighbor loop)
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
 
     # Domain and kernel parameters
-    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = wp.float32), domainMax : wp.array(dtype = wp.float32), # type: ignore
+    # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     mode_uint: wp.uint32, kernel_int: wp.int32, 
     
@@ -35,13 +35,13 @@ def computeDeltaShift_Func_i(
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, omega_i: wp.float32, referenceOmegas: wp.array(dtype = wp.float32),  # type: ignore
+    useGradHTerms: wp.bool, omega_i: scalar_t, referenceOmegas: wp.array(dtype = scalar_t),  # type: ignore
     # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: wp.float32, referenceVolumes: wp.array(dtype = wp.float32), # type: ignore
+    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
     # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: wp.float32, Bi: vector(length=Any, dtype=wp.float32), gradAi: vector(length=Any, dtype=wp.float32), gradBi: matrix(shape=(Any, Any), dtype=wp.float32), # type: ignore
+    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
     correctionData: Any, # correctionData_1 or correctionData_2 or correctionData_3, containing all the optional correction terms and their usage flags
 
     # Dummy value to allow allocation
@@ -96,9 +96,9 @@ def computeDeltaShift_Func_i(
 
         ### GENERIC CODE STOPS HERE ###
 
-        dx = wp.pow(mj / rho0, 1.0 / wp.float32(dim))
+        dx_2 = wp.pow(mj / scalar_t(rho0), scalar_t(1.0) /scalar_t(dim))
         
-        dx_ = dx / eval_kernelScale(kernel_int, dim)
+        dx_ = dx_2 / eval_kernelScale(kernel_int, dim)
         
         x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
@@ -108,20 +108,20 @@ def computeDeltaShift_Func_i(
         W_0 = eval_k(q, dim, kernel_int) * eval_C_d(dim, kernel_int) / iPow(hij, dim)
         k = w_ij / W_0
 
-        term = (1.0 + R * wp.pow(k, wp.float32(n)))
-        densityTerm =0.5 * mj / (rhoi + rhoj)
+        term = scalar_t(scalar_t(1.0) + scalar_t(R) * wp.pow(k, scalar_t(n)))
+        densityTerm =scalar_t(0.5) * mj / (rhoi + rhoj)
 
-        phi_ij = 1.0        
+        phi_ij = scalar_t(1.0  )      
         scalarTerm = term * densityTerm * phi_ij
 
         shiftAmount = scalarTerm * gradw_ij
 
 
-        Ma = wp.float32(0.1)
+        Ma = scalar_t(0.1)
         if computeMach:
-            Ma = c_max
-        h2 = (hi / eval_kernelScale(kernel_int, dim) * 2.0)
-        shiftScaling = -CFL * Ma * h2 #* h2
+            Ma = scalar_t(c_max)
+        h2 = (hi / eval_kernelScale(kernel_int, dim) * scalar_t(2.0))
+        shiftScaling = -scalar_t(CFL) * Ma * h2 #* h2
         
         out += shiftAmount
     return out
@@ -159,7 +159,7 @@ def computeDeltaShift_Func_Adjacency(
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
 
-    out = type(outputValue)() * 0.0
+    out = type(outputValue)() * scalar_t(0.0)
     for o in range(numOffsets):
         beginIndex = wp.int32(0)
         numIndices = wp.int32(0)
@@ -213,8 +213,8 @@ def computeDeltaShift_Kernel(
     mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
 
-    R: wp.float32, n: wp.int32, CFL: wp.float32, computeMach: wp.bool, c_max: wp.float32,
-    rho0: wp.float32, dx: wp.float32,
+    R: float, n: wp.int32, CFL: float, computeMach: wp.bool, c_max: float,
+    rho0: float, dx: float,
     
     # The last parameter is always the output array and should not be changed
     outputValues : wp.array(dtype = Any) # type: ignore

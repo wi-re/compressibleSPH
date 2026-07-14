@@ -307,4 +307,4 @@ def computeAlpha(currentState: Any, config: SimulationConfig, schemeConfig: Any,
             queryApparentAreas=apparentVolumes,
         )
         # return alpha
-        return - dt**2 * alpha
+        return - alpha

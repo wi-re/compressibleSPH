@@ -4,11 +4,11 @@ from .compSPH import compSPH_step
 from .deltaSPH import deltaSPH_step
 from .crkSPH import crkSPH_step
 from .monaghan import compressibleSPH_Monaghan
-from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme
+from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
 from typing import Union
 
 def buildScheme(
-    schemeName: Union[str, CompressibleSPHScheme, WeaklyCompressibleSPHScheme]
+    schemeName: Union[str, CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme]
 ):
     if (isinstance(schemeName, str) and schemeName == 'MonaghanCompressibleSPH') or (isinstance(schemeName, CompressibleSPHScheme) and schemeName == CompressibleSPHScheme.Monaghan):
         return (
@@ -25,6 +25,11 @@ def buildScheme(
     elif (isinstance(schemeName, str) and schemeName == 'deltaSPH') or (isinstance(schemeName, WeaklyCompressibleSPHScheme) and schemeName == WeaklyCompressibleSPHScheme.deltaSPH):
         return (
             WeaklyCompressibleSystem, WeaklyCompressibleState, WeaklyCompressibleSPHConfig, CompressibleSystemUpdate, deltaSPH_step, weaklyCompressibleConfigToDict, dictToWeaklyCompressibleConfig
+        )
+    elif (isinstance(schemeName, str) and schemeName == 'divergenceFree') or (isinstance(schemeName, IncompressibleSPHScheme) and schemeName == IncompressibleSPHScheme.divergenceFree):
+        from .dfsph import dfsph_step, incompressibleConfigToDict, dictToIncompressibleSPHConfig
+        return (
+            WeaklyCompressibleSystem, WeaklyCompressibleState, IncompressibleSPHConfig, CompressibleSystemUpdate, dfsph_step, incompressibleConfigToDict, dictToIncompressibleSPHConfig
         )
     else:
         raise ValueError(f"Scheme {schemeName} not recognized.")
