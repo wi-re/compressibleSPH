@@ -9,6 +9,8 @@ from sphWarpCore import *
 from warpSPH.utils.timer import TimedBlock
 from torch.profiler import profile, record_function, ProfilerActivity
 
+from ..systems.incompressible import IncompressibleSystem, IncompressibleState, IncompressibleSystemUpdate
+
 import numpy as np
 def dfsph_step(
     system: CompSPHSystem,
@@ -142,14 +144,14 @@ def dfsph_step(
     # To resolve the issues with particle disorder and clustering, we can also solve for the incompressible pressure using the Incompressible SPH solver
     # This effectively acts as a particle shifting term that helps to maintain particle order and prevent clustering
     # Instead of being explicit, e.g., as in delta SPH, this is an implicit particle shift
-    dvdt_incomp, pressure_incomp, errors_incomp, pressures_incomp = solveIncompressible(
-        particles = currentState,
-        config = config,
-        schemeConfig = schemeConfig,
-        adjacency = adjacency,
-        dvdt = dvdt + dvdt_diss + dvdt_pressure,
-        dt = dt
-    )
+    # dvdt_incomp, pressure_incomp, errors_incomp, pressures_incomp = solveIncompressible(
+    #     particles = currentState,
+    #     config = config,
+    #     schemeConfig = schemeConfig,
+    #     adjacency = adjacency,
+    #     dvdt = dvdt + dvdt_diss + dvdt_pressure,
+    #     dt = dt
+    # )
     # The shift is directly applied to the particle positions
     # As the timestep for our tests is small the shift is small and does not significantly affect the velocity field
     vPrime = currentState.velocities + dt * (dvdt + dvdt_diss + dvdt_pressure)
@@ -175,7 +177,7 @@ def dfsph_step(
     # with TimedBlock('build update', use_cuda=True, device=config.device) as tb_update:
     with record_function("[warpSPH] - [deltaSPH - 16] - build update"):
         update = WeaklyCompressibleSystemUpdate(
-            dxdt = currentState.velocities.clone() + dt * dvdt_incomp,
+            dxdt = currentState.velocities.clone(),# + dt * dvdt_incomp,
             dvdt = dvdt + dvdt_diss + dvdt_pressure,# + dvdt_incomp,
             drhodt = drhodt,# + drhodt_diss,
             passive = torch.zeros(currentState.densities.shape, device=currentState.densities.device, dtype=torch.bool)
@@ -215,4 +217,4 @@ def dfsph_step(
     #     tb.cuda_ms = tb._start_event.elapsed_time(tb._end_event) if tb.use_cuda else None
     #     print(f"[{key}] CPU: {tb.cpu_ms:.3f} ms | CUDA: {tb.cuda_ms:.3f} ms, ratio {tb.cuda_ms / tb.cpu_ms if tb.cuda_ms is not None else 'N/A'}")
 
-    return update, adjacency, currentState, (errors,pressures), (errors_incomp, pressures_incomp)
+    return update, adjacency, currentState, (errors,pressures)#, (errors_incomp, pressures_incomp)

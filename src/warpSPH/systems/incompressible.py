@@ -41,6 +41,9 @@ class IncompressibleSystemUpdate:
     passive: Optional[torch.Tensor] = tagged(tags=('passive_derivative',), default=None)
 
 
+from ..modules.incompressible import solveIncompressible
+from ..modules.density import computeDensities
+
 @dataclass
 class IncompressibleSystem(BaseIntegrationSystem):
     state: IncompressibleState = reference_state(tags=('physics_state',))
@@ -117,11 +120,17 @@ class IncompressibleSystem(BaseIntegrationSystem):
             if finite_velocity_magnitudes.numel() > 0
             else float('nan')
         )
+        config = kwargs.get('config', None)
+        schemeConfig = kwargs.get('schemeConfig', None)
+
+        self.adjacency = buildVerletList(
+            self.state, 
+            config.domain, verletScale = config.verletScale, supportMode = SupportScheme.SuperSymmetric,
+            priorNeighborhood = self.adjacency,
+            verbose = False)
 
         # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
         # print(f'Maximum Velocity Magnitude: {max_velocity_magnitude}')
-        config = kwargs.get('config', None)
-        schemeConfig = kwargs.get('schemeConfig', None)
         if schemeConfig.shiftProperties.active:
             # shiftVector, self.adjacency = computeDeltaShift(
             #     currentState = self.state,
@@ -201,8 +210,47 @@ class IncompressibleSystem(BaseIntegrationSystem):
                             adjacency = self.adjacency
                         )
 
+        self.state.densities = computeDensities(self.state, config, schemeConfig, self.adjacency)
+        dvdt_incomp, pressure_incomp, errors_incomp, pressures_incomp = solveIncompressible(
+            particles = self.state,
+            config = config,
+            schemeConfig = schemeConfig,
+            adjacency = self.adjacency,
+            dvdt = torch.zeros_like(self.state.velocities),
+            dt = dt,
+            verbose=False
+        )
 
+        # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
+        # print(f'Solver Iterations: {len(errors_incomp)}, Incompressible Error: {errors_incomp[0]:.4g}->{errors_incomp[-1]:.4g}')
 
+        gradVel = warpOperation(
+            self.state,
+            operationProperties = OperationProperties(
+                operation=WarpOperation.Gradient,
+                kernel = config.kernel, 
+                supportMode = SupportScheme.Gather,
+                operationMode = OperationDirection.AllToAll,
+                gradientMode = GradientScheme.Difference
+            ),
+            queryValues =  self.state.velocities,
+            domain = config.domain,
+            adjacency = self.adjacency
+        )
+
+        dx = dt**2 * dvdt_incomp
+
+        proj_vel = torch.einsum('nij, ni -> nj', gradVel, dx)
+
+        self.state.positions += dx
+        self.state.velocities -= proj_vel
+        # print(f"Applied incompressible update with max position change magnitude: {dvdt_incomp.norm(dim=1).max().item() * dt}")
+
+        # print(returnValues[-1][2])
+
+        returnValues[-1] = (
+            returnValues[-1][0], returnValues[-1][1], (returnValues[-1][2][0], returnValues[-1][2][1]), (errors_incomp, pressures_incomp)
+        )
 
         # initialRho = initialState.state.densities
         # midRho = returnValues[-1][1].densities
