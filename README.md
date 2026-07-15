@@ -99,31 +99,19 @@ These write/read HDF5 state data and JSON config metadata for reproducible runs.
 
 Recommended setup uses a dedicated conda environment and editable installs for backend repositories.
 
-### 1) Create and prepare conda environment
-
-```bash
-conda create -n 'warp' python=3.13
-conda activate warp
-conda install -c anaconda ipykernel -y
-conda install nvidia/label/cuda-13.0.0::cuda-toolkit cudnn
-pip install toml scipy numba tqdm h5py matplotlib ipywidgets ipympl imageio scikit-image imageio_ffmpeg seaborn pandas
-pip install warp-lang torch
 ```
-
-### 2) Clone backend repositories
-
-```bash
-git clone https://github.com/wi-re/integrators
-git clone https://github.com/wi-re/sphPlotting
-git clone https://github.com/wi-re/warpSPH
-```
-
-### 3) Install backends in editable mode
-
-```bash
-cd integrators && pip install -e . && cd ..
-cd sphPlotting && pip install -e . && cd ..
-cd warpSPH && pip install -e . && cd ..
+mkdir warpSPH
+cd warpSPH
+git clone https://github.com/wi-re/integrators warpSPHIntegrators
+git clone https://github.com/wi-re/sphPlotting warpSPHPlotting
+git clone https://github.com/wi-re/warpSPH warpSPHCore
+git clone https://github.com/wi-re/compressibleSPH warpSPHFrontend
+conda create -n warp_env python=3.14
+conda activate warp_env
+pip install tqdm seaborn pandas pyglet dill numba scipy scikit-image h5py ipykernel ipympl
+pip install -e warpSPHIntegrators/ warpSPHPlotting/ warpSPHCore/ 
+cd warpSPHFrontend
+pip install -e .
 ```
 
 Current status: cloning and editable installs are the accepted setup path for now.
