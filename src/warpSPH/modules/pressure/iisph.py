@@ -15,7 +15,7 @@ def computePressureAccelIISPH(
         OperationProperties(
             kernel = config.kernel,
             operation = WarpOperation.Gradient,
-            gradientMode = GradientScheme.Summation,
+            gradientMode = GradientScheme.Symmetric,
             supportMode = supportScheme,
         ),
         queryValues = pressureValues,

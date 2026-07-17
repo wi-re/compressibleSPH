@@ -69,7 +69,7 @@ def solveDivergenceFree(
 
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
 
-        pressureA = particles.pressures.clone() * 0.
+        pressureA = particles.pressures.clone() * 0.75
         pressureB = pressureA.clone()
 
         errors = []
@@ -102,6 +102,12 @@ def solveDivergenceFree(
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
                 pressureB = pressureB - pressureB.mean()  # Fix the pressure gauge without altering the RHS
+
+
+                # pressureB[particles.surfaceIndicators == 1] = 0.0  # Set pressures to zero for surface particles
+                # residual_clamped = torch.clamp(residual, min=-threshold).abs()
+
+                # error = torch.mean(residual_clamped).cpu().item()
 
                 error = torch.mean(torch.abs(residual)).cpu().item()
                 errors.append(error)

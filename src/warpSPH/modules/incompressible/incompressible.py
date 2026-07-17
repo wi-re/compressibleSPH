@@ -28,6 +28,11 @@ def solveIncompressible(
         dt : float,
         verbose: bool = False        
 ):
+        minIters = schemeConfig.solverConfig.pressureSolver.minIterations
+        maxIters = schemeConfig.solverConfig.pressureSolver.maxIterations
+        threshold = schemeConfig.solverConfig.pressureSolver.tolerance
+        omega = schemeConfig.solverConfig.pressureSolver.relaxationFactor
+
         predictedVelocities = particles.velocities + dt * dvdt
         # dt = config.dt
 
@@ -48,6 +53,8 @@ def solveIncompressible(
         rho0 = schemeConfig.fluid.restDensity
         rhoStar = particles.densities + dt * divergence
 
+        rhoStar = torch.clamp(rhoStar, min = 0.9)  # Clamp to avoid extreme density values
+
         # sourceTerm = config.dt * divergence
         sourceTerm = (rho0 - rhoStar)# / config.dt
 
@@ -66,6 +73,7 @@ def solveIncompressible(
                 apparentVolumes = apparentArea,
         )
 
+        alphas = torch.clamp(alphas, max=-1e-6)  # Avoid division by zero
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
 
         pressureA = particles.pressures.clone() * 0.
@@ -75,10 +83,6 @@ def solveIncompressible(
         pressures = []
         i = 0
         error = 0.
-        minIters = schemeConfig.solverConfig.pressureSolver.minIterations
-        maxIters = schemeConfig.solverConfig.pressureSolver.maxIterations
-        threshold = schemeConfig.solverConfig.pressureSolver.tolerance
-        omega = schemeConfig.solverConfig.pressureSolver.relaxationFactor
 
         # print(f"Solving for divergence-free velocities with maxIters={maxIters}, threshold={threshold:.6g}, omega={omega:.6g}")
 
@@ -101,9 +105,13 @@ def solveIncompressible(
 
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
+                pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
                 # pressureB = pressureB - pressureB.mean()  # Fix the pressure gauge without altering the RHS
 
-                error = torch.mean(torch.abs(residual)).cpu().item()
+                residual_clamped = torch.clamp(-residual, min=-threshold)
+
+                error = torch.mean(residual_clamped).cpu().item()
+                # error = torch.mean(torch.abs(residual)).cpu().item()
                 errors.append(error)
 
                 pressures.append((pressureB.min().cpu().item(), pressureB.max().cpu().item(), pressureB.mean().cpu().item()))

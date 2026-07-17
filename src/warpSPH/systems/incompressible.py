@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import torch
 from typing import Optional
 from sphWarpCore import *
+from warpSPH.modules.surfaceDetection.wrapper import detectFreeSurface
 
 from ..rigidBody.integrate import  integrateRigidBody
 from ..rigidBody.update import updateBodyParticlesWCSPH
@@ -43,6 +44,7 @@ class IncompressibleSystemUpdate:
 
 from ..modules.incompressible import solveIncompressible
 from ..modules.density import computeDensities
+import copy
 
 @dataclass
 class IncompressibleSystem(BaseIntegrationSystem):
@@ -211,6 +213,13 @@ class IncompressibleSystem(BaseIntegrationSystem):
                         )
 
         self.state.densities = computeDensities(self.state, config, schemeConfig, self.adjacency)
+
+        kernel = copy.deepcopy(config.kernel)
+        fs, fsm, n, renormalizationState_, lMin = detectFreeSurface(self.state, config, schemeConfig, schemeConfig.surfaceDetectionConfig, self.adjacency, returnNormals = True)
+
+        self.state.surfaceIndicator = fsm > 0.5
+
+        # config.kernel = KernelFunctions.Spiky
         dvdt_incomp, pressure_incomp, errors_incomp, pressures_incomp = solveIncompressible(
             particles = self.state,
             config = config,
@@ -220,9 +229,10 @@ class IncompressibleSystem(BaseIntegrationSystem):
             dt = dt,
             verbose=False
         )
+        # config.kernel = kernel
 
-        # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
-        # print(f'Solver Iterations: {len(errors_incomp)}, Incompressible Error: {errors_incomp[0]:.4g}->{errors_incomp[-1]:.4g}')
+        print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
+        print(f'Solver Iterations: {len(errors_incomp)}, Incompressible Error: {errors_incomp[0]:.4g}->{errors_incomp[-1]:.4g}')
 
         gradVel = warpOperation(
             self.state,
@@ -243,7 +253,7 @@ class IncompressibleSystem(BaseIntegrationSystem):
         proj_vel = torch.einsum('nij, ni -> nj', gradVel, dx)
 
         self.state.positions += dx
-        self.state.velocities -= proj_vel
+        # self.state.velocities -= proj_vel
         # print(f"Applied incompressible update with max position change magnitude: {dvdt_incomp.norm(dim=1).max().item() * dt}")
 
         # print(returnValues[-1][2])
@@ -259,12 +269,12 @@ class IncompressibleSystem(BaseIntegrationSystem):
         # epsilon = -dt * drhodtMid / midRho
         # self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
-        if schemeConfig.shiftProperties.active:
-            # if schemeConfig.shiftProperties.correctdrhodt:
-            #     self.state.densities += drhodt_shift * dt
-            if schemeConfig.shiftProperties.correctdvdt:
-                self.state.velocities += (dudt + duCross) * dt
-            self.state.positions += dx
+        # if schemeConfig.shiftProperties.active:
+        #     # if schemeConfig.shiftProperties.correctdrhodt:
+        #     #     self.state.densities += drhodt_shift * dt
+        #     if schemeConfig.shiftProperties.correctdvdt:
+        #         self.state.velocities += (dudt + duCross) * dt
+        #     self.state.positions += dx
 
         for rigidBody in schemeConfig.rigidBodies:
             rigidBody = integrateRigidBody(rigidBody, 0, 0, dt)

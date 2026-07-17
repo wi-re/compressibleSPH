@@ -63,8 +63,8 @@ def dfsph_step(
         enforceDirichlet(currentSystem, currentSystem.t, config.dt, config, schemeConfig)
     # 5. compute EOS (WC version)
     # with TimedBlock('compute EOS', use_cuda=True, device=config.device) as tb_eos:
-    with record_function("[warpSPH] - [deltaSPH - 05] - compute EOS"):
-        currentState.pressures = weaklyCompressibleEOS(currentState, schemeConfig)
+    # with record_function("[warpSPH] - [deltaSPH - 05] - compute EOS"):
+        # currentState.pressures = weaklyCompressibleEOS(currentState, schemeConfig)
     # 6. Skipped boundary velocity computation since no boundaries are present
     # with TimedBlock('compute boundary velocities', use_cuda=True, device=config.device) as tb_boundary_velocities:
 
@@ -72,11 +72,11 @@ def dfsph_step(
     # Done in gradRhoL for now
     # 8. Run surface detection (only if free surface)
     # with TimedBlock('compute surface detection', use_cuda=True, device=config.device) as tb_surface:
-    # with record_function("[warpSPH] - [deltaSPH - 08] - compute surface detection"):
-    #     fs, fsm, n, renormalizationState_, lMin = detectFreeSurface(currentState, config, schemeConfig, schemeConfig.surfaceDetectionConfig, adjacency, returnNormals = True) 
-    #     currentState.surfaceIndicators = (fsm > 0.5).to(torch.int32)
-    #     currentState.surfaceNormals = n
-    #     currentState.surfaceLambdas = lMin
+    with record_function("[warpSPH] - [deltaSPH - 08] - compute surface detection"):
+        fs, fsm, n, renormalizationState_, lMin = detectFreeSurface(currentState, config, schemeConfig, schemeConfig.surfaceDetectionConfig, adjacency, returnNormals = True) 
+        currentState.surfaceIndicators = (fsm > 0.5).to(torch.int32)
+        currentState.surfaceNormals = n
+        currentState.surfaceLambdas = lMin
 
     # #9. Compute gradRho and gradRhoL
     # # with TimedBlock('compute gradRho', use_cuda=True, device=config.device) as tb_gradRho:
@@ -131,6 +131,7 @@ def dfsph_step(
     # First we project the velocity field to be divergence free using the DFSph solver
     # This is the standard incompressible approach
     # However, this can lead to issues with particle disorder and clustering 
+    currentState.pressures = torch.zeros_like(currentState.densities) if currentState.pressures is None else currentState.pressures
     dvdt_pressure, pressure, errors, pressures = solveDivergenceFree(
         particles = currentState,
         config = config,

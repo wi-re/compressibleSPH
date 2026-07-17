@@ -126,8 +126,10 @@ def getInitialValue(region, pos, quantity, default):
         temp[:] = region.initialConditions[quantity]
         return temp
 
+from ..systems.incompressible import *
+
 def initializeState(regions, config, schemeConfig, SimulationState, verbose = True):    
-    rho0 = schemeConfig.fluid.restDensity if isinstance(schemeConfig, WeaklyCompressibleSPHConfig) else config.rho0
+    rho0 = schemeConfig.fluid.restDensity if isinstance(schemeConfig, WeaklyCompressibleSPHConfig) or isinstance(schemeConfig, IncompressibleSPHConfig) else config.rho0
     uidCounter = 0
 
     states = []
@@ -138,6 +140,27 @@ def initializeState(regions, config, schemeConfig, SimulationState, verbose = Tr
             
             if SimulationState is WeaklyCompressibleState:
                 tempState = WeaklyCompressibleState(
+                    positions,
+                    supports = getInitialValue(region, positions, 'supports', region.particles.supports),
+                    masses = getInitialValue(region, positions, 'masses', region.particles.masses) * rho0,
+                    
+                    densities = getInitialValue(region, positions, 'densities', torch.ones_like(region.particles.masses) * rho0),
+                    velocities = getInitialValue(region, positions, 'velocities', torch.zeros_like(region.particles.positions)),
+                    
+                    pressures = getInitialValue(region, positions, 'pressures', None),
+                    soundspeeds = getInitialValue(region, positions, 'soundspeeds', None),
+                    
+                    kinds = torch.ones_like(region.particles.masses, dtype = torch.int32) * (0 if region.type == RegionType.Fluid else 1),
+                    materials = torch.ones_like(region.particles.masses, dtype = torch.int32) * ir,
+                    UIDs = torch.arange(uidCounter, uidCounter + positions.shape[0], device = positions.device, dtype = torch.int64),
+                    
+                    UIDcounter = uidCounter + positions.shape[0],
+
+                    ghostIndices = torch.ones_like(region.particles.masses, dtype = torch.int32) * (-1),
+                    ghostOffsets = region.particles.positions.clone()
+                )
+            elif SimulationState is IncompressibleState:
+                tempState = IncompressibleState(
                     positions,
                     supports = getInitialValue(region, positions, 'supports', region.particles.supports),
                     masses = getInitialValue(region, positions, 'masses', region.particles.masses) * rho0,
@@ -181,6 +204,26 @@ def initializeState(regions, config, schemeConfig, SimulationState, verbose = Tr
             ghostIndices = torch.cat([s.ghostIndices for s in states], dim = 0),
             ghostOffsets = torch.cat([s.ghostOffsets for s in states], dim = 0)
         )
+    elif SimulationState is IncompressibleState:
+        combinedState = IncompressibleState(
+            positions = torch.cat([s.positions for s in states], dim = 0),
+            supports = torch.cat([s.supports for s in states], dim = 0),
+            masses = torch.cat([s.masses for s in states], dim = 0),
+            
+            densities = torch.cat([s.densities for s in states], dim = 0),
+            velocities = torch.cat([s.velocities for s in states], dim = 0),
+            
+            pressures = None if states[0].pressures is None else torch.cat([s.pressures for s in states], dim = 0),
+            soundspeeds = None if states[0].soundspeeds is None else torch.cat([s.soundspeeds for s in states], dim = 0),
+            
+            kinds = torch.cat([s.kinds for s in states], dim = 0),
+            materials = torch.cat([s.materials for s in states], dim = 0),
+            UIDs = torch.cat([s.UIDs for s in states], dim = 0),
+            
+            UIDcounter = uidCounter,
+            ghostIndices = torch.cat([s.ghostIndices for s in states], dim = 0),
+            ghostOffsets = torch.cat([s.ghostOffsets for s in states], dim = 0)
+        )   
 
     return combinedState
 
