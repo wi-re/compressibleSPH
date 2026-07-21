@@ -96,13 +96,14 @@ def setupWeaklyCompressibleTimestep(
         print(f'Computed c0: {c0}, target c0: {schemeConfig.fluid.fixedSoundSpeed}, diff: {abs(c0 - schemeConfig.fluid.fixedSoundSpeed)}')
         
     schemeConfig.fluid.fixedSoundSpeed = c0
-    dt = computeTimestep(
-        system = compressibleSystem,
-        config = config,
-        compParams = schemeConfig,
-        dt = None,
-        systemUpdate = None,
-    )
+    # dt = computeTimestep(
+    #     system = compressibleSystem,
+    #     config = config,
+    #     compParams = schemeConfig,
+    #     dt = None,
+    #     systemUpdate = None,
+    # )
+    dt = targetDt
     if verbose:
         print(f'Computed dt: {dt}, target dt: {targetDt}, diff: {abs(dt - targetDt)}')
     uMax = torch.max(torch.linalg.norm(compressibleSystem.state.velocities, dim=1))

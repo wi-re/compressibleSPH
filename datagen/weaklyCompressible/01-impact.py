@@ -44,7 +44,6 @@ from warpSPH.caseUtils import *
 
 import argparse
 
-
 parser = argparse.ArgumentParser(description='Run the dam break simulation with obstacle.')
 
 parser.add_argument('--nx', type=int, default=128, help='Number of particles along the x-axis')
@@ -61,20 +60,19 @@ parser.add_argument('--targetDt', type=float, default=0.0005, help='Target times
 parser.add_argument('--obstacleType', type=str, default='circle', help='Type of obstacle to include (none, circle, ellipse, box, roundedBox, equilateralTriangle, hexagon, horseshoe, star, nacaXXXX)')
 parser.add_argument('--maxExtent', type=float, default=0.25, help='Maximum extent of the obstacle')
 parser.add_argument('--aspectRatio', type=float, default=1.0, help='Aspect ratio of the obstacle (for ellipse)')
-parser.add_argument('--offsetX', type=float, default=-1.0, help='X offset of the obstacle')
-parser.add_argument('--offsetY', type=float, default=0.0, help='Y offset of the obstacle')
+parser.add_argument('--aoa', type=float, default=0.0, help='Angle of attack of the obstacle in degrees')
+parser.add_argument('--singleObstacle', action='store_true', help='If set, only a single obstacle will be placed in the domain')
 
-parser.add_argument('--linearMotion', action='store_true', help='Enable linear motion of the obstacle')
-parser.add_argument('--angularMotion', action='store_true', help='Enable angular motion of the obstacle')
-# The motion can either be fixed, i.e., constantly spinning, or it can be a function of time, e.g., sinusoidal motion. The user can specify the type of motion using the --motionType argument.
-parser.add_argument('--motionType', type=str, default='fixed', help='Type of motion for the obstacle (fixed, sinusoidal for now)')
-parser.add_argument('--motionFrequency', type=float, default=1.0, help='Frequency of the motion for the obstacle')
+parser.add_argument('--offsetLR', type=float, default=0.5, help='x offset of the obstacle')
+parser.add_argument('--offsetTD', type=float, default=0.0, help='y offset of the obstacle')
+parser.add_argument('--velocity', type=float, default=1.0, help='Velocity of the obstacle')
 
-parser.add_argument('--linearVelocityDirection', type=float, nargs=2, default=[0.0, 1.0], help='Direction of the linear motion (as a 2D vector)')
-parser.add_argument('--linearVelocityMagnitude', type=float, default=0.5, help='Magnitude of the linear motion')
-parser.add_argument('--angularVelocityMagnitude', type=float, default=1.0, help='Magnitude of the angular motion')
+parser.add_argument('--initialAngularVelocity', type=float, default=0.0, help='Initial angular velocity of the fluid (set relative to the origin)')
+parser.add_argument('--enablePotentialField', action='store_true', help='If set, a potential field will be applied to the fluid')
+parser.add_argument('--potentialFieldStrength', type=float, default=1.0, help='Strength of the potential field applied to the fluid')
+parser.add_argument('--potentialFieldCenter', type=float, nargs=2, default=[0.0, 0.0], help='Center of the potential field applied to the fluid (x, y)')
 
-parser.add_argument('--caseName', type=str, default='13-dynamic-flow', help='Name of the case to run (default: 12-dambreak)')
+parser.add_argument('--caseName', type=str, default='01-impact', help='Name of the case to run (default: 12-dambreak)')
 parser.add_argument('--plot', action='store_true', help='Enable plotting of the simulation results')
 parser.add_argument('--plotInterval', type=int, default=10, help='Interval for plotting (default: 10)')
 
@@ -84,20 +82,19 @@ args = parser.parse_args()
 nx = args.nx
 dim = 2
 L = args.L
-W = args.W
+W = args.L
 n_h = args.n_h
 targetDt = args.targetDt
 
 gamma = 5/3
 rho0 = 1
 nu_visc = 0.0005
-freeSurface = False
+freeSurface = True
 
 # obstacle = args.obstacle
 timestamp = getCurrentTimestamp()
 
-obstacleText = f'{args.obstacleType}_maxExtent{args.maxExtent}_aspectRatio{args.aspectRatio}_offsetX{args.offsetX}_offsetY{args.offsetY}'
-motionText = f'linearMotion{args.linearMotion}_angularMotion{args.angularMotion}_motionType{args.motionType}_motionFrequency{args.motionFrequency}_linearVelocityDirection{args.linearVelocityDirection[0]}_{args.linearVelocityDirection[1]}_linearVelocityMagnitude{args.linearVelocityMagnitude}_angularVelocityMagnitude{args.angularVelocityMagnitude}'
+obstacleText = f"{args.obstacleType}_maxExtent{args.maxExtent}_aspectRatio{args.aspectRatio}_offsetLR{args.offsetLR}_offsetTD{args.offsetTD}_velocity{args.velocity}"
 caseName = f'{args.caseName}_{timestamp}_{nx}_{n_h}_{L}_{W}_{obstacleText}'
 
 extraData = {
@@ -109,9 +106,15 @@ extraData = {
     'gamma': gamma,
     'rho0': rho0,
     'nu_visc': nu_visc,
+    'initialAngularVelocity': args.initialAngularVelocity,
+    'enablePotentialField': args.enablePotentialField,
+    'potentialFieldStrength': args.potentialFieldStrength,
+    'potentialFieldCenter': args.potentialFieldCenter,
     # 'obstacle': obstacle
 }
-
+########################################################################################################################
+# Generic initialization code #
+########################################################################################################################
 import copy
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 dtype = get_torch_precision()
@@ -136,7 +139,7 @@ config, integrator = buildConfig(
     domain = domain,
     dim = dim,
     kernel = KernelFunctions.Wendland4,
-    targetNeighbors = n_h_to_nH(4, dim),
+    targetNeighbors = n_h_to_nH(args.n_h, dim),
     supportMode = SupportScheme.KernelMeanSymmetric,
     gradientMode = GradientScheme.Difference,
     laplacianMode = LaplacianScheme.Brookshaw,
@@ -157,170 +160,60 @@ config.minDt = 1e-8
 scheme = WeaklyCompressibleSPHScheme.deltaSPH
 SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, export_fn, import_fn = buildScheme(scheme)
 
+
 schemeConfig = SimulationConfig()
 schemeConfig.surfaceDetectionConfig.active = freeSurface
 
 
+from warpSPH.utils.naca import *
+
+if args.enablePotentialField:
+    B = args.potentialFieldStrength
+
+    schemeConfig.gravityConfig.active = True
+    schemeConfig.gravityConfig.type = GravityType.PotentialField
+    schemeConfig.gravityConfig.magnitude = B
+    schemeConfig.gravityConfig.origin =[args.potentialFieldCenter[0], args.potentialFieldCenter[1]]
+
+########################################################################################################################
+# Build the reigons per case #
+########################################################################################################################
 fluid_sdf = lambda x: sampleDomainSDF(x, domain, invert = True)
 domain_sdf = lambda x: sampleDomainSDF(x, interiorDomain, invert = False)
 
-# obstacleWidth = L/16
-# obstacleHeight = L/4
-
-from warpSPH.utils.naca import *
 
 
 maxExtent = args.maxExtent
 aspectRatio = args.aspectRatio
-offsetX = args.offsetX
-offsetY = args.offsetY
-aoa = args.aoa
+offsetX = args.offsetLR
+offsetY = args.offsetTD
 
 from utils import buildObstacleSDF
 
-obstacle_sdf = buildObstacleSDF(args.obstacleType, args.offsetX, args.offsetY, args.maxExtent, args.aspectRatio, aoa, config, schemeConfig, L, W)
-
-# obstacle_sdf = 
+left_fluid = buildObstacleSDF(args.obstacleType, -args.offsetLR, -args.offsetTD, args.maxExtent, args.aspectRatio, args.aoa, config, schemeConfig, L, L)
+right_fluid = buildObstacleSDF(args.obstacleType, args.offsetLR, args.offsetTD, args.maxExtent, args.aspectRatio, args.aoa, config, schemeConfig, L, L)
 
 regions = []
 
-regions.append(buildRegion(config, schemeConfig, fluid_sdf, RegionType.Fluid, initialConditions = {}, shortEdge = W > L))
-# regions.append(buildRegion(config, schemeConfig, domain_sdf, RegionType.Boundary, initialConditions = {}, kind = BCType.noSlip))
-# if obstacle:
-
-bcType = BCType.noSlip
-if args.linearMotion or args.angularMotion:
-    bcType = BCType.constant
-regions.append(buildRegion(config, schemeConfig, obstacle_sdf, RegionType.Boundary, initialConditions = {}, kind = bcType, shortEdge = W > L))
-
-
-
-for region in regions:
-    region = filterRegion(region, regions)
-config.regions = schemeConfig.regions = regions
-
-
-bdyPtcls = regions[-1].particles.positions
-print(f'AABB of boundary particles: {torch.min(bdyPtcls, dim=0).values} to {torch.max(bdyPtcls, dim=0).values}')
-
-# compressibleSystem = initializeWeaklyCompressibleSimulation(regions, config, schemeConfig, SimulationSystem, SimulationState, verbose = True)
-
-# compressibleSystem.state.positions = shuffleParticles(compressibleSystem.state, config, schemeConfig, 128, jitterAmount = 1.0)
-
+regions.append(buildRegion(config, schemeConfig, left_fluid, RegionType.Fluid, initialConditions = {}, shortEdge = W > L))
+regions.append(buildRegion(config, schemeConfig, right_fluid, RegionType.Fluid, initialConditions = {}, shortEdge = W > L))
 
 compressibleSystem = initializeWeaklyCompressibleSimulation(regions, config, schemeConfig, SimulationSystem, SimulationState, verbose = True)
 
-# compressibleSystem.state.positions = shuffleParticles(compressibleSystem.state, config, schemeConfig, 128, jitterAmount = 1.0)
 
-u_freestream = args.freeStreamVelocity
-minBoundaryDistance = torch.ones_like(compressibleSystem.state.positions[:,0]) * np.inf
-for region in regions:
-    if region.type == RegionType.Boundary:
-        distances = region.sdf(compressibleSystem.state.positions)[0]
-        minBoundaryDistance = torch.min(minBoundaryDistance, distances)
-maxDistance = compressibleSystem.state.supports.max() * 4.0
-minBoundaryDistance = torch.clamp(minBoundaryDistance, min=0.0, max = maxDistance)
-ramp = (minBoundaryDistance) / maxDistance
-def rampFn(r):
-    ramped = 15/8 * r - 10/8 * r**3 + 3/8 * r**5
-    return torch.clamp(ramped, min=0.0, max = 1.0)
-ramped = rampFn(ramp)
+compressibleSystem.state.velocities[compressibleSystem.state.positions[:,0] < 0,0] = args.velocity
+compressibleSystem.state.velocities[compressibleSystem.state.positions[:,0] > 0,0] = -args.velocity
 
-compressibleSystem.state.velocities[compressibleSystem.state.kinds == 0,0] = u_freestream * ramped[compressibleSystem.state.kinds == 0]
+compressibleSystem.state.velocities[:,0] += args.initialAngularVelocity * (compressibleSystem.state.positions[:,1] - args.potentialFieldCenter[1])
+compressibleSystem.state.velocities[:,1] += -args.initialAngularVelocity * (compressibleSystem.state.positions[:,0] - args.potentialFieldCenter[0])
 
+########################################################################################################################
+# Setup the system #
+########################################################################################################################
 
 schemeConfig.fluid.fixedSoundSpeed, config.dt = setupWeaklyCompressibleTimestep(config, schemeConfig, compressibleSystem, targetDt, verbose = True)
 # config.dt = config.dt * 2
 print(f"Computed timestep: {config.dt:.6g}, target timestep: {targetDt:.6g}, diff: {abs(config.dt - targetDt):.6g}, c0: {schemeConfig.fluid.fixedSoundSpeed:.6g}")
-
-forcingWidth = args.forcingWidth
-
-forcingSDF = lambda points: sampleSDF(points, lambda x: getSDF('box')['function'](x, torch.tensor([W/2 - forcingWidth, L/2]).to(points.device)), invert = True)
-
-def ldcDirichlet(state, cfg, schemeCfg, positions, d, n, t, dt):
-    velocities = state.velocities.clone()
-    # mask = torch.logical_or(positions[:,0] < -W/2 + forcingWidth, positions[:,0] > W/2 - forcingWidth)
-    velocities[:,0] = u_freestream * 2
-    # v_diff = u_freestream - state.velocities[:,0]
-    # # slowly ramp the velocities to the target velocity over time
-    # velocities[:,0] = state.velocities[:,0] + v_diff * dt / 0.1
-    return velocities
-
-def ldcDirichletDensity(state, cfg, schemeCfg, positions, d, n, t, dt):
-    densities = state.densities.clone()
-    densities[:] = rho0
-    # ramp the densities to the target density over time
-    densities[:] = state.densities[:] + (rho0 - state.densities[:]) * dt / 0.1
-    return densities
-
-def ldcDirichletUpdate(state, cfg, schemeCfg, positions, d, n, t, dt):
-    velocities = torch.zeros_like(state.velocities)
-    mask = torch.logical_or(positions[:,0] < -W/2 + forcingWidth, positions[:,0] > W/2 - forcingWidth)
-    velocities[:,0] = torch.where(mask, 0.0, velocities[:,0])
-    return velocities
-
-def ldcDirichletUpdateDensity(state, cfg, schemeCfg, positions, d, n, t, dt):
-    densities = torch.zeros_like(state.densities)
-    mask = torch.logical_or(positions[:,0] < -W/2 + forcingWidth, positions[:,0] > W/2 - forcingWidth)
-    densities[:] = torch.where(mask, 0.0, densities[:])
-    return densities
-
-def ldcForcing(state, cfg, schemeCfg, positions, d, n, t, dt):
-    forcing = torch.zeros_like(state.velocities)
-    mask = torch.logical_or(positions[:,0] < -W/2 + forcingWidth, positions[:,0] > W/2 - forcingWidth)
-    velocities = state.velocities.clone()
-    velocities[:,0] = u_freestream
-    v_diff = u_freestream - state.velocities[:,0]
-    # slowly ramp the velocities to the target velocity over time
-    velocities[:,0] = state.velocities[:,0] + v_diff * dt / 0.1
-
-    forcing[:,0] = v_diff * dt / 0.1
-
-
-
-
-    return forcing
-
-ldcBC = BoundaryCondition(
-    type = BoundaryConditionType.dynamic,
-    sdf = forcingSDF,
-    dirichletFunctions = {
-        # 'velocities': lambda state, cfg, schemeCfg, positions, d, n, t, dt: ldcDirichlet(state, cfg, schemeCfg, positions, d, n, t, dt),
-        # 'densities': lambda state, cfg, schemeCfg, positions, d, n, t, dt: ldcDirichletDensity(state, cfg, schemeCfg, positions, d, n, t, dt)
-    },
-    updateFunctions = {
-        # 'dvdt': lambda state, cfg, schemeCfg, positions, d, n, t, dt: ldcDirichletUpdate(state, cfg, schemeCfg, positions, d, n, t, dt),
-        # 'drhodt': lambda state, cfg, schemeCfg, positions, d, n, t, dt: ldcDirichletUpdateDensity(state, cfg, schemeCfg, positions, d, n, t, dt)
-    },
-    forcingFunctions = [ldcForcing]
-
-)
-schemeConfig.boundaryConditions = [ldcBC]
-
-
-enforceDirichlet(compressibleSystem, compressibleSystem.t, config.dt, config, schemeConfig)
-
-t = torch.tensor(0, device = device, dtype = dtype)
-
-obstacleLinearVelocity = torch.tensor(args.linearVelocityDirection, device = device, dtype = dtype) * args.linearVelocityMagnitude
-obstacleAngularVelocity = args.angularVelocityMagnitude
-obstacleMotionType = args.motionType
-obstacleMotionFrequency = args.motionFrequency
-print(f"Obstacle motion type: {obstacleMotionType}, linear velocity: {obstacleLinearVelocity}, angular velocity: {obstacleAngularVelocity}, motion frequency: {obstacleMotionFrequency}")
-if obstacleMotionType == 'fixed':
-    linearVelocity = obstacleLinearVelocity#[None,:]
-    angularVelocity = torch.tensor(obstacleAngularVelocity, device = device, dtype = dtype)
-elif obstacleMotionType == 'sinusoidal':
-    linearVelocity =  obstacleLinearVelocity * torch.cos(t * np.pi * obstacleMotionFrequency)#[:,None]
-    angularVelocity = obstacleAngularVelocity * torch.cos(t * np.pi * obstacleMotionFrequency) 
-else:
-    raise ValueError(f"Unknown motion type: {obstacleMotionType}")
-
-if args.linearMotion == True:
-    config.rigidBodies[0].linearVelocity = linearVelocity
-if args.angularMotion == True:
-    config.rigidBodies[0].angularVelocity = angularVelocity
-schemeConfig.rigidBodies = config.rigidBodies
 
 runningState = compressibleSystem.initializeNewState()
 
@@ -332,19 +225,9 @@ exportSimulationSystem(exportPath, 'initialState', scheme, compressibleSystem, e
 schemeConfig.diffusionParams.inviscid = True
 schemeConfig.diffusionParams.viscidNu = 0.01
 
-nu = schemeConfig.diffusionParams.viscidNu if schemeConfig.diffusionParams.inviscid == False else alphaToNu(schemeConfig.diffusionParams.inviscidAlpha, schemeConfig.fluid.fixedSoundSpeed, compressibleSystem.state.supports.mean().cpu().item(), config.dim)
-alpha = nuToAlpha(schemeConfig.diffusionParams.viscidNu, schemeConfig.fluid.fixedSoundSpeed, compressibleSystem.state.supports.mean().cpu().item(), config.dim) if schemeConfig.diffusionParams.inviscid == False else schemeConfig.diffusionParams.inviscidAlpha
-
-print(f'Using inviscid: {schemeConfig.diffusionParams.inviscid}, nu: {nu:.6g}, alpha: {alpha:.6g}')
-
-u_mag = 1
-Re = u_mag / nu * (domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2
-print(f"Reynolds number: {Re:.6g}\nnu: {nu:.6g} (alpha: {alpha:.6g})\nu_mag: {u_mag:.6g}, L: {(domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2:.6g}")
-if alpha < 0.01:
-    print(f'Running with a viscosity of alpha < 0.01 may result in unstable simulations.')
-nu_limit = alphaToNu(0.01, schemeConfig.fluid.fixedSoundSpeed, compressibleSystem.state.supports.mean().cpu().item(), config.dim)
-Re_limit = u_mag / nu_limit * (domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2
-print(f'Reynolds limit based on alpha = 0.01, nu = {nu_limit:.6g}, Re = {Re_limit:.6g}')
+########################################################################################################################
+# Setup the plotting #
+########################################################################################################################
 
 result = integrator.function(
     state = runningState,
@@ -356,7 +239,7 @@ result = integrator.function(
     # priorStep = priorStep
 )
 if args.plot:
-    markerSize = 2
+    markerSize = 6
     plotter = visualize(
         particleState = runningState.state,
         domain = config.domain,
@@ -400,7 +283,7 @@ if args.plot:
         },
         figTitle = "Initial State",
         mosaic = 'AB',
-        figsize= (20,5),
+        figsize= (16,10),
         backend='vispy',
         # backend='pyVista',
         # backendOptions = {
@@ -418,6 +301,9 @@ nSteps = int(args.timeLimit / config.dt)
 
 runningState = compressibleSystem.initializeNewState()
 # schemeConfig.rigidBodies[0].linearVelocity = 0.0
+########################################################################################################################
+# Run the simulation #
+########################################################################################################################
 
 kes = []
 priorStep = None
@@ -445,19 +331,6 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
     t = runningState.t
     # schemeConfig.rigidBodies[0].linearVelocity = 0.5 * torch.cos(t * np.pi * 2)
     # linearVelocity = 0.5 * torch.cos(t * np.pi * 2)
-    if obstacleMotionType == 'fixed':
-        linearVelocity = obstacleLinearVelocity
-        angularVelocity = torch.tensor(obstacleAngularVelocity, device = device, dtype = dtype)
-    elif obstacleMotionType == 'sinusoidal':
-        linearVelocity =  obstacleLinearVelocity * torch.cos(t * np.pi * obstacleMotionFrequency)
-        angularVelocity = obstacleAngularVelocity * torch.cos(t * np.pi * obstacleMotionFrequency) 
-
-    if args.linearMotion == True:
-        config.rigidBodies[0].linearVelocity = linearVelocity
-        schemeConfig.rigidBodies[0].linearVelocity = linearVelocity
-    if args.angularMotion == True:
-        config.rigidBodies[0].angularVelocity = angularVelocity
-        schemeConfig.rigidBodies[0].angularVelocity = angularVelocity
 
     currentState = runningState.state
     # print(f'-' * 80)
@@ -475,17 +348,20 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
                 newParticleState = runningState.state,
             )
             plotter.export(f'{imagePath}/frame_{i:05d}.png', dpi = 300)
-            plotter.updateTitle(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{args.timeLimit:8.4g} | max vel: {torch.linalg.norm(runningState.state.velocities, dim = -1).max():.3g} | iter time: {timing:.3f} ms | linear velocity: {linearVelocity.cpu().numpy() if args.linearMotion else 'N/A'}, angular velocity: {angularVelocity if args.angularMotion else 'N/A'}")
+            plotter.updateTitle(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{args.timeLimit:8.4g} | max vel: {torch.linalg.norm(runningState.state.velocities, dim = -1).max():.3g} | iter time: {timing:.3f} ms")
         # break
             
     maxVel = torch.linalg.norm(runningState.state.velocities, dim = -1).max()
-    tq.set_description(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{args.timeLimit:8.4g} | max vel: {maxVel:.3g} | iter time: {timing:.3f} ms")
+    tq.set_description(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{args.timeLimit:8.4g} | ptcls: {len(runningState.state.positions)} | max vel: {maxVel:.3g} | iter time: {timing:.3f} ms")
     # t = {runningState.t:2f}, dt = {config.dt:.3g}, ptcls = {len(runningState.state.positions)}\nTotal Energy: {totalEnergy:.3g}, Kinetic Energy: {kineticEnergy:.3g}, Thermal Energy: {thermalEnergy:.3g}'
     # break
     if torch.any(torch.isnan(runningState.state.velocities)):
         print("NaN detected in velocities, stopping simulation.")
         break
 
+########################################################################################################################
+# Finalize the simulation #
+########################################################################################################################
 
 ffmpeg_cmd = "ffmpeg -y -loglevel error -hide_banner -framerate 50 -f image2 -pattern_type glob -i 'frame_*.png' -c:v libx264 -pix_fmt yuv420p -b:v 10M output.mp4"
 subprocess.run(shlex.split(ffmpeg_cmd), check=True, cwd = imagePath)
