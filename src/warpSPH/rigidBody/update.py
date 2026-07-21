@@ -24,6 +24,7 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     particleVelocities = torch.stack([-relativePositions[:,1], relativePositions[:,0]], dim = 1) * rigidBody.angularVelocity + rigidBody.linearVelocity
 
 
+
     # particleVelocities += rigidBody.linearVelocity
 
     updatedPositions = particleState.positions.clone()
@@ -36,6 +37,7 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
         # print(particleVelocities)
         updatedVelocities[rigidBody.particleIndices] = particleVelocities
         updatedVelocities[rigidBody.ghostParticleIndices] = particleVelocities
+        # print(f'updated velocities to {particleVelocities[0]}')
 
     updatedOffsets = particleState.ghostOffsets.clone()
     updatedOffsets[rigidBody.particleIndices] = offsets
