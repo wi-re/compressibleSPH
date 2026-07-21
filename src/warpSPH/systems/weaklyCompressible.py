@@ -94,6 +94,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
             self.state.surfaceIndicators.copy_(lastState.surfaceIndicators)
         else:
             self.state.surfaceIndicators = lastState.surfaceIndicators.clone() if lastState.surfaceIndicators is not None else None
+            # print(f'copying surface indicators: {self.state.surfaceIndicators is not None}, {lastState.surfaceIndicators is not None}')
 
         if self.state.surfaceNormals is not None and lastState.surfaceNormals is not None:
             self.state.surfaceNormals.copy_(lastState.surfaceNormals)
@@ -104,6 +105,8 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
             self.state.surfaceLambdas.copy_(lastState.surfaceLambdas)
         else:
             self.state.surfaceLambdas = lastState.surfaceLambdas.clone() if lastState.surfaceLambdas is not None else None
+
+        # print(self.state)
 
         velocity_magnitudes = torch.linalg.vector_norm(self.state.velocities, dim=-1)
         finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
@@ -204,7 +207,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         
         drhodtMid = updateValues[-1].drhodt
         epsilon = -dt * drhodtMid / midRho
-        self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
+        # self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
         if schemeConfig.shiftProperties.active:
             if schemeConfig.shiftProperties.correctdrhodt:
@@ -221,6 +224,8 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         # self.state.divergence.copy_(lastState.divergence)
         # self.state.alpha0s.copy_(lastState.alpha0s)
         # self.state.alphas.copy_(lastState.alphas)
+
+        # print(self.state)
 
         return super().finalize(initialState, dt, returnValues, updateValues, weights, *args, **kwargs)
     

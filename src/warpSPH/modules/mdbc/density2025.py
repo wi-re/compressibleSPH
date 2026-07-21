@@ -58,7 +58,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         nb = torch.nn.functional.normalize(nb, dim = 1)
 
         dot = torch.einsum('ni, i -> n', nb, g)
-        dot2 = torch.einsum('ni, ni -> n', relPos, -nb)
+        dot2 = torch.einsum('ni, ni -> n', relPos, nb)
 
 
         P_b = P_g + rho0 * (dot * dot2)

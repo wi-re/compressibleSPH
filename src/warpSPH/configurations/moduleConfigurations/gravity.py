@@ -40,8 +40,8 @@ def gravityConfigurationToDict(config: gravityConfiguration) -> dict:
         "active": config.active,
         "type": config.type.name,
         "magnitude": config.magnitude,
-        "direction": config.direction,
-        "origin": config.origin
+        "direction": config.direction.cpu().tolist() if isinstance(config.direction, torch.Tensor) else config.direction,
+        "origin": config.origin if not isinstance(config.origin, torch.Tensor) else config.origin.cpu().tolist()
     }
 
 def dictToGravityConfiguration(config_dict: dict) -> gravityConfiguration:

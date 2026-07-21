@@ -114,7 +114,9 @@ def solveShifting(
                         # update[surfaceIndicator] = result[surfaceIndicator] * surfaceScaling * 5.0
                         update[surfaceIndicator] = (lMin**2.0).view(-1,1)[surfaceIndicator] * result[surfaceIndicator]
                         # update[fs > 0.5] = result[fs> 0.5] * surfaceScaling
+                        # update[surfaceIndicator] = 0.0
                         update[lMin < 0.4] = 0
+                        update[surfaceIndicator]=0.0
                     else:
                         update[fsm > 0.5] = 0
                         update[lMin < 0.4] = 0

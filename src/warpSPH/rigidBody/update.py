@@ -60,4 +60,10 @@ def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
         ghostIndices = particleState.ghostIndices,
         ghostOffsets = updatedOffsets,
 
+        surfaceIndicators = particleState.surfaceIndicators,
+        surfaceNormals = particleState.surfaceNormals,
+        surfaceLambdas = particleState.surfaceLambdas,
+
+        
+
     )
