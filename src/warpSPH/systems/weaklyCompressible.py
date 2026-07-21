@@ -207,7 +207,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         
         drhodtMid = updateValues[-1].drhodt
         epsilon = -dt * drhodtMid / midRho
-        # self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
+        self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
         if schemeConfig.shiftProperties.active:
             if schemeConfig.shiftProperties.correctdrhodt:

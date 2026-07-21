@@ -8,12 +8,14 @@ def batchedSDF(fn, p, *args):
 
 def sdEquilateralTriangle(p, r):
     k = torch.sqrt(torch.tensor(3.0, dtype = p.dtype, device = p.device))
-    p[:, 0] = torch.abs(p[:, 0]) - r
-    p[:, 1] = p[:, 1] + r / k
-    mask = p[:, 0] + k * p[:, 1] > 0.0
-    p[mask] = torch.stack([p[mask, 0] - k * p[mask, 1], -k * p[mask, 0] - p[mask, 1]], dim=1) / 2.0
-    p[:, 0] -= torch.clamp(p[:, 0], -2.0 * r, 0.0)
-    return -torch.norm(p, dim=1) * torch.sign(p[:, 1])
+    x0 = torch.abs(p[:, 0]) - r
+    x1 = p[:, 1] + r / k
+    mask = x0 + k * x1 > 0.0
+    x0_new = torch.where(mask, (x0 - k * x1) / 2.0, x0)
+    x1_new = torch.where(mask, (-k * x0 - x1) / 2.0, x1)
+    x0_new = x0_new - torch.clamp(x0_new, -2.0 * r, 0.0)
+    x = torch.stack([x0_new, x1_new], dim=1)
+    return -torch.norm(x, dim=1) * torch.sign(x[:, 1])
 def sdTriangleIsosceles(p, q):
     p = torch.stack((torch.abs(p[0]), p[1]))
     a = p - q * torch.clamp(torch.dot(p, q) / torch.dot(q, q), 0.0, 1.0)

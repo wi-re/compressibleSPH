@@ -1,5 +1,6 @@
 
 from sphWarpCore import *
+from ...utils.math import getPeriodicPositions
 # from ...systems.compSPH import CompSPHSystem, CompSPHState
 from ...configurations.compSPHConfig import CompSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
@@ -26,14 +27,16 @@ def enforceDirichlet(
                     #print(f'Enforcing dirichlet for {varName}')
                     if hasattr(system, 'state'):
                         var = getattr(system.state, varName)
-                        d, n = bc.sdf(system.state.positions)
-                        updatedValues = dirichletFn(system.state, config, compParams, system.state.positions, d, n, t, dt)
+                        periodicPositions = getPeriodicPositions(system.state.positions, config.domain)
+                        d, n = bc.sdf(periodicPositions)
+                        updatedValues = dirichletFn(system.state, config, compParams, periodicPositions, d, n, t, dt)
                         var[d < 0] = updatedValues[d < 0]
                         # print(f'Enforced dirichlet for {varName}')
                     else:
                         var = getattr(system, varName)
-                        d, n = bc.sdf(system.positions)
-                        updatedValues = dirichletFn(system, config, compParams, system.positions, d, n, t, dt)
+                        periodicPositions = getPeriodicPositions(system.positions, config.domain)
+                        d, n = bc.sdf(periodicPositions)
+                        updatedValues = dirichletFn(system, config, compParams, periodicPositions, d, n, t, dt)
                         var[d < 0] = updatedValues[d < 0]
                         # print(f'Enforced dirichlet for {varName}')
                     
@@ -50,12 +53,14 @@ def computeForcing(
             if bc.forcingFunctions is not None and len(bc.forcingFunctions) > 0:
                 for forcingFn in bc.forcingFunctions:
                     if hasattr(system, 'state'):
-                        d, n = bc.sdf(system.state.positions)
-                        forcingValues = forcingFn(system.state, config, compParams, system.state.positions, d, n, t, dt)
+                        periodicPositions = getPeriodicPositions(system.state.positions, config.domain)
+                        d, n = bc.sdf(periodicPositions)
+                        forcingValues = forcingFn(system.state, config, compParams, periodicPositions, d, n, t, dt)
                         totalForcing[d < 0] += forcingValues[d < 0]
                     else:
-                        d, n = bc.sdf(system.positions)
-                        forcingValues = forcingFn(system, config, compParams, system.positions, d, n, t, dt)
+                        periodicPositions = getPeriodicPositions(system.positions, config.domain)
+                        d, n = bc.sdf(periodicPositions)
+                        forcingValues = forcingFn(system, config, compParams, periodicPositions, d, n, t, dt)
                         totalForcing[d < 0] += forcingValues[d < 0]
         return totalForcing
 
@@ -73,13 +78,15 @@ def enforceUpdates(
                 for varName, updateFn in bc.updateFunctions.items():
                     # print(f'Enforcing updates for {varName}')
                     if hasattr(system, 'state'):
+                        periodicPositions = getPeriodicPositions(system.state.positions, config.domain)
                         var = getattr(updates, varName)
-                        d, n = bc.sdf(system.state.positions)
-                        updatedValues = updateFn(system.state, config, compParams, system.state.positions, d, n, t, dt)
+                        d, n = bc.sdf(periodicPositions)
+                        updatedValues = updateFn(system.state, config, compParams, periodicPositions, d, n, t, dt)
                         var[d < 0] = updatedValues[d < 0]
                     else:
+                        periodicPositions = getPeriodicPositions(system.positions, config.domain)
                         var = getattr(updates, varName)
-                        d, n = bc.sdf(system.positions)
-                        updatedValues = updateFn(system, config, compParams, system.positions, d, n, t, dt)
+                        d, n = bc.sdf(periodicPositions)
+                        updatedValues = updateFn(system, config, compParams, periodicPositions, d, n, t, dt)
                         var[d < 0] = updatedValues[d < 0]
                     # print(f'Enforced updates for {varName}')

@@ -3,8 +3,8 @@ import torch
 from ..utils.sampling import ParticleSet
 import numpy as np
 
-def sampleParticles(config, schemeConfig, sdf, nx, filter = True):
-    particlesA = sampleRegularParticles(nx, config.domain, config.targetNeighbors, 0.0, 0, shortEdge = True)
+def sampleParticles(config, schemeConfig, sdf, nx, filter = True, shortEdge = True):
+    particlesA = sampleRegularParticles(nx, config.domain, config.targetNeighbors, 0.0, 0, shortEdge = shortEdge)
 
     mask = torch.ones_like(particlesA.masses, dtype = torch.bool)
     distances = particlesA.masses.new_ones(particlesA.masses.shape) * np.inf
