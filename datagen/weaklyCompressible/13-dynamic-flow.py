@@ -453,7 +453,7 @@ if args.plot:
                 markerSize = markerSize,
                 # midPoint = 1.0,
                 quantityScaling = PlotScaling.Linear,
-                plotTitle = "Densities",
+                plotTitle = "UIDs",
                 boundaryVisualization= VisualizeOptions.Hide,
                 fluidVisualization= VisualizeOptions.Visualize,
                 plotTitleGap = 0.08,
