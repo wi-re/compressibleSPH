@@ -28,7 +28,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
             config = config,
             neighbor_threshold = 4,
             direction = OperationDirection.FluidToGhost,
-            supportScale = 2.0
+            supportScale = 1.0
         )
         # return res[:,0], res[:,1:], neighCounts
 
@@ -51,7 +51,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         P_g = c_s**2 * (rho_g - rho0)
 
 
-        relPos = currentState.ghostOffsets[ghostMask]
+        relPos = -currentState.ghostOffsets[ghostMask]
         nb = relPos
         # This normalization is not in the paper https://www.sciencedirect.com/science/article/pii/S0045793025003305?via%3Dihub
         # But it is correct, see the dualsphysics code and thanks Aaron!
@@ -71,7 +71,10 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         boundaryDensity[bIndices] = rho_b
         threshold = 9
 
-        boundaryDensity[bIndices] = torch.where(numNeighbors > threshold, (rho_interp - torch.einsum('nu, nu -> n',(-relPos), rho_interp_grad)), boundaryDensity[bIndices])
+        drho = -torch.einsum('nu, nu -> n',(relPos), rho_interp_grad)
+        rho_proj = (rho_interp + drho)
+        rho_proj = torch.where(drho < rho0 * (dot * dot2), rho_b, rho_proj)
+        boundaryDensity[bIndices] = torch.where(numNeighbors > threshold, rho_proj, boundaryDensity[bIndices])
 
         mergedDensitities = currentState.densities.clone()
         mergedDensitities[bIndices] = boundaryDensity[bIndices]
