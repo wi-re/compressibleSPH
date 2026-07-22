@@ -201,9 +201,9 @@ regions.append(buildRegion(config, schemeConfig, box_sdf, RegionType.Fluid, init
 # regions.append(buildRegion(config, schemeConfig, domain_sdf, RegionType.Boundary, initialConditions = {}, kind = BCType.noSlip))
 # if obstacle:
 
-bcType = BCType.noSlip
-if args.linearMotion or args.angularMotion:
-    bcType = BCType.constant
+# bcType = BCType.noSlip
+# if args.linearMotion or args.angularMotion:
+bcType = BCType.constant
 if args.obstacleActive:
     regions.append(buildRegion(config, schemeConfig, obstacle_sdf, RegionType.Boundary, initialConditions = {}, kind = bcType, shortEdge = W > L))
 if args.band > 0:
@@ -390,6 +390,8 @@ if args.plot:
                 #     resolution = 512,
                 # ),
                 # vMin=1e-10
+                vMin = 0.0,
+                vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1
             ),
             "B": PlottingOptions(
                 colorMap = DivergingColorMap.RdBu,
@@ -401,6 +403,7 @@ if args.plot:
                 vMin = 0.95,
                 vMax = 1.05,
                 plotTitleGap = 0.08,
+                boundaryVisualization = VisualizeOptions.Visualize,
                 # gridVisualization = GridVisualization(
                 #     resolution = 512,
                 # ),
@@ -477,7 +480,7 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
         config = config,
         schemeConfig = schemeConfig,
         verbose = False,
-        priorStep = priorStep
+        # priorStep = priorStep
     )
     kes.append(torch.sum(0.5 * result.state.state.masses * torch.sum(result.state.state.velocities**2, dim=1)))
     # print('max_vel:', torch.linalg.norm(result.state.state.velocities, dim = -1).max())

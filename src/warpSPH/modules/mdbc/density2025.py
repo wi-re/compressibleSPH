@@ -28,7 +28,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
             config = config,
             neighbor_threshold = 4,
             direction = OperationDirection.FluidToGhost,
-            supportScale = 1.0
+            supportScale = 2.0
         )
         # return res[:,0], res[:,1:], neighCounts
 
@@ -43,7 +43,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         boundaryDensity = currentState.densities.new_ones(currentState.densities.shape) * schemeConfig.fluid.restDensity
         shepardNominator = b[:,0]
         shepardDenominator = A_g[:,0,0]
-        shepardDensity = shepardNominator / shepardDenominator
+        shepardDensity = torch.where(shepardDenominator > 0, shepardNominator / shepardDenominator, rho0)
 
         boundaryDensity[bIndices] = torch.where(numNeighbors > 0, shepardDensity, rho0)
 
@@ -60,9 +60,13 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         dot = torch.einsum('ni, i -> n', nb, g)
         dot2 = torch.einsum('ni, ni -> n', relPos, nb)
 
+        # if the normal is pointing in the direction of the gravity then we disable the gravity contribution as we want to avoid negative densities in the boundary particles
+        dot = torch.where(dot > 0, torch.zeros_like(dot), dot)
 
         P_b = P_g + rho0 * (dot * dot2)
         rho_b = rho0 + P_b / c_s**2
+
+        # rho_b = torch.where(numNeighbors > 4, rho_b, boundaryDensity[bIndices])
 
         boundaryDensity[bIndices] = rho_b
         threshold = 9

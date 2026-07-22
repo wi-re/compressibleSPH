@@ -28,7 +28,7 @@ def deltaSPH_step(
 
         adjacency = buildVerletList(
             currentState, 
-            config.domain, verletScale = verletScale, supportMode = SupportScheme.SuperSymmetric,
+            config.domain, verletScale = 1.0, supportMode = SupportScheme.SuperSymmetric,
             priorNeighborhood = adjacency,
             verbose = False)
         currentSystem.adjacency = adjacency

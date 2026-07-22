@@ -209,6 +209,9 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         epsilon = -dt * drhodtMid / midRho
         self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
 
+        if torch.any(self.state.kinds != 0):
+            self.state.densities[self.state.kinds != 0] = midRho[self.state.kinds != 0]
+
         if schemeConfig.shiftProperties.active:
             if schemeConfig.shiftProperties.correctdrhodt:
                 self.state.densities += drhodt_shift * dt
