@@ -45,7 +45,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         shepardDenominator = A_g[:,0,0]
         shepardDensity = torch.where(shepardDenominator > 0, shepardNominator / shepardDenominator, rho0)
 
-        boundaryDensity[bIndices] = torch.where(numNeighbors > 0, shepardDensity, rho0)
+        boundaryDensity[bIndices] = torch.where(numNeighbors > 1, shepardDensity, rho0)
 
         rho_g = boundaryDensity[bIndices]
         P_g = c_s**2 * (rho_g - rho0)
@@ -73,7 +73,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
 
         drho = -torch.einsum('nu, nu -> n',(relPos), rho_interp_grad)
         rho_proj = (rho_interp + drho)
-        rho_proj = torch.where(drho < rho0 * (dot * dot2), rho_b, rho_proj)
+        # rho_proj = torch.where(drho < rho0 * (dot * dot2), rho_b, rho_proj)
         boundaryDensity[bIndices] = torch.where(numNeighbors > threshold, rho_proj, boundaryDensity[bIndices])
 
         mergedDensitities = currentState.densities.clone()

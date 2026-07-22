@@ -149,7 +149,7 @@ config, integrator = buildConfig(
     adaptiveDt = True,
     cflFactor=0.3,
 )
-config.nx = nx
+config.nx = nx + band * 2
 config.dx = dx
 
 config.minDt = 1e-8
