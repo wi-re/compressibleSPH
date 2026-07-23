@@ -61,7 +61,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
         dot2 = torch.einsum('ni, ni -> n', relPos, nb)
 
         # if the normal is pointing in the direction of the gravity then we disable the gravity contribution as we want to avoid negative densities in the boundary particles
-        dot = torch.where(dot > 0, torch.zeros_like(dot), dot)
+        # dot = torch.where(dot > 0, torch.zeros_like(dot), dot)
 
         P_b = P_g + rho0 * (dot * dot2)
         rho_b = rho0 + P_b / c_s**2

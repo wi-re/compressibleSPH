@@ -80,6 +80,14 @@ parser.add_argument('--linearVelocityDirection', type=float, nargs=2, default=[0
 parser.add_argument('--linearVelocityMagnitude', type=float, default=0.5, help='Magnitude of the linear motion')
 parser.add_argument('--angularVelocityMagnitude', type=float, default=1.0, help='Magnitude of the angular motion')
 
+parser.add_argument('--disableGravity', action='store_true', help='Disable gravity in the simulation')
+parser.add_argument('--gravityDirection', type=float, nargs=2, default=[0.0, -1.0], help='Direction of gravity (default: [0.0, -1.0])')
+parser.add_argument('--gravityMagnitude', type=float, default=9.81, help='Magnitude of gravity (default: 9.81)')
+
+parser.add_argument('--enableSloshing', action='store_true', help='Enable sloshing motion in the simulation')
+parser.add_argument('--sloshingAmplitude', type=float, default=0.1, help='Amplitude of sloshing motion (default: 0.1)')
+parser.add_argument('--sloshingFrequency', type=float, default=1.0, help='Frequency of sloshing motion (default: 1.0)')
+
 parser.add_argument('--caseName', type=str, default='4-open-flow', help='Name of the case to run (default: 12-dambreak)')
 parser.add_argument('--plot', action='store_true', help='Enable plotting of the simulation results')
 parser.add_argument('--plotInterval', type=int, default=10, help='Interval for plotting (default: 10)')
@@ -162,6 +170,13 @@ SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, expor
 schemeConfig = SimulationConfig()
 schemeConfig.surfaceDetectionConfig.active = freeSurface
 schemeConfig.bandwith = L / args.bandWidth / config.dx
+
+
+schemeConfig.gravityConfig.active = not args.disableGravity
+schemeConfig.gravityConfig.type = GravityType.Directional
+schemeConfig.gravityConfig.magnitude = args.gravityMagnitude
+schemeConfig.gravityConfig.origin = args.gravityDirection   
+
 
 fluid_sdf = lambda x: sampleDomainSDF(x, domain, invert = True)
 
