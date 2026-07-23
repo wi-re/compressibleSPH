@@ -64,7 +64,7 @@ parser.add_argument('--band', type=int, default=5, help='Number of particle band
 
 parser.add_argument('--targetDt', type=float, default=0.0005, help='Target timestep for the simulation')
 
-parser.add_argument('--caseName', type=str, default='2-flow', help='Name of the case to run (default: 12-dambreak)')
+parser.add_argument('--caseName', type=str, default='3-dambreak', help='Name of the case to run (default: 12-dambreak)')
 parser.add_argument('--plot', action='store_true', help='Enable plotting of the simulation results')
 parser.add_argument('--plotInterval', type=int, default=10, help='Interval for plotting (default: 10)')
 
@@ -261,6 +261,8 @@ exportSimulationSystem(exportPath, 'initialState', scheme, compressibleSystem, e
 }, **extraData))
 
 if args.plot:
+    titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.enableObstacle}'
+
     markerSize = args.markerSize
     plotter = visualize(
         particleState = runningState.state,
@@ -314,7 +316,7 @@ if args.plot:
                 # ),
             )
         },
-        figTitle = "Taylor Green Vortex",
+        figTitle = titleString,
         mosaic = 'ABC',
         figsize= (args.plotWidth,5),
         backend='vispy',
@@ -325,7 +327,7 @@ if args.plot:
         # }
     )
 
-    plotter.updateTitle(f'Taylor Green Vortex | t = {runningState.t:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)}')
+    plotter.updateTitle(titleString)
 
     imagePath = f'{exportPath}/images'
     os.makedirs(imagePath, exist_ok = True)
@@ -385,6 +387,8 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
 
     if args.plot and plotter is not None:
         if i % 10 == 0 and i > 0:
+            titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.enableObstacle} | max vel: {torch.linalg.norm(runningState.state.velocities, dim = -1).max():.3g} | iter time: {timing:.3f} ms'
+            plotter.updateTitle(titleString)
             plotter.updateQuantities(
                 {
                     "A": runningState.state.velocities,
@@ -393,7 +397,6 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
                 },
                 newParticleState = runningState.state,
             )
-            plotter.updateTitle(f'Taylor Green Vortex | t = {runningState.t:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)}')
             plotter.export(f'{imagePath}/frame_{i:05d}.png', dpi = 300)
             
     maxVel = torch.linalg.norm(runningState.state.velocities, dim = -1).max()

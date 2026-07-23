@@ -69,6 +69,7 @@ parser.add_argument('--aoa', type=float, default=0.0, help='Angle of attack of t
 parser.add_argument('--aspectRatio', type=float, default=1.0, help='Aspect ratio of the obstacle (for ellipse)')
 parser.add_argument('--offsetX', type=float, default=-0.0, help='X offset of the obstacle')
 parser.add_argument('--offsetY', type=float, default=0.0, help='Y offset of the obstacle')
+parser.add_argument('--mergeBoundaries', action='store_true', help='If set, the boundaries will be merged into a single boundary region')
 
 parser.add_argument('--linearMotion', action='store_true', help='Enable linear motion of the obstacle')
 parser.add_argument('--angularMotion', action='store_true', help='Enable angular motion of the obstacle')
@@ -219,6 +220,7 @@ regions.append(buildRegion(config, schemeConfig, box_sdf, RegionType.Fluid, init
 # bcType = BCType.noSlip
 # if args.linearMotion or args.angularMotion:
 bcType = BCType.constant
+
 if args.obstacleActive:
     regions.append(buildRegion(config, schemeConfig, obstacle_sdf, RegionType.Boundary, initialConditions = {}, kind = bcType, shortEdge = W > L))
 if args.band > 0:
@@ -382,6 +384,7 @@ exportSimulationSystem(exportPath, 'initialState', scheme, compressibleSystem, e
 }, **extraData))
 
 if args.plot:
+    titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.obstacleActive}'
     markerSize = args.markerSize
     plotter = visualize(
         particleState = runningState.state,
@@ -438,7 +441,7 @@ if args.plot:
                 # ),
             )
         },
-        figTitle = "Taylor Green Vortex",
+        figTitle = titleString,
         mosaic = 'ABC',
         figsize= (args.plotWidth,5),
         backend='vispy',
@@ -449,7 +452,7 @@ if args.plot:
         # }
     )
 
-    plotter.updateTitle(f'Taylor Green Vortex | t = {runningState.t:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)}')
+    plotter.updateTitle(titleString)
 
     imagePath = f'{exportPath}/images'
     os.makedirs(imagePath, exist_ok = True)
@@ -524,6 +527,8 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
 
     if args.plot and plotter is not None:
         if i % 10 == 0 and i > 0:
+            titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.obstacleActive} | max vel: {torch.linalg.norm(runningState.state.velocities, dim = -1).max():.3g} | iter time: {timing:.3f} ms'
+            plotter.updateTitle(titleString)
             plotter.updateQuantities(
                 {
                     "A": runningState.state.velocities,
@@ -532,7 +537,6 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
                 },
                 newParticleState = runningState.state,
             )
-            plotter.updateTitle(f'Taylor Green Vortex | t = {runningState.t:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)}')
             plotter.export(f'{imagePath}/frame_{i:05d}.png', dpi = 300)
             
     maxVel = torch.linalg.norm(runningState.state.velocities, dim = -1).max()

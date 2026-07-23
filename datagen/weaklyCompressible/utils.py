@@ -42,20 +42,20 @@ def buildObstacleSDF(obstacleType,
 
     scale = 1.0
 
-    trs = lambda points: scaleFn(rotateFn(translateFn(points, offsetX, offsetY), torch.tensor(aoa_rad).to(points.device)), scale, scale)
+    trs = lambda points: scaleFn(rotateFn(translateFn(points, offsetX, offsetY), torch.tensor(aoa_rad).to(points.device)), scale, scale / aspectRatio)
 
     # circle
     if obstacleType == 'circle':
         obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('circle')['function'](trs(x), torch.tensor(maxExtent).to(points.device)), invert = False)
     # ellipse (emulated as a scaled circle)
     elif obstacleType == 'ellipse':
-        obstacle_sdf = lambda points: sampleSDF(scaleFn(points, maxExtent, maxExtent / aspectRatio), lambda x: getSDF('circle')['function'](trs(x), torch.tensor(1.0).to(points.device)), invert = False)
+        obstacle_sdf = lambda points: sampleSDF(scaleFn(points, maxExtent, maxExtent), lambda x: getSDF('circle')['function'](trs(x), torch.tensor(1.0).to(points.device)), invert = False)
     # box
     elif obstacleType == 'box':
-        obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('box')['function'](trs(x), torch.tensor([maxExtent,maxExtent / aspectRatio]).to(points.device)))
+        obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('box')['function'](trs(x), torch.tensor([maxExtent,maxExtent]).to(points.device)))
     # roundedBox
     elif obstacleType == 'roundedBox':
-        obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('roundedBox')['function'](trs(x), torch.tensor([maxExtent,maxExtent / aspectRatio]).to(points.device), torch.tensor([maxExtent/5] * 4).to(points.device)), invert = False)
+        obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('roundedBox')['function'](trs(x), torch.tensor([maxExtent,maxExtent ]).to(points.device), torch.tensor([maxExtent/5] * 4).to(points.device)), invert = False)
     # equilateralTriangle
     elif obstacleType == 'equilateralTriangle':
         obstacle_sdf = lambda points: sampleSDF(points, lambda x: getSDF('equilateralTriangle')['function'](trs(x), maxExtent), invert = False)
