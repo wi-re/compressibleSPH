@@ -270,9 +270,19 @@ def build_sdfs(config, schemeConfig, band, args, domain, interiorDomain, obstacl
     offsetY = obstacle['offsetY']
     aoa = obstacle['aoa']
 
+    domain_domain = copy.deepcopy(interiorDomain)
+
+    if args.semiPeriodic:
+        domain_domain.min[0] *= 1.1
+        domain_domain.max[0] *= 1.1
+    if args.fullyPeriodic:
+        domain_domain.min[0] *= 1.1
+        domain_domain.max[0] *= 1.1
+        domain_domain.min[1] *= 1.1
+        domain_domain.max[1] *= 1.1
 
     obstacle_sdf = buildObstacleSDF(obstacle['obstacleType'], offsetX, offsetY, maxExtent, aspectRatio, aoa, config, schemeConfig, args.L, args.W)
-    domain_sdf = lambda x: domainSDF(x, interiorDomain, invert = False)
+    domain_sdf = lambda x: domainSDF(x, domain_domain, invert = False)
     # obstacle_sdf = 
 
     merged_sdf = union(domain_sdf, obstacle_sdf)

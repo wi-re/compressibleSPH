@@ -47,8 +47,10 @@ import argparse
 parser = argparse.ArgumentParser(description='Run the dam break simulation with obstacle.')
 
 parser.add_argument('--nx', type=int, default=128, help='Number of particles along the x-axis')
-parser.add_argument('--markerSize', type=int, default=2, help='Size of the markers in the plot')
+parser.add_argument('--markerSize', type=int, default=4, help='Size of the markers in the plot')
 parser.add_argument('--plotWidth', type=int, default=28, help='Width of the plot in inches')
+parser.add_argument('--plotHeight', type=int, default=8, help='Height of the plot in inches')
+parser.add_argument('--plotDensity', action='store_true', help='Plot density in the visualization')
 parser.add_argument('--n_h', type=int, default=4, help='Target number of neighbors')
 parser.add_argument('--L', type=float, default=2.0, help='Length of the domain')
 parser.add_argument('--W', type=float, default=4.0, help='Width of the domain')
@@ -181,6 +183,10 @@ schemeConfig.gravityConfig.type = GravityType.Directional
 schemeConfig.gravityConfig.magnitude = args.gravityMagnitude
 schemeConfig.gravityConfig.origin = args.gravityDirection   
 
+# schemeConfig.surfaceDetectionConfig.scheme = SurfaceDetectionScheme.Maronne
+
+# schemeConfig.diffusionParams.densityDiffusionTerm = DensityDiffusionScheme.densityOnly
+
 fluid_sdf = lambda x: sampleDomainSDF(x, domain, invert = True)
 domain_sdf = lambda x: sampleDomainSDF(x, interiorDomain, invert = False)
 
@@ -223,6 +229,12 @@ regions, fluid_sdf, domain_sdf, obstacle_sdf = build_sdfs(config, schemeConfig, 
 
 fluidW = args.fluidWidth * W
 fluidH = args.fillRatio * L
+
+# if args.semiPeriodic:
+#     fluidW = W*1.1
+# if args.fullyPeriodic:
+#     fluidW = W*1.1
+#     fluidH = L*1.1
 
 box_sdf = lambda points: sampleSDF(points, operatorDict['translate'](lambda x: getSDF('box')['function'](x, torch.tensor([fluidW/2,fluidH/2]).to(points.device)), torch.tensor([interiorDomain.min[0]+fluidW/2,interiorDomain.min[1] + fluidH/2]).to(points.device)), invert = False)
 
@@ -342,6 +354,7 @@ if args.enableFreestream:
 
 
 schemeConfig.fluid.fixedSoundSpeed, config.dt = setupWeaklyCompressibleTimestep(config, schemeConfig, compressibleSystem, targetDt, verbose = True)
+# schemeConfig.fluid.fixedSoundSpeed *= 1.5
 # print(f"Computed timestep: {config.dt:.6g}, target timestep: {targetDt:.6g}, diff: {abs(config.dt - targetDt):.6g}")
 
 # ke0 = compressibleSystem.state.masses * torch.linalg.norm(compressibleSystem.state.velocities, dim=1)**2 * 0.5
@@ -365,55 +378,54 @@ exportSimulationSystem(exportPath, 'initialState', scheme, compressibleSystem, e
 }, **extraData))
 
 if args.plot:
-    titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.obstacleActive}'
+    caseText = f'{args.caseName}'
+    timeText = f't = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g}'
+    particleText = f'particles = {len(runningState.state.positions[runningState.state.kinds == 0])} fluid + {len(runningState.state.positions[runningState.state.kinds == 1])} boundary | nx = {nx} | n_h = {n_h}'
+    domainText = f'L = {L}, W = {W}'
+    obstacleText = f'obstacle: {args.obstacleType}, aoa: {args.aoa}' if args.obstacleActive else 'no obstacle'
+    stateText = f'v_max = {runningState.state.velocities.max().cpu().item():.4g} (c0 = {schemeConfig.fluid.fixedSoundSpeed:.4g}), rho_max = {runningState.state.densities.max().cpu().item():.4g}, rho_min = {runningState.state.densities.min().cpu().item():.4g}'
+    timingText = f'iter time: {0.00:.3f} ms'
+
+    titleString = f'{caseText} | {timeText} | {particleText} | {domainText} | {obstacleText} | {stateText} | {timingText}'
 
     markerSize = args.markerSize
-    plotter = visualize(
-        particleState = runningState.state,
-        domain = config.domain,
-        quantities = {
-            "A": runningState.state.velocities,
-            "B":runningState.state.densities,
-            "C":runningState.state.UIDs
-        },
-        plotOptions = {
-            "A": PlottingOptions(
+    velocityPlot = PlottingOptions(
                 colorMap = UniformColorMap.viridis,
                 markerSize = markerSize,
                 midPoint = 0.0,
                 quantityScaling = PlotScaling.Linear,
                 mapping = Mapping.L2Norm,
-                plotTitle = "velocities",
+                plotTitle = "Particle Velocity Magnitude",
                 plotTitleGap = 0.08,
                 boundaryVisualization = VisualizeOptions.Visualize,
                 # gridVisualization = GridVisualization(
                 #     resolution = 512,
                 # ),
                 # vMin=1e-10,
-                vMin = 0.0,
-                vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
-            ),
-            "B": PlottingOptions(
+                # vMin = 0.0,
+                # vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
+            )
+    densityPlot = PlottingOptions(
                 colorMap = DivergingColorMap.RdBu,
                 flipColorMap=True,
                 markerSize = markerSize,
                 midPoint = 1.0,
                 quantityScaling = PlotScaling.Linear,
-                plotTitle = "densities",
+                plotTitle = "Particle Density",
                 vMin = 0.95,
                 vMax = 1.05,
                 plotTitleGap = 0.08,
                 # gridVisualization = GridVisualization(
                 #     resolution = 512,
                 # ),
-            ),
-            "C": PlottingOptions(
+            )
+    UIDPlot = PlottingOptions(
                 colorMap = CyclicColorMap.twilight,
                 # flipColorMap=True,
                 markerSize = markerSize,
                 # midPoint = 1.0,
                 quantityScaling = PlotScaling.Linear,
-                plotTitle = "UIDs",
+                plotTitle = "Particle IDs",
                 # vMin = 0.95,
                 # vMax = 1.05
                 plotTitleGap = 0.08,
@@ -421,10 +433,29 @@ if args.plot:
                 #     resolution = 512,
                 # ),
             )
+
+    plotter = visualize(
+        particleState = runningState.state,
+        domain = config.domain,
+        quantities = {
+            "A": runningState.state.velocities,
+            "B":runningState.state.densities,
+            "C":runningState.state.UIDs
+        } if args.plotDensity else {
+            "A": runningState.state.velocities,
+            "B": runningState.state.UIDs
+        },
+        plotOptions = {
+            "A": velocityPlot,
+            "B": densityPlot,
+            "C": UIDPlot
+        } if args.plotDensity else {
+            "A": velocityPlot,
+            "B": UIDPlot
         },
         figTitle = titleString,
-        mosaic = 'ABC',
-        figsize= (args.plotWidth,5),
+        mosaic = 'ABC' if args.plotDensity else 'AB',
+        figsize= (args.plotWidth,args.plotHeight),
         backend='vispy',
         # backend='pyVista',
         # backendOptions = {
@@ -493,13 +524,25 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
 
     if args.plot and plotter is not None:
         if i % 10 == 0 and i > 0:
-            titleString = f'{args.caseName} | t = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g} | particles = {len(runningState.state.positions)} | nx = {nx} | n_h = {n_h} | L = {L} | W = {W} | obstacle: {args.obstacleActive} | max vel: {torch.linalg.norm(runningState.state.velocities, dim = -1).max():.3g} | iter time: {timing:.3f} ms'
+            caseText = f'{args.caseName}'
+            timeText = f't = {runningState.t:.4g}/{args.timeLimit:.4g} | dt = {config.dt:.4g}'
+            particleText = f'particles = {len(runningState.state.positions[runningState.state.kinds == 0])} fluid + {len(runningState.state.positions[runningState.state.kinds == 1])} boundary | nx = {nx} | n_h = {n_h}'
+            domainText = f'L = {L}, W = {W}'
+            obstacleText = f'obstacle: {args.obstacleType}, aoa: {args.aoa}' if args.obstacleActive else 'no obstacle'
+            stateText = f'v_max = {runningState.state.velocities.max().cpu().item():.4g} (c0 = {schemeConfig.fluid.fixedSoundSpeed:.4g}), rho_max = {runningState.state.densities[runningState.state.kinds == 0].max().cpu().item():.4g}, rho_min = {runningState.state.densities[runningState.state.kinds == 0].min().cpu().item():.4g}'
+            timingText = f'iter time: {timing:.3f} ms'
+
+            titleString = f'{caseText} | {timeText} | {particleText} | {domainText} | {obstacleText} | {stateText} | {timingText}'
+            
             plotter.updateTitle(titleString)
             plotter.updateQuantities(
                 {
                     "A": runningState.state.velocities,
                     "B": runningState.state.densities,
                     "C": runningState.state.UIDs
+                } if args.plotDensity else {
+                    "A": runningState.state.velocities,
+                    "B": runningState.state.UIDs
                 },
                 newParticleState = runningState.state,
             )
@@ -563,7 +606,7 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
 #     'frame_num': i,
 # }))
 
-ffmpeg_cmd = "ffmpeg -y -loglevel error -hide_banner -framerate 50 -f image2 -pattern_type glob -i 'frame_*.png' -c:v libx264 -pix_fmt yuv420p -b:v 10M output.mp4"
+ffmpeg_cmd = "ffmpeg -y -loglevel error -hide_banner -framerate 100 -f image2 -pattern_type glob -i 'frame_*.png' -c:v libx264 -pix_fmt yuv420p -b:v 10M output.mp4"
 subprocess.run(shlex.split(ffmpeg_cmd), check=True, cwd = imagePath)
 ffmpeg_cmd = 'ffmpeg -y -loglevel error -hide_banner -i output.mp4  -vf "fps=50,scale=540:-1:flags=lanczos,palettegen" palette.png'
 subprocess.run(shlex.split(ffmpeg_cmd), check=True, cwd = imagePath)

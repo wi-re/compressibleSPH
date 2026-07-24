@@ -7,7 +7,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 def computeMomentumConsistent_warp(
     state: BaseParticleState,
     config: SimulationConfig,
-    supportScheme: SupportScheme = SupportScheme.Scatter,
+    schemeConfig: Any, 
     adjacency: Optional[AdjacencyList] = None,
     gradH: Optional[GradHState] = None,
 ):
@@ -22,8 +22,9 @@ def computeMomentumConsistent_warp(
             OperationProperties(
                 kernel = config.kernel,
                 operation = WarpOperation.Divergence,
+                supportMode = SupportScheme.SuperSymmetric,
+                operationMode = OperationDirection.AllToAll,
                 gradientMode = GradientScheme.Difference,
-                supportMode = supportScheme,
             ),
             queryValues = state.velocities,
             domain = config.domain,

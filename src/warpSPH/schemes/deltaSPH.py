@@ -28,7 +28,7 @@ def deltaSPH_step(
 
         adjacency = buildVerletList(
             currentState, 
-            config.domain, verletScale = 1.0, supportMode = SupportScheme.SuperSymmetric,
+            config.domain, verletScale = config.verletScale, supportMode = SupportScheme.SuperSymmetric,
             priorNeighborhood = adjacency,
             verbose = False)
         currentSystem.adjacency = adjacency
@@ -100,7 +100,7 @@ def deltaSPH_step(
     # 12. Compute drhodt
     # with TimedBlock('compute drhodt', use_cuda=True, device=config.device) as tb_drhodt:
     with record_function("[warpSPH] - [deltaSPH - 12] - compute drhodt"):
-        drhodt = computeMomentum(currentState, config, schemeConfig, adjacency)
+        drhodt = computeMomentumConsistent(currentState, config, schemeConfig, adjacency)
 
     # 13. Compute dvdt from pressure
     # with TimedBlock('compute dvdt', use_cuda=True, device=config.device) as tb_dvdt:

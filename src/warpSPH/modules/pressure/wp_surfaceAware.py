@@ -89,7 +89,7 @@ def computePressureSurfaceAware_Func_i(
             p_ij = P_j + P_i
         elif pressureTerm == wp.static(wp.int32(PressureForceScheme.Antuono.value)):
             sw = P_i >= 0.0
-            sw = (sw) or (mask_i == 1)
+            sw = (sw) or (mask_i == 1) 
             p_ij = (P_j + P_i) if sw else (P_j - P_i)
         elif pressureTerm == wp.static(wp.int32(PressureForceScheme.i.value)):
             p_ij = P_i

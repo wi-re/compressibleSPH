@@ -21,7 +21,7 @@ def computeCovariance(currentState: Any, config: SimulationConfig, schemeConfig:
             operationProperties = OperationProperties(
                 kernel = config.kernel,
                 operation = WarpOperation.Gradient,
-                operationMode = OperationDirection.AllToAll,
+                operationMode = OperationDirection.FluidToFluid,
                 supportMode = SupportScheme.SuperSymmetric
             ),
             domain = config.domain,
@@ -32,8 +32,8 @@ def computeCovariance(currentState: Any, config: SimulationConfig, schemeConfig:
 
 def computeGradRhoL(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], L: Optional[RenormalizationState]) -> torch.Tensor:
     with record_function("[warpSPH] - (deltaSPH) - computeGradRhoL"):
-        if L is None:
-            C, Evals, L = computeCovariance(currentState, config, schemeConfig, adjacency)
+        # if L is None:
+        C, Evals, L = computeCovariance(currentState, config, schemeConfig, adjacency)
 
         return warpOperation(
                 currentState,
