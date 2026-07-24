@@ -71,6 +71,8 @@ def deltaSPH_step(
         currentState.surfaceIndicators = (fsm > 0.5).to(torch.int32)
         currentState.surfaceNormals = n
         currentState.surfaceLambdas = lMin
+        # print(f'Surface particles: {currentState.surfaceIndicators.sum().item()} / {currentState.surfaceIndicators.shape[0]} ({100 * currentState.surfaceIndicators.sum().item() / currentState.surfaceIndicators.shape[0]:.2f}%)')
+
 
     #9. Compute gradRho and gradRhoL
     # with TimedBlock('compute gradRho', use_cuda=True, device=config.device) as tb_gradRho:

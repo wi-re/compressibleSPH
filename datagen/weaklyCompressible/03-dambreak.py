@@ -402,8 +402,8 @@ if args.plot:
                 #     resolution = 512,
                 # ),
                 # vMin=1e-10,
-                # vMin = 0.0,
-                # vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
+                vMin = 0.0,
+                vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
             )
     densityPlot = PlottingOptions(
                 colorMap = DivergingColorMap.RdBu,
@@ -412,8 +412,8 @@ if args.plot:
                 midPoint = 1.0,
                 quantityScaling = PlotScaling.Linear,
                 plotTitle = "Particle Density",
-                vMin = 0.95,
-                vMax = 1.05,
+                # vMin = 0.95,
+                # vMax = 1.05,
                 plotTitleGap = 0.08,
                 # gridVisualization = GridVisualization(
                 #     resolution = 512,
@@ -510,7 +510,7 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
         config = config,
         schemeConfig = schemeConfig,
         verbose = False,
-        priorStep = priorStep
+        # priorStep = priorStep
     )
     kes.append(torch.sum(0.5 * result.state.state.masses * torch.sum(result.state.state.velocities**2, dim=1)))
     # print('max_vel:', torch.linalg.norm(result.state.state.velocities, dim = -1).max())

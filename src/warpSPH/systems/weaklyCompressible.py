@@ -230,5 +230,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
 
         # print(self.state)
 
+        # print(f'Surface particles: {self.state.surfaceIndicators.sum().item()} / {self.state.surfaceIndicators.shape[0]} ({100 * self.state.surfaceIndicators.sum().item() / self.state.surfaceIndicators.shape[0]:.2f}%)')
+
         return super().finalize(initialState, dt, returnValues, updateValues, weights, *args, **kwargs)
     
