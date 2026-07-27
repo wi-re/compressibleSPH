@@ -92,6 +92,20 @@ parser.add_argument('--semiPeriodic', action='store_true', help='Enable semi-per
 parser.add_argument('--fullyPeriodic', action='store_true', help='Enable fully periodic boundary conditions')
 parser.add_argument('--fluidWidth', type=float, default=5/2 * 1/3, help='Width of the fluid region (default: 4.0)')
 
+parser.add_argument('--enableNoise', action='store_true', help='Enable noise in the initial conditions')
+parser.add_argument('--octaves', type=int, default=3, help='Number of octaves for the noise function')
+parser.add_argument('--lacunarity', type=int, default=2, help='Lacunarity for the noise function')
+parser.add_argument('--persistence', type=float, default=0.5, help='Persistence for the noise function')
+parser.add_argument('--baseFrequency', type=int, default=2, help='Base frequency for the noise function')
+parser.add_argument('--kind', type=str, default='perlin', help='Kind of noise function (perlin, simplex, etc.)')
+parser.add_argument('--seed', type=int, default=45906734, help='Seed for the noise function')
+parser.add_argument('--noiseAmplitude', type=float, default=1.0, help='Amplitude of the noise in the initial conditions')
+parser.add_argument('--bandWidth', type=float, default=32.0, help='Width of the band for the noise function')
+
+parser.add_argument('--enableKolmogorovForcing', action='store_true', help='Enable Kolmogorov forcing')
+parser.add_argument('--kolmogorovForcingAmplitude', type=float, default=0.1, help='Amplitude of the Kolmogorov forcing')
+parser.add_argument('--kolmogorovForcingWavenumber', type=int, default=2, help='Wavenumber of the Kolmogorov forcing')
+
 args = parser.parse_args()
 
 
@@ -183,6 +197,8 @@ schemeConfig.gravityConfig.type = GravityType.Directional
 schemeConfig.gravityConfig.magnitude = args.gravityMagnitude
 schemeConfig.gravityConfig.origin = args.gravityDirection   
 
+schemeConfig.bandwith = L / args.bandWidth / config.dx
+
 # schemeConfig.surfaceDetectionConfig.scheme = SurfaceDetectionScheme.Maronne
 
 # schemeConfig.diffusionParams.densityDiffusionTerm = DensityDiffusionScheme.densityOnly
@@ -271,6 +287,12 @@ compressibleSystem = initializeWeaklyCompressibleSimulation(regions, config, sch
 # compressibleSystem.state.velocities[:,0] =  u_mag * torch.cos(ktgv * compressibleSystem.state.positions[:,0] * np.pi + phaseShift_x) * torch.sin(ktgv * np.pi * compressibleSystem.state.positions[:,1] + phaseShift_y)
 # compressibleSystem.state.velocities[:,1] = -u_mag * torch.sin(ktgv * compressibleSystem.state.positions[:,0] * np.pi + phaseShift_x) * torch.cos(ktgv * np.pi * compressibleSystem.state.positions[:,1] + phaseShift_y)
 
+if args.enableNoise:
+    velocities = sampleDivergenceFreeNoise(compressibleSystem.state, domain, config, schemeConfig, int(nx * 2), 
+                                        octaves = args.octaves, lacunarity = args.lacunarity, persistence = args.persistence, baseFrequency = args.baseFrequency, tileable = True, kind = args.kind, seed = args.seed)
+    compressibleSystem.state.velocities[:] = velocities * args.noiseAmplitude 
+
+schemeConfig.boundaryConditions = []
 
 if args.enableFreestream:
     u_freestream = args.freeStreamVelocity
@@ -336,7 +358,7 @@ if args.enableFreestream:
         forcingFunctions = [ldcForcing]
 
     )
-    schemeConfig.boundaryConditions = [ldcBC]
+    schemeConfig.boundaryConditions.append(ldcBC)
     minBoundaryDistance = torch.ones_like(compressibleSystem.state.positions[:,0]) * np.inf
     for region in regions:
         if region.type == RegionType.Boundary:
@@ -352,6 +374,36 @@ if args.enableFreestream:
 
     compressibleSystem.state.velocities[compressibleSystem.state.kinds == 0,0] += u_freestream * ramped[compressibleSystem.state.kinds == 0]
 
+
+
+xi = args.kolmogorovForcingAmplitude
+k = args.kolmogorovForcingWavenumber
+noiseLevel = 0.01 * xi
+from warpSPH.modules.noise.sampleDivergenceFree import generateNoiseInterpolator
+nxGrid = nx * 2
+
+domain_cpu = buildDomainDescription(L + dx * (band) * 2, dim, True, 'cpu', dtype)
+domain_cpu.min = torch.tensor([-W/2 - dx * (band), -L/2 - dx * (band)], device = 'cpu', dtype = dtype)
+domain_cpu.max = torch.tensor([W/2 + dx * (band), L/2 + dx * (band)], device = 'cpu', dtype = dtype)
+noiseGen = generateNoiseInterpolator(nxGrid, nxGrid, domain_cpu, dim = domain.dim, octaves = args.octaves, lacunarity = args.lacunarity, persistence = args.persistence, baseFrequency = args.baseFrequency, tileable = True, kind = args.kind, seed = args.seed)
+
+
+def forcing(state, config, compParams, x, d, n, t, dt):
+# def forcing(x, mask, state, t, dt):
+    pos = getPeriodicPositions(x, domain)
+    noiseOffset = torch.rand(pos.shape[1], device = device, dtype = dtype) * L - L/2
+    noisePos = getPeriodicPositions(x + noiseOffset, domain)
+    u_x = xi * torch.sin(k * np.pi * pos[:,1])
+    u_y = noiseGen(pos.detach().cpu()).to(dtype = x.dtype, device = x.device) * noiseLevel
+    return torch.stack([u_x, u_y], dim = 1) * state.masses.unsqueeze(1)
+
+if args.enableKolmogorovForcing:
+    kolmogorovForcing = BoundaryCondition(
+        type = BoundaryConditionType.dynamic,
+        sdf = lambda x: fluid_sdf(x),
+        forcingFunctions = [forcing]
+    )
+    schemeConfig.boundaryConditions.append(kolmogorovForcing)
 
 schemeConfig.fluid.fixedSoundSpeed, config.dt = setupWeaklyCompressibleTimestep(config, schemeConfig, compressibleSystem, targetDt, verbose = True)
 # schemeConfig.fluid.fixedSoundSpeed *= 1.5

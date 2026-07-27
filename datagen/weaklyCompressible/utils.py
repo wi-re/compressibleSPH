@@ -273,19 +273,23 @@ def build_sdfs(config, schemeConfig, band, args, domain, interiorDomain, obstacl
     domain_domain = copy.deepcopy(interiorDomain)
 
     if args.semiPeriodic:
-        domain_domain.min[0] *= 1.1
-        domain_domain.max[0] *= 1.1
+        domain_domain.min[0] *= 1.5
+        domain_domain.max[0] *= 1.5
     if args.fullyPeriodic:
-        domain_domain.min[0] *= 1.1
-        domain_domain.max[0] *= 1.1
-        domain_domain.min[1] *= 1.1
-        domain_domain.max[1] *= 1.1
+        domain_domain.min[0] *= 1.5
+        domain_domain.max[0] *= 1.5
+        domain_domain.min[1] *= 1.5
+        domain_domain.max[1] *= 1.5
 
-    obstacle_sdf = buildObstacleSDF(obstacle['obstacleType'], offsetX, offsetY, maxExtent, aspectRatio, aoa, config, schemeConfig, args.L, args.W)
+    if args.obstacleActive:
+        obstacle_sdf = buildObstacleSDF(obstacle['obstacleType'], offsetX, offsetY, maxExtent, aspectRatio, aoa, config, schemeConfig, args.L, args.W)
     domain_sdf = lambda x: domainSDF(x, domain_domain, invert = False)
     # obstacle_sdf = 
 
-    merged_sdf = union(domain_sdf, obstacle_sdf)
+    if args.obstacleActive:
+        merged_sdf = union(domain_sdf, obstacle_sdf)
+    else:
+        merged_sdf = domain_sdf
     domain_sdf = lambda x: sampleSDF(x, merged_sdf, invert=False)
 
     regions = []
@@ -312,4 +316,4 @@ def build_sdfs(config, schemeConfig, band, args, domain, interiorDomain, obstacl
     for region in regions:
         region = filterRegion(region, regions)
 
-    return regions, fluid_sdf, domain_sdf, obstacle_sdf
+    return regions, fluid_sdf, domain_sdf, obstacle_sdf if args.obstacleActive else None
