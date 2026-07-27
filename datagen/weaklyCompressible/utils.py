@@ -113,7 +113,7 @@ def buildPresetObstacles(
         'squareBottom': {
             'maxExtent': maxExtent/2,
             'offsetX': offsetX,
-            'offsetY': -domainL + maxExtent/4,
+            'offsetY': -domainL + maxExtent/3,
             'aspectRatio': 1.0,
             'obstacleType': 'box',
             'aoa': 0.0

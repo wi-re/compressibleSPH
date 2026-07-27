@@ -3,6 +3,7 @@ from ...systems.baseState import *
 from warpSPH.configurations import SimulationConfig
 
 from torch.profiler import profile, record_function, ProfilerActivity
+from typing import Optional, Any
 
 def computeMomentumConsistent_warp(
     state: BaseParticleState,

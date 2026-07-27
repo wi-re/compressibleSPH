@@ -3,6 +3,7 @@
 # Changes to the precision require re-loading the kernel and need to be done before any op uses them.
 import argparse
 
+import h5py
 import sphWarpCore_config as swc
 from typing import Any
 swc.configure(precision="float32", dim=Any) # precision: float16|half|float32|single|float64|double
@@ -109,21 +110,59 @@ targetDt = args.targetDt
 gamma = 5/3
 rho0 = 1
 nu_visc = 0.0005
-freeSurface = True
+freeSurface = True if (not args.semiPeriodic and not args.fullyPeriodic) else False
+freeSurface = True if args.fillRatio < 1.0 else freeSurface
 
 timestamp = getCurrentTimestamp()
 obstacleText = f'obstacle_{args.maxExtent:.4g}_{args.aoa:.4g}_{args.offsetX:.4g}' if args.obstacleActive else 'no_obstacle'
 caseName = f'{args.caseName}/{timestamp}_{nx}_{n_h}_{L}_{W}_{obstacleText}'
 
 extraData = {
-    'nx': nx,
-    'dim': dim,
-    'L': L,
-    'n_h': n_h,
+    'nx': args.nx,
+    'markerSize': args.markerSize,
+    'plotWidth': args.plotWidth,
+    'plotHeight': args.plotHeight,
+    'plotDensity': args.plotDensity,
+    'n_h': args.n_h,
+    'L': args.L,
+    'W': args.W,
 
-    'gamma': gamma,
-    'rho0': rho0,
-    'nu_visc': nu_visc,
+    'timeLimit': args.timeLimit,
+    'enableFreestream': args.enableFreestream,
+    'forcingWidth': args.forcingWidth,
+    'freeStreamVelocity': args.freeStreamVelocity,
+    'band': args.band,
+
+    'targetDt': args.targetDt,
+
+    'caseName': args.caseName,
+    'plot': args.plot,
+    'plotInterval': args.plotInterval,
+
+    'disableGravity': args.disableGravity,
+    'gravityDirection': args.gravityDirection,
+    'gravityMagnitude': args.gravityMagnitude,
+
+    'enableSloshing': args.enableSloshing,
+    'sloshingAmplitude': args.sloshingAmplitude,
+    'sloshingFrequency': args.sloshingFrequency,
+
+    'obstacleActive': args.obstacleActive,
+    'obstacleType': args.obstacleType,
+
+    'offsetX': args.offsetX,
+    'aoa': args.aoa,
+    'maxExtent': args.maxExtent,
+
+    'fillRatio': args.fillRatio,
+    'semiPeriodic': args.semiPeriodic,
+    'fullyPeriodic': args.fullyPeriodic,
+    'fluidWidth': args.fluidWidth,
+
+    'freeSurface': freeSurface,
+    'timestamp': timestamp,
+    'obstacleText': obstacleText,
+    'caseNameFull': caseName,
 }
 
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
@@ -148,6 +187,14 @@ interiorDomain.min = torch.tensor([-W/2, -L/2], device = device, dtype = dtype)
 interiorDomain.max = torch.tensor([W/2, L/2], device = device, dtype = dtype)
 
 
+# extraData['domain'] = {
+#     'min': domain.min.cpu().numpy().tolist(),
+#     'max': domain.max.cpu().numpy().tolist(),
+#     'interiorMin': interiorDomain.min.cpu().numpy().tolist(),
+#     'interiorMax': interiorDomain.max.cpu().numpy().tolist(),
+# }
+
+
 config, integrator = buildConfig(
     domain = domain,
     dim = dim,
@@ -169,6 +216,24 @@ config.dx = dx
 
 config.minDt = 1e-8
 # config.dx = L / (nx * 2)
+
+extraData['config'] = {
+    'domain_min': config.domain.min.cpu().numpy().tolist(),
+    'domain_max': config.domain.max.cpu().numpy().tolist(),
+    'dim': config.dim,
+    'kernel': config.kernel.name,
+    'targetNeighbors': config.targetNeighbors,
+    'supportMode': config.supportMode.name,
+    'gradientMode': config.gradientMode.name,
+    'laplacianMode': config.laplacianMode.name,
+    'integrationScheme': config.integrationScheme.name,
+    'samplingScheme': config.samplingScheme.name,
+    'device': str(config.device),
+    'dtype': str(config.dtype),
+    # 'dt': config.dt,
+    'adaptiveDt': config.adaptiveDt,
+    'cflFactor': config.cflFactor,
+}
 
 scheme = WeaklyCompressibleSPHScheme.deltaSPH
 SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, export_fn, import_fn = buildScheme(scheme)
@@ -354,7 +419,7 @@ if args.enableFreestream:
 
 
 schemeConfig.fluid.fixedSoundSpeed, config.dt = setupWeaklyCompressibleTimestep(config, schemeConfig, compressibleSystem, targetDt, verbose = True)
-# schemeConfig.fluid.fixedSoundSpeed *= 1.5
+schemeConfig.fluid.fixedSoundSpeed *= 1.25
 # print(f"Computed timestep: {config.dt:.6g}, target timestep: {targetDt:.6g}, diff: {abs(config.dt - targetDt):.6g}")
 
 # ke0 = compressibleSystem.state.masses * torch.linalg.norm(compressibleSystem.state.velocities, dim=1)**2 * 0.5
@@ -376,6 +441,8 @@ exportPath = prepExport(f'{caseName}', config, schemeConfig, scheme, export_fn)
 exportSimulationSystem(exportPath, 'initialState', scheme, compressibleSystem, exportAdjacency = False, stages = None, exportStagesAdjacency = False, extraData = dict({
     'frame_num': 0,
 }, **extraData))
+
+
 
 if args.plot:
     caseText = f'{args.caseName}'
@@ -497,6 +564,81 @@ nSteps = int(t_limit / config.dt)
 
 runningState = compressibleSystem.initializeNewState()
 
+outFolderPath = f'{exportPath}/trajectory/'
+os.makedirs(outFolderPath, exist_ok=True)
+outFile = h5py.File(f'{exportPath}/trajectory.h5', 'w')
+
+outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme
+outFile.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+outFile.create_group('states')
+outFile.create_group('stages')
+
+
+uniqueParticles = True
+writeStages = False
+
+for key, value in extraData.items():
+    if not isinstance(value, dict):
+        print(f'Writing attribute: {key} = {value}')
+        outFile.attrs[key] = value
+    else:
+        print(f'Writing nested attributes for: {key}')
+        for subkey, subvalue in value.items():
+            if isinstance(subvalue, (list, np.ndarray)):
+                print(f'Writing attribute: {key}_{subkey} = {subvalue}')
+                outFile.attrs[f'{key}_{subkey}'] = np.array(subvalue)
+            else:
+                print(f'Writing attribute: {key}_{subkey} = {subvalue}')
+                outFile.attrs[f'{key}_{subkey}'] = subvalue
+
+outFile.attrs['uniqueParticles'] = uniqueParticles
+
+initialStateGroup = outFile.create_group('initialState')
+initialStateGroup.create_dataset('positions', data=runningState.state.positions.cpu().numpy())
+initialStateGroup.create_dataset('velocities', data=runningState.state.velocities.cpu().numpy())
+initialStateGroup.create_dataset('densities', data=runningState.state.densities.cpu().numpy())
+initialStateGroup.create_dataset('masses', data=runningState.state.masses.cpu().numpy())
+initialStateGroup.create_dataset('supports', data=runningState.state.supports.cpu().numpy())
+initialStateGroup.create_dataset('kinds', data=runningState.state.kinds.cpu().numpy())
+initialStateGroup.create_dataset('UIDs', data=runningState.state.UIDs.cpu().numpy())
+initialStateGroup.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+
+
+initialStateGroupBytes = 0
+print('#'*80)
+print(f'Initial state group datasets:')
+for name, dataset in initialStateGroup.items():
+    print(f'\tDataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
+    initialStateGroupBytes += dataset.nbytes
+print(f'Initial state group size: {initialStateGroupBytes / (1024**2):.2f} MB')
+print('#'*80)
+
+def writeFrame(i, state, stages, uniqueParticles = True, writeStages = False):
+    frameGroup = outFile['states'].create_group(f'frame_{i:05d}')
+    stageGroup = outFile['stages'].create_group(f'frame_{i:05d}')
+
+    frameGroup.attrs['time'] = state.t if isinstance(state.t, float) else state.t.cpu().item()
+    frameGroup.attrs['num_particles'] = len(state.state.positions)
+    frameGroup.attrs['num_fluid_particles'] = len(state.state.positions[state.state.kinds == 0])
+    frameGroup.attrs['num_boundary_particles'] = len(state.state.positions[state.state.kinds == 1])
+
+    frameGroup.create_dataset('positions', data=state.state.positions.cpu().numpy())
+    frameGroup.create_dataset('velocities', data=state.state.velocities.cpu().numpy())
+    frameGroup.create_dataset('densities', data=state.state.densities.cpu().numpy())
+
+    if not(uniqueParticles):
+        frameGroup.create_dataset('masses', data=state.state.masses.cpu().numpy())
+        frameGroup.create_dataset('supports', data=state.state.supports.cpu().numpy())
+        frameGroup.create_dataset('kinds', data=state.state.kinds.cpu().numpy())
+
+        frameGroup.create_dataset('UIDs', data=state.state.UIDs.cpu().numpy())
+
+    if writeStages:
+        for j, stage in enumerate(stages):
+            stageGroup.create_dataset(f'stage_{j:02d}_positions', data=stage.update.dxdt.cpu().numpy())
+            stageGroup.create_dataset(f'stage_{j:02d}_velocities', data=stage.update.dvdt.cpu().numpy())
+            stageGroup.create_dataset(f'stage_{j:02d}_densities', data=stage.update.drhodt.cpu().numpy())
+
 kes = []
 priorStep = None
 for i in (tq := tqdm(range(nSteps), leave = False)):
@@ -518,6 +660,36 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
     torch.cuda.synchronize()
     priorStep = result.stages[-1]
     timing = begin.elapsed_time(end)
+
+    writeFrame(i, result.state, result.stages, uniqueParticles = uniqueParticles, writeStages = writeStages)
+    if i == 0:
+        print('#'*80)
+        print(f'Wrote initial frame to trajectory file: {outFile.filename}')
+        initialFrameDatasetBytes = 0
+        print(f'Initial state group datasets:')
+        for name, dataset in outFile['states'][f'frame_{i:05d}'].items():
+            print(f'\tDataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
+            initialFrameDatasetBytes += dataset.nbytes
+        print(f'Initial frame dataset size: {initialFrameDatasetBytes / (1024**2):.2f} MB')
+
+
+        initialFrameStageDatasetBytes = 0
+        if writeStages:
+            print(f'Initial stage group datasets:')
+            for name, dataset in outFile['stages'][f'frame_{i:05d}'].items():
+                print(f'\tStage Dataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
+                initialFrameStageDatasetBytes += dataset.nbytes
+            print(f'Initial frame stage dataset size: {initialFrameStageDatasetBytes / (1024**2):.2f} MB')
+
+            print('Ratio of stage dataset size to frame dataset size: {:.2f}'.format(initialFrameStageDatasetBytes / initialFrameDatasetBytes))
+            print('\n')
+
+        estimatedTotalBytes = initialFrameDatasetBytes * nSteps + initialFrameStageDatasetBytes * nSteps + initialStateGroupBytes
+        print(f'Estimated total trajectory file size: {estimatedTotalBytes / (1024**2):.2f} MB ({estimatedTotalBytes / (1024**3):.2f} GB)\n')
+
+        print('#'*80)
+
+
 
     runningState = result.state
     t = runningState.t
@@ -557,6 +729,23 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
         break
 
 
+finalStateGroup = outFile.create_group('finalState')
+
+finalStateGroup.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+finalStateGroup.attrs['num_particles'] = len(runningState.state.positions)
+finalStateGroup.attrs['num_fluid_particles'] = len(runningState.state.positions[runningState.state.kinds == 0])
+finalStateGroup.attrs['num_boundary_particles'] = len(runningState.state.positions[runningState.state.kinds == 1])
+
+finalStateGroup.create_dataset('positions', data=runningState.state.positions.cpu().numpy())
+finalStateGroup.create_dataset('velocities', data=runningState.state.velocities.cpu().numpy())
+finalStateGroup.create_dataset('densities', data=runningState.state.densities.cpu().numpy())
+
+if not(uniqueParticles):
+    finalStateGroup.create_dataset('masses', data=runningState.state.masses.cpu().numpy())
+    finalStateGroup.create_dataset('supports', data=runningState.state.supports.cpu().numpy())
+    finalStateGroup.create_dataset('kinds', data=runningState.state.kinds.cpu().numpy())
+
+    finalStateGroup.create_dataset('UIDs', data=runningState.state.UIDs.cpu().numpy())
 
 # ts = np.arange(len(kes)) * config.dt.cpu().item()
 # kineticEnergy = np.array([ke.cpu().item() for ke in kes])

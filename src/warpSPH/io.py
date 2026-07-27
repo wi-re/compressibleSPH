@@ -95,6 +95,7 @@ def exportSimulationSystem(
         if isinstance(value, dict):
             extraGroup = outFile.create_group(f'dict_{key}')
             for subKey, subValue in value.items():
+                # print(f'Exporting extra data key {key}[{subKey}] with value {subValue} of type {type(subValue)}')
                 if isinstance(subValue, torch.Tensor):
                     extraGroup.create_dataset(subKey, data=subValue.cpu().numpy())
                 else:
