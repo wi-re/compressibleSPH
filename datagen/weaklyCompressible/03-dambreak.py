@@ -177,6 +177,20 @@ extraData = {
     'timestamp': timestamp,
     'obstacleText': obstacleText,
     'caseNameFull': caseName,
+
+    "enableNoise": args.enableNoise,
+    "octaves": args.octaves,
+    "lacunarity": args.lacunarity,
+    "persistence": args.persistence,
+    "baseFrequency": args.baseFrequency,
+    "kind": args.kind,
+    "seed": args.seed,
+    "noiseAmplitude": args.noiseAmplitude,
+    "bandWidth": args.bandWidth,
+
+    "enableKolmogorovForcing": args.enableKolmogorovForcing,
+    "kolmogorovForcingAmplitude": args.kolmogorovForcingAmplitude,
+    "kolmogorovForcingWavenumber": args.kolmogorovForcingWavenumber,
 }
 
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
