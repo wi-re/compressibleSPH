@@ -1,5 +1,5 @@
 
-__version__ = "0.3.3"
+__version__ = "0.4.5"
 
 # from .casefile import argparse_defaults_from_casefile, build_configs_from_casefile, load_casefile
 # from .shape_generation import populateSourceObstacleGridsStructured, sampleShapeStructured

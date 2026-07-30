@@ -101,10 +101,10 @@ parser.add_argument('--baseFrequency', type=int, default=2, help='Base frequency
 parser.add_argument('--kind', type=str, default='perlin', help='Kind of noise function (perlin, simplex, etc.)')
 parser.add_argument('--seed', type=int, default=45906734, help='Seed for the noise function')
 parser.add_argument('--noiseAmplitude', type=float, default=1.0, help='Amplitude of the noise in the initial conditions')
-parser.add_argument('--bandWidth', type=float, default=32.0, help='Width of the band for the noise function')
+parser.add_argument('--bandWidth', type=float, default=16.0, help='Width of the band for the noise function')
 
 parser.add_argument('--enableKolmogorovForcing', action='store_true', help='Enable Kolmogorov forcing')
-parser.add_argument('--kolmogorovForcingAmplitude', type=float, default=0.1, help='Amplitude of the Kolmogorov forcing')
+parser.add_argument('--kolmogorovForcingAmplitude', type=float, default=1/3, help='Amplitude of the Kolmogorov forcing')
 parser.add_argument('--kolmogorovForcingWavenumber', type=int, default=2, help='Wavenumber of the Kolmogorov forcing')
 
 args = parser.parse_args()
@@ -276,6 +276,7 @@ schemeConfig.gravityConfig.type = GravityType.Directional
 schemeConfig.gravityConfig.magnitude = args.gravityMagnitude
 schemeConfig.gravityConfig.origin = args.gravityDirection   
 
+# if args.enableNoise:
 schemeConfig.bandwith = L / args.bandWidth / config.dx
 
 # schemeConfig.surfaceDetectionConfig.scheme = SurfaceDetectionScheme.Maronne
@@ -535,8 +536,8 @@ if args.plot:
                 #     resolution = 512,
                 # ),
                 # vMin=1e-10,
-                vMin = 0.0,
-                vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
+                # vMin = 0.0,
+                # vMax = schemeConfig.fluid.fixedSoundSpeed * 0.1,
             )
     densityPlot = PlottingOptions(
                 colorMap = DivergingColorMap.RdBu,
@@ -613,15 +614,20 @@ alpha = nuToAlpha(schemeConfig.diffusionParams.viscidNu, schemeConfig.fluid.fixe
 
 print(f'Using inviscid: {schemeConfig.diffusionParams.inviscid}, nu: {nu:.6g}, alpha: {alpha:.6g}')
 
+schemeConfig.diffusionParams.inviscidAlpha = 0.01
 
-# Re = u_mag / nu * (domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2
-# print(f"Reynolds number: {Re:.6g}\nnu: {nu:.6g} (alpha: {alpha:.6g})\nu_mag: {u_mag:.6g}, L: {(domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2:.6g}")
-# if alpha < 0.01:
-#     print(f'Running with a viscosity of alpha < 0.01 may result in unstable simulations.')
+u_mag = torch.linalg.norm(compressibleSystem.state.velocities, dim=1).max().cpu().item()
+ReL = (domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2
+ReL = args.maxExtent if args.obstacleActive else L
 
-# nu_limit = alphaToNu(0.01, schemeConfig.fluid.fixedSoundSpeed, compressibleSystem.state.supports.mean().cpu().item(), config.dim)
-# Re_limit = u_mag / nu_limit * (domain.max[0].cpu().item() - domain.min[0].cpu().item()) / 2
-# print(f'Reynolds limit based on alpha = 0.01, nu = {nu_limit:.6g}, Re = {Re_limit:.6g}')
+Re = u_mag / nu * ReL
+print(f"Reynolds number: {Re:.6g}\nnu: {nu:.6g} (alpha: {alpha:.6g})\nu_mag: {u_mag:.6g}, L: {ReL:.6g}")
+if alpha < 0.01:
+    print(f'Running with a viscosity of alpha < 0.01 may result in unstable simulations.')
+
+nu_limit = alphaToNu(0.01, schemeConfig.fluid.fixedSoundSpeed, compressibleSystem.state.supports.mean().cpu().item(), config.dim)
+Re_limit = u_mag / nu_limit * ReL
+print(f'Reynolds limit based on alpha = 0.01, nu = {nu_limit:.6g}, Re = {Re_limit:.6g}')
 
 
 
@@ -667,8 +673,16 @@ initialStateGroup.create_dataset('masses', data=runningState.state.masses.cpu().
 initialStateGroup.create_dataset('supports', data=runningState.state.supports.cpu().numpy())
 initialStateGroup.create_dataset('kinds', data=runningState.state.kinds.cpu().numpy())
 initialStateGroup.create_dataset('UIDs', data=runningState.state.UIDs.cpu().numpy())
-initialStateGroup.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+if runningState.state.ghostIndices is not None:
+    initialStateGroup.create_dataset('ghostIndices', data=runningState.state.ghostIndices.cpu().numpy())
+if runningState.state.ghostOffsets is not None:
+    initialStateGroup.create_dataset('ghostOffsets', data=runningState.state.ghostOffsets.cpu().numpy())
 
+initialStateGroup.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+initialStateGroup.attrs['num_particles'] = len(runningState.state.positions)
+initialStateGroup.attrs['num_fluid_particles'] = len(runningState.state.positions[runningState.state.kinds == 0])
+initialStateGroup.attrs['num_boundary_particles'] = len(runningState.state.positions[runningState.state.kinds == 1])
+initialStateGroup.attrs['dt'] = config.dt if isinstance(config.dt, float) else config.dt.cpu().item()
 
 initialStateGroupBytes = 0
 print('#'*80)
@@ -687,6 +701,7 @@ def writeFrame(i, state, stages, uniqueParticles = True, writeStages = False):
     frameGroup.attrs['num_particles'] = len(state.state.positions)
     frameGroup.attrs['num_fluid_particles'] = len(state.state.positions[state.state.kinds == 0])
     frameGroup.attrs['num_boundary_particles'] = len(state.state.positions[state.state.kinds == 1])
+    frameGroup.attrs['dt'] = config.dt if isinstance(config.dt, float) else config.dt.cpu().item()
 
     frameGroup.create_dataset('positions', data=state.state.positions.cpu().numpy())
     frameGroup.create_dataset('velocities', data=state.state.velocities.cpu().numpy())
@@ -727,33 +742,34 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
     priorStep = result.stages[-1]
     timing = begin.elapsed_time(end)
 
-    writeFrame(i, result.state, result.stages, uniqueParticles = uniqueParticles, writeStages = writeStages)
-    if i == 0:
-        print('#'*80)
-        print(f'Wrote initial frame to trajectory file: {outFile.filename}')
-        initialFrameDatasetBytes = 0
-        print(f'Initial state group datasets:')
-        for name, dataset in outFile['states'][f'frame_{i:05d}'].items():
-            print(f'\tDataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
-            initialFrameDatasetBytes += dataset.nbytes
-        print(f'Initial frame dataset size: {initialFrameDatasetBytes / (1024**2):.2f} MB')
+    if i % 50 == 0:
+        writeFrame(i, result.state, result.stages, uniqueParticles = uniqueParticles, writeStages = writeStages)
+        if i == 0:
+            print('#'*80)
+            print(f'Wrote initial frame to trajectory file: {outFile.filename}')
+            initialFrameDatasetBytes = 0
+            print(f'Initial state group datasets:')
+            for name, dataset in outFile['states'][f'frame_{i:05d}'].items():
+                print(f'\tDataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
+                initialFrameDatasetBytes += dataset.nbytes
+            print(f'Initial frame dataset size: {initialFrameDatasetBytes / (1024**2):.2f} MB')
 
 
-        initialFrameStageDatasetBytes = 0
-        if writeStages:
-            print(f'Initial stage group datasets:')
-            for name, dataset in outFile['stages'][f'frame_{i:05d}'].items():
-                print(f'\tStage Dataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
-                initialFrameStageDatasetBytes += dataset.nbytes
-            print(f'Initial frame stage dataset size: {initialFrameStageDatasetBytes / (1024**2):.2f} MB')
+            initialFrameStageDatasetBytes = 0
+            if writeStages:
+                print(f'Initial stage group datasets:')
+                for name, dataset in outFile['stages'][f'frame_{i:05d}'].items():
+                    print(f'\tStage Dataset: {name}, shape: {dataset.shape}, dtype: {dataset.dtype}, size: {dataset.nbytes / (1024**2):.2f} MB')
+                    initialFrameStageDatasetBytes += dataset.nbytes
+                print(f'Initial frame stage dataset size: {initialFrameStageDatasetBytes / (1024**2):.2f} MB')
 
-            print('Ratio of stage dataset size to frame dataset size: {:.2f}'.format(initialFrameStageDatasetBytes / initialFrameDatasetBytes))
-            print('\n')
+                print('Ratio of stage dataset size to frame dataset size: {:.2f}'.format(initialFrameStageDatasetBytes / initialFrameDatasetBytes))
+                print('\n')
 
-        estimatedTotalBytes = initialFrameDatasetBytes * nSteps + initialFrameStageDatasetBytes * nSteps + initialStateGroupBytes
-        print(f'Estimated total trajectory file size: {estimatedTotalBytes / (1024**2):.2f} MB ({estimatedTotalBytes / (1024**3):.2f} GB)\n')
+            estimatedTotalBytes = initialFrameDatasetBytes * nSteps + initialFrameStageDatasetBytes * nSteps + initialStateGroupBytes
+            print(f'Estimated total trajectory file size: {estimatedTotalBytes / (1024**2):.2f} MB ({estimatedTotalBytes / (1024**3):.2f} GB)\n')
 
-        print('#'*80)
+            print('#'*80)
 
 
 
@@ -767,7 +783,7 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
             particleText = f'particles = {len(runningState.state.positions[runningState.state.kinds == 0])} fluid + {len(runningState.state.positions[runningState.state.kinds == 1])} boundary | nx = {nx} | n_h = {n_h}'
             domainText = f'L = {L}, W = {W}'
             obstacleText = f'obstacle: {args.obstacleType}, aoa: {args.aoa}' if args.obstacleActive else 'no obstacle'
-            stateText = f'v_max = {runningState.state.velocities.max().cpu().item():.4g} (c0 = {schemeConfig.fluid.fixedSoundSpeed:.4g}), rho_max = {runningState.state.densities[runningState.state.kinds == 0].max().cpu().item():.4g}, rho_min = {runningState.state.densities[runningState.state.kinds == 0].min().cpu().item():.4g}'
+            stateText = f'v_max = {torch.linalg.norm(runningState.state.velocities, dim=-1).max().cpu().item():.4g} (c0 = {schemeConfig.fluid.fixedSoundSpeed:.4g}), rho_max = {runningState.state.densities[runningState.state.kinds == 0].max().cpu().item():.4g}, rho_min = {runningState.state.densities[runningState.state.kinds == 0].min().cpu().item():.4g}'
             timingText = f'iter time: {timing:.3f} ms'
 
             titleString = f'{caseText} | {timeText} | {particleText} | {domainText} | {obstacleText} | {stateText} | {timingText}'
