@@ -107,26 +107,26 @@ def deltaSPH_step(
     # 13. Compute dvdt from pressure
     # with TimedBlock('compute dvdt', use_cuda=True, device=config.device) as tb_dvdt:
     with record_function("[warpSPH] - [deltaSPH - 13] - compute dvdt from pressure"):
-        dvdt = computePressureForceSurfaceAware(currentState, config, schemeConfig, adjacency)
+        dvdt_pressure = computePressureForceSurfaceAware(currentState, config, schemeConfig, adjacency)
 
     # 14. Apply forcing
     # with TimedBlock('compute forcing', use_cuda=True, device=config.device) as tb_forcing:
     with record_function("[warpSPH] - [deltaSPH - 14] - compute forcing"):
         forcing = computeForcing(currentSystem, config.dt, currentSystem.t, config, schemeConfig)
-        dvdt += forcing / currentState.masses.view(-1,1)
+        dvdt_forcing = forcing / currentState.masses.view(-1,1)
 
 
     # 15. Compute gravity
     # with TimedBlock('compute gravity', use_cuda=True, device=config.device) as tb_gravity:
     with record_function("[warpSPH] - [deltaSPH - 15] - compute gravity"):
         gravity = computeGravity(currentState, config, schemeConfig, adjacency)
-        dvdt += gravity
+        dvdt_gravity = gravity
 
     # Revert boundary velocity
     # with TimedBlock('compute mDBC no-pen shift', use_cuda=True, device=config.device) as tb_nopenshift:
     with record_function("[warpSPH] - [deltaSPH - 16] - compute mDBC no-pen shift"):
         nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
-        dvdt += nopenshift / dt
+        dvdt_nopenshift = nopenshift / dt
     # currentState.velocities = currentVelocities
 
     # 16. build update
@@ -134,7 +134,7 @@ def deltaSPH_step(
     with record_function("[warpSPH] - [deltaSPH - 16] - build update"):
         update = WeaklyCompressibleSystemUpdate(
             dxdt = currentState.velocities.clone(),
-            dvdt = dvdt + dvdt_diss,
+            dvdt = dvdt_pressure + dvdt_forcing + dvdt_gravity + dvdt_nopenshift + dvdt_diss,
             drhodt = drhodt + drhodt_diss,
             passive = torch.zeros(currentState.densities.shape, device=currentState.densities.device, dtype=torch.bool)
         )

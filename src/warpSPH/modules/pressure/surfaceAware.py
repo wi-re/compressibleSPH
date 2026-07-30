@@ -15,7 +15,7 @@ from .wp_surfaceAware import computePressureSurfaceAwareWarp
 
 def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     with record_function("[warpSPH] - computePressureForceSurfaceAware"):
-        dvdt = - computePressureSurfaceAwareWarp(
+        dvdt = computePressureSurfaceAwareWarp(
             currentState,
             operationProperties = OperationProperties(
                 kernel = config.kernel,
@@ -26,5 +26,5 @@ def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig
             queryPressures = currentState.pressures,
             pressureTerm = schemeConfig.pressureForceTerm,
             querySurfaceMask = currentState.surfaceIndicators,
-        ) / currentState.densities.view(-1,1)
+        )
         return dvdt

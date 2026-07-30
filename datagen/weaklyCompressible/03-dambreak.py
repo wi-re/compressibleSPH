@@ -722,6 +722,9 @@ def writeFrame(i, state, stages, uniqueParticles = True, writeStages = False):
 
 kes = []
 priorStep = None
+plotTiming = 0.0
+exportTiming = 0.0
+import time
 for i in (tq := tqdm(range(nSteps), leave = False)):
     begin = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
@@ -742,6 +745,7 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
     priorStep = result.stages[-1]
     timing = begin.elapsed_time(end)
 
+    cpuBeginExport = time.time()
     if i % 50 == 0:
         writeFrame(i, result.state, result.stages, uniqueParticles = uniqueParticles, writeStages = writeStages)
         if i == 0:
@@ -770,12 +774,14 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
             print(f'Estimated total trajectory file size: {estimatedTotalBytes / (1024**2):.2f} MB ({estimatedTotalBytes / (1024**3):.2f} GB)\n')
 
             print('#'*80)
-
+        cpuEndExport = time.time()
+        exportTiming = (cpuEndExport - cpuBeginExport) * 1000.0
 
 
     runningState = result.state
     t = runningState.t
 
+    plotBegin = time.time()
     if args.plot and plotter is not None:
         if i % 10 == 0 and i > 0:
             caseText = f'{args.caseName}'
@@ -801,9 +807,11 @@ for i in (tq := tqdm(range(nSteps), leave = False)):
                 newParticleState = runningState.state,
             )
             plotter.export(f'{imagePath}/frame_{i:05d}.png', dpi = 300)
+            plotEnd = time.time()
+            plotTiming = (plotEnd - plotBegin) * 1000.0
             
     maxVel = torch.linalg.norm(runningState.state.velocities, dim = -1).max()
-    tq.set_description(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{t_limit:8.4g} | max vel: {maxVel:.3g} | iter time: {timing:.3f} ms")
+    tq.set_description(f"Step {i+1}/{nSteps}, time: {(i+1)*config.dt:8.4g}/{t_limit:8.4g} | max vel: {maxVel:.3g} | iter time: {timing:.3f} ms | export time: {exportTiming:.3f} ms | plot time: {plotTiming:.3f} ms")
     # t = {runningState.t:2f}, dt = {config.dt:.3g}, ptcls = {len(runningState.state.positions)}\nTotal Energy: {totalEnergy:.3g}, Kinetic Energy: {kineticEnergy:.3g}, Thermal Energy: {thermalEnergy:.3g}'
     # break
     if torch.any(torch.isnan(runningState.state.velocities)):

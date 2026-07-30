@@ -205,7 +205,7 @@ def computePressureSurfaceAware_Kernel(
     if i >= numParticles:
         return
 
-    outputValues[i] = computePressureSurfaceAware_Func_Adjacency(
+    outputValues[i] = -computePressureSurfaceAware_Func_Adjacency(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
@@ -216,7 +216,7 @@ def computePressureSurfaceAware_Kernel(
         pressureTerm,
 
         zero_like_warp(outputValues)
-    )
+    ) / queryState.densities[i]
 
 
 def computePressureSurfaceAwareWarp(

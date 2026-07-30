@@ -12,6 +12,7 @@ def interpolateLiuLiu(
     referenceParticles: Any,
     referenceQuantities: torch.Tensor,
     config: SimulationConfig,
+    adjacency: AdjacencyList = None,
     neighbor_threshold: int = 4,
     direction: OperationDirection = OperationDirection.AllToAll,
     supportScale: float = 1.0
@@ -30,6 +31,7 @@ def interpolateLiuLiu(
                 operationMode = direction,
             ),
             domain = config.domain,
+            adjacency = adjacency
         )
         referenceParticles.supports = h
 
