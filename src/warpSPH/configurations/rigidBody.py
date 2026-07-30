@@ -2,6 +2,27 @@ from .moduleConfigurations.boundaryConditions import BoundaryCondition, Boundary
 import torch
 from dataclasses import dataclass, field
 
+from typing import Callable, List, Tuple, Dict, Any
+import os, pickle
+import dill
+import codecs
+
+def _encode_callable(fn: Callable) -> str:
+    # dill can serialize local lambdas/closures used in case builders.
+    return codecs.encode(dill.dumps(fn), 'base64').decode()
+
+
+def _decode_callable(encoded_fn: str) -> Callable:
+    raw = codecs.decode(encoded_fn.encode(), 'base64')
+    try:
+        return dill.loads(raw)
+    except Exception:
+        # Backward compatibility for configs written with pickle.
+        return pickle.loads(raw)
+
+
+
+
 @dataclass(slots = True)
 class RigidBody:
     centerOfMass: torch.Tensor
@@ -30,3 +51,54 @@ class RigidBody:
     sdf: callable
     bodyID: int = 0  
     kind: BCType = BCType.constant
+
+    def toDict(self) -> dict:
+        return {
+            'centerOfMass': self.centerOfMass.detach().cpu().numpy().tolist(),
+            'orientation': self.orientation.detach().cpu().numpy().tolist(),
+            'angularVelocity': self.angularVelocity.detach().cpu().numpy().tolist(),
+            'linearVelocity': self.linearVelocity.detach().cpu().numpy().tolist(),
+            'mass': self.mass.detach().cpu().numpy().tolist(),
+            'inertia': self.inertia.detach().cpu().numpy().tolist(),
+            # 'particlePositions': self.particlePositions.detach().cpu().numpy().tolist(),
+            # 'particleVelocities': self.particleVelocities.detach().cpu().numpy().tolist(),
+            # 'particleMasses': self.particleMasses.detach().cpu().numpy().tolist(),
+            # 'particleUIDs': self.particleUIDs.detach().cpu().numpy().tolist(),
+            # 'particleIndices': self.particleIndices.detach().cpu().numpy().tolist(),
+            # 'particleBoundaryDistances': self.particleBoundaryDistances.detach().cpu().numpy().tolist(),
+            # 'particleBoundaryNormals': self.particleBoundaryNormals.detach().cpu().numpy().tolist(),
+            # 'ghostParticlePositions': self.ghostParticlePositions.detach().cpu().numpy().tolist(),
+            # 'ghostParticleIndices': self.ghostParticleIndices.detach().cpu().numpy().tolist(),
+            # 'ghostParticleUIDs': self.ghostParticleUIDs.detach().cpu().numpy().tolist(),
+            # 'ghostParticleBoundaryDistances': self.ghostParticleBoundaryDistances.detach().cpu().numpy().tolist(),
+            # 'ghostParticleBoundaryNormals': self.ghostParticleBoundaryNormals.detach().cpu().numpy().tolist(),
+            'sdf': _encode_callable(self.sdf),
+            'bodyID': self.bodyID,
+            'kind': self.kind.name
+        }
+
+    @staticmethod
+    def fromDict(bodyDict: dict) -> 'RigidBody':
+        return RigidBody(
+            centerOfMass=torch.tensor(bodyDict['centerOfMass']),
+            orientation=torch.tensor(bodyDict['orientation']),
+            angularVelocity=torch.tensor(bodyDict['angularVelocity']),
+            linearVelocity=torch.tensor(bodyDict['linearVelocity']),
+            mass=torch.tensor(bodyDict['mass']),
+            inertia=torch.tensor(bodyDict['inertia']),
+            # particlePositions=torch.tensor(bodyDict['particlePositions']),
+            # particleVelocities=torch.tensor(bodyDict['particleVelocities']),
+            # particleMasses=torch.tensor(bodyDict['particleMasses']),
+            # particleUIDs=torch.tensor(bodyDict['particleUIDs']),
+            # particleIndices=torch.tensor(bodyDict['particleIndices']),
+            # particleBoundaryDistances=torch.tensor(bodyDict['particleBoundaryDistances']),
+            # particleBoundaryNormals=torch.tensor(bodyDict['particleBoundaryNormals']),
+            # ghostParticlePositions=torch.tensor(bodyDict['ghostParticlePositions']),
+            # ghostParticleIndices=torch.tensor(bodyDict['ghostParticleIndices']),
+            # ghostParticleUIDs=torch.tensor(bodyDict['ghostParticleUIDs']),
+            # ghostParticleBoundaryDistances=torch.tensor(bodyDict['ghostParticleBoundaryDistances']),
+            ghostParticleBoundaryNormals=torch.tensor(bodyDict['ghostParticleBoundaryNormals']),
+            sdf=_decode_callable(bodyDict['sdf']),
+            bodyID=bodyDict.get('bodyID', 0),
+            kind=BCType[bodyDict.get('kind', BCType.constant.name)] if isinstance(bodyDict.get('kind', BCType.constant.name), str) else bodyDict.get('kind', BCType.constant)
+        )

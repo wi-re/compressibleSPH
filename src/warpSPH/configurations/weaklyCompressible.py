@@ -114,57 +114,61 @@ def weaklyCompressibleConfigToDict(config: WeaklyCompressibleSPHConfig) -> Dict[
             'scheme': config.surfaceDetectionConfig.scheme.name,
             'normalSource': config.surfaceDetectionConfig.normalSource.name,
         },
-        'gravityConfig': gravityConfigurationToDict(config.gravityConfig)
+        'gravityConfig': gravityConfigurationToDict(config.gravityConfig),
+        'regions': [region.toDict() for region in config.regions],
+        'rigidBodies': [body.toDict() for body in config.rigidBodies],
     }
 
 def dictToWeaklyCompressibleConfig(configDict: Dict[str, Any]) -> WeaklyCompressibleSPHConfig:
     config = WeaklyCompressibleSPHConfig()
     config.fluid.eosType = EquationOfState[configDict['eosType']] if isinstance(configDict['eosType'], str) else configDict['eosType']
-    config.fluid.restDensity = configDict['restDensity']
-    config.fluid.polytropicExponent = configDict['polytropicExponent']
-    config.fluid.kappa = configDict['kappa']
-    config.fluid.gas_constant = configDict['gas_constant']
-    config.fluid.molarMass = configDict['molarMass']
-    config.fluid.fixedSoundSpeed = configDict['fixedSoundSpeed']
+    config.fluid.restDensity = float(configDict['restDensity'])
+    config.fluid.polytropicExponent = float(configDict['polytropicExponent'])
+    config.fluid.kappa = float(configDict['kappa'])
+    config.fluid.gas_constant = float(configDict['gas_constant'])
+    config.fluid.molarMass = float(configDict['molarMass'])
+    config.fluid.fixedSoundSpeed = float(configDict['fixedSoundSpeed'])
     config.adaptiveSupportScheme = AdaptiveSupportScheme[configDict['adaptiveSupportScheme']] if isinstance(configDict['adaptiveSupportScheme'], str) else configDict['adaptiveSupportScheme']
-    config.adaptiveSupportIterations = configDict['adaptiveSupportIterations']
-    config.adaptiveSupportThreshold = configDict['adaptiveSupportThreshold']
-    config.adaptiveSupportCorrections = configDict['adaptiveSupportCorrections']
+    config.adaptiveSupportIterations = int(configDict['adaptiveSupportIterations'])
+    config.adaptiveSupportThreshold = float(configDict['adaptiveSupportThreshold'])
+    config.adaptiveSupportCorrections = bool(configDict['adaptiveSupportCorrections'])
     config.diffusionParams = dictToWCDiffusionParams(configDict['diffusionParams'])
     config.viscositySwitchParams = dictToViscositySwitchConfig(configDict['viscositySwitchParams'])
     config.schemeName = configDict['schemeName']
     config.boundaryConditions = [dictToBoundaryCondition(bcDict) for bcDict in configDict['boundaryConditions']]
-    config.dt_viscosityConstraint = configDict['dt_viscosityConstraint']
-    config.dt_accelerationConstraint = configDict['dt_accelerationConstraint']
-    config.dt_acousticConstraint = configDict['dt_acousticConstraint']
+    config.dt_viscosityConstraint = bool(configDict['dt_viscosityConstraint'])
+    config.dt_accelerationConstraint = bool(configDict['dt_accelerationConstraint'])
+    config.dt_acousticConstraint = bool(configDict['dt_acousticConstraint'])
     # config.densityDiffusionTerm = DensityDiffusionScheme[configDict['densityDiffusionTerm']] if isinstance(configDict['densityDiffusionTerm'], str) else configDict['densityDiffusionTerm']
     config.pressureForceTerm = PressureForceScheme[configDict['pressureForceTerm']] if isinstance(configDict['pressureForceTerm'], str) else configDict['pressureForceTerm']
-    config.bandwith = configDict.get('bandwith', 10.0)
+    config.bandwith = float(configDict.get('bandwith', 10.0))
     shiftPropsDict = configDict.get('shiftProperties', {})
     config.shiftProperties = ShiftProperties(
-        iterations=shiftPropsDict.get('iterations', 1),
-        CFL=shiftPropsDict.get('CFL', 0.3),
-        computeMach=shiftPropsDict.get('computeMach', False),
-        maxC=shiftPropsDict.get('maxC', 0.3),
-        active=shiftPropsDict.get('active', True),
+        iterations=int(shiftPropsDict.get('iterations', 1)),
+        CFL=float(shiftPropsDict.get('CFL', 0.3)),
+        computeMach=bool(shiftPropsDict.get('computeMach', False)),
+        maxC=float(shiftPropsDict.get('maxC', 0.3)),
+        active=bool(shiftPropsDict.get('active', True)),
         scheme=ShiftingScheme[shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH.name)] if isinstance(shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH.name), str) else shiftPropsDict.get('scheme', ShiftingScheme.deltaSPH),
         projectionScheme=ShiftingProjectionScheme[shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot.name)] if isinstance(shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot.name), str) else shiftPropsDict.get('projectionScheme', ShiftingProjectionScheme.dot),
-        summationDensity=shiftPropsDict.get('summationDensity', False),
-        surfaceScaling=shiftPropsDict.get('surfaceScaling', 0.1),
-        threshold=shiftPropsDict.get('threshold', 0.5),
-        projectQuantities=shiftPropsDict.get('projectQuantities', False),
+        summationDensity=bool(shiftPropsDict.get('summationDensity', False)),
+        surfaceScaling=float(shiftPropsDict.get('surfaceScaling', 0.1)),
+        threshold=float(shiftPropsDict.get('threshold', 0.5)),
+        projectQuantities=bool(shiftPropsDict.get('projectQuantities', False)),
     )
     surfaceConfigDict = configDict.get('surfaceDetectionConfig')
     if surfaceConfigDict is not None:
         config.surfaceDetectionConfig = SurfaceDetectionConfig(
             active=surfaceConfigDict.get('active', buildDefaultSurfaceDetectionConfig().active),
-            colorFieldThreshold=surfaceConfigDict.get('colorFieldThreshold', buildDefaultSurfaceDetectionConfig().colorFieldThreshold),
-            colorFieldGradThreshold=surfaceConfigDict.get('colorFieldGradThreshold', buildDefaultSurfaceDetectionConfig().colorFieldGradThreshold),
-            barecascoThreshold=surfaceConfigDict.get('barecascoThreshold', buildDefaultSurfaceDetectionConfig().barecascoThreshold),
-            expansionIterations=surfaceConfigDict.get('expansionIterations', buildDefaultSurfaceDetectionConfig().expansionIterations),
+            colorFieldThreshold=float(surfaceConfigDict.get('colorFieldThreshold', buildDefaultSurfaceDetectionConfig().colorFieldThreshold)),
+            colorFieldGradThreshold=float(surfaceConfigDict.get('colorFieldGradThreshold', buildDefaultSurfaceDetectionConfig().colorFieldGradThreshold)),
+            barecascoThreshold=float(surfaceConfigDict.get('barecascoThreshold', buildDefaultSurfaceDetectionConfig().barecascoThreshold)),
+            expansionIterations=int(surfaceConfigDict.get('expansionIterations', buildDefaultSurfaceDetectionConfig().expansionIterations)),
             scheme=SurfaceDetectionScheme[surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme.name)] if isinstance(surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme.name), str) else surfaceConfigDict.get('scheme', buildDefaultSurfaceDetectionConfig().scheme),
             normalSource=NormalSource[surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource.name)] if isinstance(surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource.name), str) else surfaceConfigDict.get('normalSource', buildDefaultSurfaceDetectionConfig().normalSource),
         )
     config.gravityConfig = dictToGravityConfiguration(configDict['gravityConfig']) if configDict.get('gravityConfig') is not None else buildDefaultGravityConfiguration()
+    config.regions = [ParticleRegion.fromDict(regionDict) for regionDict in configDict.get('regions', [])]
+    config.rigidBodies = [RigidBody.fromDict(bodyDict) for bodyDict in configDict.get('rigidBodies', [])]
 
     return config

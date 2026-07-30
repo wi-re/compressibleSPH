@@ -166,17 +166,17 @@ def dictToConfig(
         periodic=torch.tensor(domainDict['periodic'], device=device, dtype=torch.bool),
         dim=domainDict['dim']
     )
-    dim = configDict['dim']
-    verletScale = configDict['verletScale']
+    dim = int(configDict['dim'])
+    verletScale = float(configDict['verletScale'])
     kernel = KernelFunctions[configDict['kernel']]
     integrationScheme = IntegrationSchemeType[configDict['integrationScheme']]
-    cflFactor = configDict['cflFactor']
-    dt = configDict['dt']
-    minDt = configDict['minDt']
-    maxDt = configDict['maxDt']
-    dtGrowthFactor = configDict['dtGrowthFactor']
-    adaptiveDt = configDict['adaptiveDt']
-    targetNeighbors = configDict['targetNeighbors']
+    cflFactor = float(configDict['cflFactor'])
+    dt = float(configDict['dt'])
+    minDt = float(configDict['minDt'])
+    maxDt = float(configDict['maxDt'])
+    dtGrowthFactor = float(configDict['dtGrowthFactor'])
+    adaptiveDt = bool(configDict['adaptiveDt'])
+    targetNeighbors = float(configDict['targetNeighbors'])
     supportMode = SupportScheme[configDict['supportMode']]
     gradientMode = GradientScheme[configDict['gradientMode']]
     laplacianMode = LaplacianScheme[configDict['laplacianMode']]
