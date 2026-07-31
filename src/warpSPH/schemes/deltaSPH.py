@@ -146,24 +146,24 @@ def deltaSPH_step(
     # with TimedBlock('compute mDBC no-pen shift', use_cuda=True, device=config.device) as tb_nopenshift:
     with record_function("[warpSPH] - [deltaSPH - 16] - compute mDBC no-pen shift"):
         nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
-        dvdt_nopenshift = nopenshift / dt
+        dvdt_nopenshift = nopenshift# / dt
     # currentState.velocities = currentVelocities
 
     # 16. build update
     # with TimedBlock('build update', use_cuda=True, device=config.device) as tb_update:
-    print(f'End of step: t={currentSystem.t:.6f}, dt={config.dt:.6f}, min density={currentState.densities.min().item():.6f}, max density={currentState.densities.max().item():.6f}, mean density={currentState.densities.mean().item():.6f}')
-    print(f'\tmin pressure={currentState.pressures.min().item():.6f}, max pressure={currentState.pressures.max().item():.6f}, mean pressure={currentState.pressures.mean().item():.6f}')
-    print(f'\tmin velocity={currentState.velocities.norm(dim=1).min().item():.6f}, max velocity={currentState.velocities.norm(dim=1).max().item():.6f}, mean velocity={currentState.velocities.norm(dim=1).mean().item():.6f}')
-    print(f'\tdvdt:')
-    print(f'\t[pressure]\tmin dvdt={dvdt_pressure.norm(dim=1).min().item():.6f}, max dvdt={dvdt_pressure.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_pressure.norm(dim=1).mean().item():.6f}')
-    print(f'\t[forcing]\tmin dvdt={dvdt_forcing.norm(dim=1).min().item():.6f}, max dvdt={dvdt_forcing.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_forcing.norm(dim=1).mean().item():.6f}')
-    print(f'\t[gravity]\tmin dvdt={dvdt_gravity.norm(dim=1).min().item():.6f}, max dvdt={dvdt_gravity.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_gravity.norm(dim=1).mean().item():.6f}')
-    print(f'\t[nopenshift]\tmin dvdt={dvdt_nopenshift.norm(dim=1).min().item():.6f}, max dvdt={dvdt_nopenshift.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_nopenshift.norm(dim=1).mean().item():.6f}')
-    print(f'\t[dissipation]\tmin dvdt={dvdt_diss.norm(dim=1).min().item():.6f}, max dvdt={dvdt_diss.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_diss.norm(dim=1).mean().item():.6f}')
-    print(f'\tdrhodt:')
-    print(f'\t[drhodt]\tmin drhodt={drhodt.min().item():.6f}, max drhodt={drhodt.max().item():.6f}, mean drhodt={drhodt.mean().item():.6f}')    
-    print(f'\t[drhodt_diss]\tmin drhodt={drhodt_diss.min().item():.6f}, max drhodt={drhodt_diss.max().item():.6f}, mean drhodt={drhodt_diss.mean().item():.6f}')
-    print(f'------------------------------------------------------------')
+    # print(f'End of step: t={currentSystem.t:.6f}, dt={config.dt:.6f}, min density={currentState.densities.min().item():.6f}, max density={currentState.densities.max().item():.6f}, mean density={currentState.densities.mean().item():.6f}')
+    # print(f'\tmin pressure={currentState.pressures.min().item():.6f}, max pressure={currentState.pressures.max().item():.6f}, mean pressure={currentState.pressures.mean().item():.6f}')
+    # print(f'\tmin velocity={currentState.velocities.norm(dim=1).min().item():.6f}, max velocity={currentState.velocities.norm(dim=1).max().item():.6f}, mean velocity={currentState.velocities.norm(dim=1).mean().item():.6f}')
+    # print(f'\tdvdt:')
+    # print(f'\t[pressure]\tmin dvdt={dvdt_pressure.norm(dim=1).min().item():.6f}, max dvdt={dvdt_pressure.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_pressure.norm(dim=1).mean().item():.6f}')
+    # print(f'\t[forcing]\tmin dvdt={dvdt_forcing.norm(dim=1).min().item():.6f}, max dvdt={dvdt_forcing.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_forcing.norm(dim=1).mean().item():.6f}')
+    # print(f'\t[gravity]\tmin dvdt={dvdt_gravity.norm(dim=1).min().item():.6f}, max dvdt={dvdt_gravity.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_gravity.norm(dim=1).mean().item():.6f}')
+    # print(f'\t[nopenshift]\tmin dvdt={dvdt_nopenshift.norm(dim=1).min().item():.6f}, max dvdt={dvdt_nopenshift.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_nopenshift.norm(dim=1).mean().item():.6f}')
+    # print(f'\t[dissipation]\tmin dvdt={dvdt_diss.norm(dim=1).min().item():.6f}, max dvdt={dvdt_diss.norm(dim=1).max().item():.6f}, mean dvdt={dvdt_diss.norm(dim=1).mean().item():.6f}')
+    # print(f'\tdrhodt:')
+    # print(f'\t[drhodt]\tmin drhodt={drhodt.min().item():.6f}, max drhodt={drhodt.max().item():.6f}, mean drhodt={drhodt.mean().item():.6f}')    
+    # print(f'\t[drhodt_diss]\tmin drhodt={drhodt_diss.min().item():.6f}, max drhodt={drhodt_diss.max().item():.6f}, mean drhodt={drhodt_diss.mean().item():.6f}')
+    # print(f'------------------------------------------------------------')
 
     with record_function("[warpSPH] - [deltaSPH - 16] - build update"):
         update = WeaklyCompressibleSystemUpdate(
