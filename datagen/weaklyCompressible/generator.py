@@ -120,6 +120,7 @@ schemeConfig.gravityConfig.magnitude = args.gravityMagnitude
 schemeConfig.gravityConfig.origin = args.gravityDirection   
 schemeConfig.bandwith = simSetup.L / args.bandWidth / config.dx
 
+# schemeConfig.fluid.eosType = EquationOfState.stiffTait
 
 presets = buildPresetObstacles(args.maxExtent, args.offsetX, args.L, args.fillRatio, args.aoa)
 schemeConfig.regions = buildRegions(config, schemeConfig, simSetup, args, domain, interiorDomain, presets.get(args.obstacleType))
@@ -135,7 +136,7 @@ setupKolmogorov(compressibleSystem, config, schemeConfig, simSetup, args)
 
 schemeConfig.fluid.fixedSoundSpeed, config.dt = setupWeaklyCompressibleTimestep(config, schemeConfig, compressibleSystem, args.targetDt, verbose = True)
 # Make the problem slightly stiffer
-schemeConfig.fluid.fixedSoundSpeed *= 1.25
+# schemeConfig.fluid.fixedSoundSpeed *= 1.25
 # t = torch.tensor(0, device = device, dtype = dtype)
 
 runningState = compressibleSystem.initializeNewState()

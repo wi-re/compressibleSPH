@@ -21,7 +21,7 @@ def computeMomentum(currentState: Any, config: SimulationConfig, schemeConfig: A
                 kernel = config.kernel,
                 operation = WarpOperation.Divergence,
                 supportMode = SupportScheme.SuperSymmetric,
-                operationMode = OperationDirection.AllToAll,
+                operationMode = OperationDirection.FluidToFluid,
                 gradientMode = GradientScheme.Difference
             ),
             queryValues = currentState.velocities,

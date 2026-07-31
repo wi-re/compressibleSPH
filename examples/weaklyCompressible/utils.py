@@ -276,7 +276,7 @@ def build_sdfs(config, schemeConfig, band, args, domain, interiorDomain, obstacl
     # obstacle_sdf = 
 
     merged_sdf = union(domain_sdf, obstacle_sdf)
-    domain_sdf = lambda x: sampleSDF(x, merged_sdf, invert=False)
+    domain_sdf = lambda x: sampleSDFNumeric(x, merged_sdf, invert=False, eps = 0.01)
 
     regions = []
 

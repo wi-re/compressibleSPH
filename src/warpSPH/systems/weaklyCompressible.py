@@ -207,7 +207,9 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         
         drhodtMid = updateValues[-1].drhodt
         epsilon = -dt * drhodtMid / midRho
-        self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
+        epsilon = torch.clamp(epsilon, min=-1.5, max=1.5)  # Pade approximant has a pole at +-2, stay well clear of it
+        # self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
+        self.state.densities = initialRho * torch.exp(dt * drhodtMid / midRho)  # Use exponential update to avoid negative densities
 
         if torch.any(self.state.kinds != 0):
             self.state.densities[self.state.kinds != 0] = midRho[self.state.kinds != 0]

@@ -27,16 +27,18 @@ def weaklyCompressibleEOS(particleState, schemeConfig):
         kappa = schemeConfig.fluid.kappa
         polytropicExponent = schemeConfig.fluid.polytropicExponent
 
+        rho = torch.clamp(particleState.densities, min=0.8)  # Avoid negative densities
+
         
         if eosType == EquationOfState.stiffTait:
-            return stiffTaitEOS(particleState.densities, rho0, c_s, polytropicExponent)
+            return stiffTaitEOS(rho, rho0, c_s, polytropicExponent)
         elif eosType == EquationOfState.Tait:
-            return TaitEOS(particleState.densities, rho0, kappa)
+            return TaitEOS(rho, rho0, kappa)
         elif eosType == EquationOfState.isoThermal:
-            return isoThermalEOS(particleState.densities, rho0, c_s)
+            return isoThermalEOS(rho, rho0, c_s)
         elif eosType == EquationOfState.Polytropic:
-            return polytropicEOS(particleState.densities, polytropicExponent, kappa)
+            return polytropicEOS(rho, polytropicExponent, kappa)
         elif eosType == EquationOfState.Murnaghan:
-            return murnaghanEOS(particleState.densities, rho0, kappa, polytropicExponent)
+            return murnaghanEOS(rho, rho0, kappa, polytropicExponent)
         else:
             raise ValueError('EOS type not recognized')

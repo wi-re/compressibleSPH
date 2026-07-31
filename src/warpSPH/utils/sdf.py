@@ -76,3 +76,22 @@ def sampleSDF(x, sdf, invert = False):
     else:
         return d.detach() if x.requires_grad == False else d, grad if x.requires_grad == False else grad
 
+def sampleSDFNumeric(x, sdf, invert = False, eps = 1e-3):
+    # The analytic gradient (autograd through sdf) is exact but discontinuous wherever the closest
+    # surface point jumps, e.g. at convex corners. Central differences over a finite step act as a
+    # local mollifier, blending the two analytic gradients across the corner instead of switching
+    # between them discontinuously. eps should be picked relative to the sampling resolution (e.g.
+    # particle spacing) that needs the smoothing, not left at the default.
+    d = sdf(x)
+    grad = torch.zeros_like(x)
+    for i in range(x.shape[-1]):
+        offset = torch.zeros_like(x)
+        offset[..., i] = eps
+        grad[..., i] = (sdf(x + offset) - sdf(x - offset)) / (2 * eps)
+    grad = torch.nn.functional.normalize(grad, dim = -1)
+
+    if invert:
+        return -d, -grad
+    else:
+        return d, grad
+
