@@ -102,7 +102,7 @@ config, integrator = buildConfig(
     adaptiveDt = True,
     cflFactor=0.3,
 )
-config.nx = simSetup.nx
+config.nx = simSetup.nx + 2 * simSetup.band
 config.dx = simSetup.dx
 
 config.minDt = 1e-8
@@ -122,8 +122,16 @@ schemeConfig.bandwith = simSetup.L / args.bandWidth / config.dx
 
 # schemeConfig.fluid.eosType = EquationOfState.stiffTait
 
-presets = buildPresetObstacles(args.maxExtent, args.offsetX, args.L, args.fillRatio, args.aoa)
-schemeConfig.regions = buildRegions(config, schemeConfig, simSetup, args, domain, interiorDomain, presets.get(args.obstacleType))
+# round maxExtent to nearest multiple of dx
+maxExtent = round(args.maxExtent / config.dx) * config.dx
+# round the offsets to nearest multiple of dx
+offsetX = round(args.offsetX / config.dx) * config.dx
+# offsetY = round(args.offsetY / config.dx) * config.dx
+
+presets = buildPresetObstacles(maxExtent, offsetX, args.L, args.fillRatio, args.aoa)
+obstacle = presets.get(args.obstacleType)
+obstacle['offsetY'] = round(obstacle['offsetY'] / config.dx) * config.dx
+schemeConfig.regions = buildRegions(config, schemeConfig, simSetup, args, domain, interiorDomain, obstacle)
 schemeConfig.boundaryConditions = []
 
 compressibleSystem = initializeWeaklyCompressibleSimulation(schemeConfig.regions, config, schemeConfig, SimulationSystem, SimulationState, verbose = True)

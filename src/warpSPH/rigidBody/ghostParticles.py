@@ -29,9 +29,10 @@ def addBoundaryGhostParticles(regions, particleState : Any):
 
             dx = particleState.masses.mean()**(1.0/float(particleState.positions.shape[-1]))
             sdfValues, sdfNormals = region.sdf(particleState.positions[relevantParticles])
-            clampedDist = sdfValues - torch.min(-sdfValues, particleState.supports.mean())
+            clampedDist = sdfValues
+            clampedDist = sdfValues - torch.min(-sdfValues, 1.5 * particleState.supports.mean())
 
-            clampedDist = torch.clamp(clampedDist, min = dx)
+            # clampedDist = torch.clamp(clampedDist, min = dx)
             # round up to nearest larger dx
             # clampedDist = torch.ceil(clampedDist / dx) * dx
             offsets = clampedDist.view(-1,1) * sdfNormals

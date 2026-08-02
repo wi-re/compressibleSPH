@@ -28,7 +28,7 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
             config = config,
             neighbor_threshold = 4,
             direction = OperationDirection.FluidToGhost,
-            supportScale = 1.0,
+            supportScale = 1.5,
             adjacency = adjacency.hashMap if isinstance(adjacency, AdjacencyList) else None
         )
         # return res[:,0], res[:,1:], neighCounts
@@ -66,9 +66,11 @@ def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig
 
         P_b = P_g + rho0 * (dot * dot2)
         rho_b = rho0 + P_b / c_s**2
+        rho_b = torch.clamp(rho_b, min = rho0)
 
         # rho_b = torch.where(numNeighbors > 4, rho_b, boundaryDensity[bIndices])
 
+        # boundaryDensity[bIndices] = torch.where(numNeighbors > 4, rho_b, boundaryDensity[bIndices])
         boundaryDensity[bIndices] = rho_b
         threshold = 9
 

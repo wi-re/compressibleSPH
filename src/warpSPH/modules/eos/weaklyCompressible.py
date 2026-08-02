@@ -28,7 +28,7 @@ def weaklyCompressibleEOS(particleState, schemeConfig):
         polytropicExponent = schemeConfig.fluid.polytropicExponent
 
         rho = torch.clamp(particleState.densities, min=0.8)  # Avoid negative densities
-
+        rho = particleState.densities
         
         if eosType == EquationOfState.stiffTait:
             return stiffTaitEOS(rho, rho0, c_s, polytropicExponent)
