@@ -25,7 +25,7 @@ def computeDensityDiffusion(currentState: Any, config: SimulationConfig, schemeC
                 kernel = config.kernel,
                 operation = WarpOperation.Divergence,
                 supportMode = SupportScheme.SuperSymmetric,
-                operationMode = OperationDirection.FluidToFluid,
+                operationMode = OperationDirection.AllToAll,
             ),
             domain = config.domain,
             adjacency = adjacency,

@@ -146,7 +146,7 @@ def deltaSPH_step(
     # with TimedBlock('compute mDBC no-pen shift', use_cuda=True, device=config.device) as tb_nopenshift:
     with record_function("[warpSPH] - [deltaSPH - 16] - compute mDBC no-pen shift"):
         nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
-        dvdt_nopenshift = nopenshift*0# / dt
+        dvdt_nopenshift = nopenshift / dt
     # currentState.velocities = currentVelocities
 
     # 16. build update

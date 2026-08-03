@@ -41,7 +41,7 @@ def computeGradRhoL(currentState: Any, config: SimulationConfig, schemeConfig: A
                     kernel = config.kernel,
                     operation = WarpOperation.Gradient,
                     supportMode = SupportScheme.SuperSymmetric,
-                    operationMode = OperationDirection.FluidToFluid,
+                    operationMode = OperationDirection.AllToAll,
                     gradientMode = GradientScheme.Difference
                 ),
                 queryValues = currentState.densities,
