@@ -3,6 +3,7 @@ import h5py as h5
 from sphWarpCore import *
 import torch
 from typing import Optional, Any
+import numpy as np
 
 def dumpAdjacency(adjacency, adjacencyGroup):
     adjacencyGroup.create_dataset('i', data=adjacency.i.cpu().numpy())
@@ -275,6 +276,9 @@ def importSimulationSystem(
     return SimulationSystem(state=state, adjacency=adjacency, t = t), stages, schemeEnum, extraData
 
 import json
+import pickle
+import dill
+import codecs
 
 from .utils import getCurrentTimestamp
 from .configurations import *
@@ -309,6 +313,217 @@ def importConfigs(configPath, import_fn):
         configDict = json.load(f)
         
     return dictToConfig(configDict['config']), import_fn(configDict['schemeConfig'])
+
+
+def _encode_callable(fn):
+    return codecs.encode(dill.dumps(fn), 'base64').decode()
+
+
+def _decode_callable(encoded_fn):
+    raw = codecs.decode(encoded_fn.encode(), 'base64')
+    try:
+        return dill.loads(raw)
+    except Exception:
+        return pickle.loads(raw)
+
+
+def copy_dict_to_h5(group, d, indent=0):
+    for key, value in d.items():
+        if isinstance(value, dict):
+            subgroup = group.create_group(key)
+            subgroup.attrs['taggedType'] = 'dict'
+            copy_dict_to_h5(subgroup, value, indent + 1)
+        elif isinstance(value, list):
+            subgroup = group.create_group(key)
+            subgroup.attrs['taggedType'] = 'list'
+            copy_dict_to_h5(subgroup, {f'item_{i}': v for i, v in enumerate(value)}, indent + 1)
+        else:
+            if value is None:
+                continue
+            group.attrs[key] = value
+
+
+def restore_config_from_h5(group, indent=0):
+    config = {}
+    for key, value in group.attrs.items():
+        if key != 'taggedType':
+            config[key] = value
+    for key, subgroup in group.items():
+        if subgroup.attrs['taggedType'] == 'dict':
+            config[key] = restore_config_from_h5(subgroup, indent + 1)
+        elif subgroup.attrs['taggedType'] == 'list':
+            config[key] = [restore_config_from_h5(subgroup[f'item_{i}'], indent + 1) for i in range(len(subgroup))]
+            subkeys = [k for k in list(subgroup.attrs.keys()) if k.startswith('item_')]
+            for i in range(len(subkeys)):
+                item_key = f'item_{i}'
+                if item_key in subgroup.attrs:
+                    config[key].append(subgroup.attrs[item_key])
+        else:
+            raise ValueError(f'Unknown type for subgroup {key}: {subgroup.attrs["taggedType"]}')
+    return config
+
+
+# Backward-compatible alias used by existing notebooks/scripts.
+def restoreConfig_from_h5(group, indent=0):
+    return restore_config_from_h5(group, indent=indent)
+
+
+def createOutFile(exportPath: str):
+    os.makedirs(exportPath, exist_ok=True)
+    return h5py.File(f'{exportPath}/trajectory.h5', 'w')
+
+
+def writeInitialData(
+    exportPath: str,
+    outFile: h5py.File,
+    scheme: Any,
+    config: SimulationConfig,
+    schemeConfig: Any,
+    args: Any,
+    runningState: Any,
+    extraData: dict | None = None,
+):
+    if extraData is None:
+        extraData = {}
+
+    outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme
+    outFile.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
+    outFile.create_group('states')
+    outFile.create_group('stages')
+
+    uniqueParticles = True
+
+    for key, value in extraData.items():
+        if not isinstance(value, dict):
+            outFile.attrs[key] = value
+        else:
+            for subkey, subvalue in value.items():
+                if isinstance(subvalue, (list, np.ndarray)):
+                    outFile.attrs[f'{key}_{subkey}'] = np.array(subvalue)
+                else:
+                    outFile.attrs[f'{key}_{subkey}'] = subvalue
+
+    outFile.attrs['uniqueParticles'] = uniqueParticles
+    outFile.attrs['exportInterval'] = args.exportInterval
+    outFile.attrs['original_dt'] = config.dt if isinstance(config.dt, float) else config.dt.cpu().item()
+    outFile.attrs['exportRatio'] = args.exportInterval / (config.dt if isinstance(config.dt, float) else config.dt.cpu().item())
+
+    outFile.create_group('config')
+    loadedConfig = json.load(open(f'{exportPath}/config.json', 'r'))
+    copy_dict_to_h5(outFile['config'], loadedConfig)
+
+    rigidBodyGroup = outFile.create_group('rigidBodies')
+    for r, rigidBody in enumerate(schemeConfig.rigidBodies):
+        cGroup = rigidBodyGroup.create_group(f'rigidBody_{r:02d}')
+        cGroup.attrs['centerOfMass'] = rigidBody.centerOfMass.cpu().numpy()
+        cGroup.attrs['orientation'] = rigidBody.orientation.cpu().numpy()
+        cGroup.attrs['angularVelocity'] = rigidBody.angularVelocity.cpu().numpy()
+        cGroup.attrs['linearVelocity'] = rigidBody.linearVelocity.cpu().numpy()
+        cGroup.attrs['mass'] = rigidBody.mass.cpu().numpy()
+        cGroup.attrs['inertia'] = rigidBody.inertia.cpu().numpy()
+
+        cGroup.create_dataset('particlePositions', data=rigidBody.particlePositions.cpu().numpy())
+        cGroup.create_dataset('particleVelocities', data=rigidBody.particleVelocities.cpu().numpy())
+        cGroup.create_dataset('particleMasses', data=rigidBody.particleMasses.cpu().numpy())
+        cGroup.create_dataset('particleUIDs', data=rigidBody.particleUIDs.cpu().numpy())
+        cGroup.create_dataset('particleIndices', data=rigidBody.particleIndices.cpu().numpy())
+        cGroup.create_dataset('particleBoundaryDistances', data=rigidBody.particleBoundaryDistances.cpu().numpy())
+        cGroup.create_dataset('particleBoundaryNormals', data=rigidBody.particleBoundaryNormals.cpu().numpy())
+
+        cGroup.create_dataset('particlePositions', data=rigidBody.ghostParticlePositions.cpu().numpy())
+        cGroup.create_dataset('particleIndices', data=rigidBody.ghostParticleIndices.cpu().numpy())
+        cGroup.create_dataset('particleUIDs', data=rigidBody.ghostParticleUIDs.cpu().numpy())
+        cGroup.create_dataset('particleBoundaryDistances', data=rigidBody.ghostParticleBoundaryDistances.cpu().numpy())
+        cGroup.create_dataset('particleBoundaryNormals', data=rigidBody.ghostParticleBoundaryNormals.cpu().numpy())
+
+        cGroup.attrs['bodyID'] = rigidBody.bodyID
+        cGroup.attrs['kind'] = rigidBody.kind.value
+        cGroup.attrs['sdf'] = _encode_callable(rigidBody.sdf)
+
+    initialState = runningState.state
+    kinds = initialState.kinds
+
+    boundaryMask = kinds == 1
+    boundaryPositions = initialState.positions[boundaryMask]
+    boundaryMasses = initialState.masses[boundaryMask]
+    boundarySupports = initialState.supports[boundaryMask]
+    boundaryUIDs = initialState.UIDs[boundaryMask]
+    boundaryKinds = initialState.kinds[boundaryMask]
+    boundaryOffsets = initialState.ghostOffsets[boundaryMask] if initialState.ghostOffsets is not None else None
+
+    outFile.create_dataset('boundaryPositions', data=boundaryPositions.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('boundaryMasses', data=boundaryMasses.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('boundarySupports', data=boundarySupports.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('boundaryUIDs', data=boundaryUIDs.detach().cpu().numpy(), dtype=np.int32)
+    outFile.create_dataset('boundaryKinds', data=boundaryKinds.detach().cpu().numpy(), dtype=np.int32)
+    if boundaryOffsets is not None:
+        outFile.create_dataset('boundaryOffsets', data=boundaryOffsets.detach().cpu().numpy(), dtype=np.int32)
+
+    fluidMask = kinds == 0
+    fluidPositions = initialState.positions[fluidMask]
+    fluidMasses = initialState.masses[fluidMask]
+    fluidSupports = initialState.supports[fluidMask]
+    fluidUIDs = initialState.UIDs[fluidMask]
+    fluidKinds = initialState.kinds[fluidMask]
+
+    outFile.create_dataset('fluidPositions', data=fluidPositions.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('fluidMasses', data=fluidMasses.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('fluidSupports', data=fluidSupports.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('fluidUIDs', data=fluidUIDs.detach().cpu().numpy(), dtype=np.int32)
+    outFile.create_dataset('fluidKinds', data=fluidKinds.detach().cpu().numpy(), dtype=np.int32)
+
+    ghostMask = kinds == 2
+    ghostPositions = initialState.positions[ghostMask]
+    ghostMasses = initialState.masses[ghostMask]
+    ghostSupports = initialState.supports[ghostMask]
+    ghostUIDs = initialState.UIDs[ghostMask]
+    ghostKinds = initialState.kinds[ghostMask]
+    outFile.create_dataset('ghostPositions', data=ghostPositions.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('ghostMasses', data=ghostMasses.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('ghostSupports', data=ghostSupports.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('ghostUIDs', data=ghostUIDs.detach().cpu().numpy(), dtype=np.int32)
+    outFile.create_dataset('ghostKinds', data=ghostKinds.detach().cpu().numpy(), dtype=np.int32)
+
+    outFile.create_dataset('combinedPositions', data=initialState.positions.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('combinedMasses', data=initialState.masses.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('combinedSupports', data=initialState.supports.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('combinedUIDs', data=initialState.UIDs.detach().cpu().numpy(), dtype=np.int32)
+    outFile.create_dataset('combinedKinds', data=initialState.kinds.detach().cpu().numpy(), dtype=np.int32)
+    outFile.create_dataset('combinedDensities', data=initialState.densities.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('combinedVelocities', data=initialState.velocities.detach().cpu().numpy(), dtype=np.float32)
+    outFile.create_dataset('combinedMaterials', data=initialState.materials.detach().cpu().numpy(), dtype=np.float32)
+    if initialState.ghostOffsets is not None:
+        outFile.create_dataset('combinedGhostOffsets', data=initialState.ghostOffsets.detach().cpu().numpy(), dtype=np.float32)
+        outFile.create_dataset('combinedGhostIndices', data=initialState.ghostIndices.detach().cpu().numpy(), dtype=np.int32)
+
+    positionGroup = outFile.create_group('positions')
+    velocityGroup = outFile.create_group('velocities')
+    densityGroup = outFile.create_group('densities')
+    timeGroup = outFile.create_group('times')
+    rigidBodyGroup = outFile.create_group('rigidBodyTrajectories')
+
+    return (positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup)
+
+
+def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=True, writeStages=False):
+    positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup = groups
+
+    positionGroup.create_dataset(f'frame_{i:05d}', data=state.state.positions.cpu().numpy())
+    velocityGroup.create_dataset(f'frame_{i:05d}', data=state.state.velocities.cpu().numpy())
+    densityGroup.create_dataset(f'frame_{i:05d}', data=state.state.densities.cpu().numpy())
+    timeGroup.create_dataset(
+        f'frame_{i:05d}',
+        data=np.array([state.t.cpu().item() if isinstance(state.t, torch.Tensor) else state.t], dtype=np.float32),
+    )
+
+    rbg = rigidBodyGroup.create_group(f'frame_{i:05d}')
+    for r, rigidBody in enumerate(schemeConfig.rigidBodies):
+        rbg.attrs[f'rigidBody_{r:02d}_centerOfMass'] = rigidBody.centerOfMass.cpu().numpy()
+        rbg.attrs[f'rigidBody_{r:02d}_orientation'] = rigidBody.orientation.cpu().numpy()
+        rbg.attrs[f'rigidBody_{r:02d}_angularVelocity'] = rigidBody.angularVelocity.cpu().numpy()
+        rbg.attrs[f'rigidBody_{r:02d}_linearVelocity'] = rigidBody.linearVelocity.cpu().numpy()
+        rbg.attrs[f'rigidBody_{r:02d}_mass'] = rigidBody.mass.cpu().numpy()
+        rbg.attrs[f'rigidBody_{r:02d}_inertia'] = rigidBody.inertia.cpu().numpy()
 
 
 from .enumTypes import *

@@ -47,12 +47,7 @@ from warpSPH import *
 from warpSPH.caseUtils import *
 
 from parser import *
-from utils import *
-from export_util import *
 from warpSPH.utils.naca import *
-
-from export_util import *
-from utils import *
 from plot import *
 
 device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
