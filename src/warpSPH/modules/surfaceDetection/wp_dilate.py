@@ -169,7 +169,7 @@ def dilateSurfaceMask_Kernel(
     useAdjacency: wp.bool, adjacencyState: adjacencyData, gridState: gridData,
     correctionData: Any,
     
-    mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, opInt: wp.int32,
+    mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, laplacianMode_int: wp.int32, positiveDivergence_int: wp.int32, divergenceMode_int: wp.int32, opInt: wp.int32,
     # Do not change the parameters above
     freeSurfaceMask: wp.array(dtype = scalar_t), # type: ignore
     # The last parameter is always the output array and should not be changed
