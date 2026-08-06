@@ -1,6 +1,41 @@
-from sphWarpCore.diffusion.viscosity import DiffusionParameters, ViscosityTerms
 from typing import Dict, Any
+from sphWarpCore import *
+from dataclasses import dataclass, field
+import warp as wp
+from enum import Enum
 
+
+class ViscosityTerms(Enum):
+    Default = 0
+    MonaghanGingold1983 = 1
+    Cleary1998 = 2
+    Monaghan1992 = 3
+    Monaghan1997a = 4
+    Monaghan1997b = 5
+    Dukowicz = 6
+    Price2012_98 = 7
+    Price2012 = 8
+    Price2008 = 9
+    Wadsley2008 = 10
+    DeltaSPH = 11
+
+@wp.struct
+class DiffusionParameters:
+    c_s: scalar_t = field(default=scalar_t(1.0)) # Speed of sound, used in some formulations to compute the signal velocity
+    C_l: scalar_t = field(default=scalar_t(1.0)) # Linear viscosity coefficient, also referred to as alpha in some formulations
+    C_q: scalar_t = field(default=scalar_t(2.0)) # Quadratic viscosity coefficient, also referred to as beta in some formulations
+    Cu_l: scalar_t = field(default=scalar_t(1.0)) # Linear thermal conductivity coefficient, also referred to as alpha_u in some formulations
+    Cu_q: scalar_t = field(default=scalar_t(2.0)) # Quadratic thermal conductivity coefficient, also referred to as beta_u in some formulations
+    
+    K: scalar_t = field(default=scalar_t(1.0)) # Overall viscosity scaling factor
+    thermalConductivity: scalar_t = field(default=scalar_t(0.5)) # Overall thermal conductivity scaling factor
+    viscosityTerm: wp.int32 = field(default=ViscosityTerms.Price2012_98.value) # Viscosity formulation to use, e.g. Monaghan1992, Monaghan1997, Cleary1998 etc.
+    thermalConducitiyTerm: wp.int32 = field(default=ViscosityTerms.Price2012_98.value) # Thermal conductivity formulation to use, e.g. Monaghan1997 thermal conductivity term, Cleary1998 thermal conductivity term etc.
+    scaleBeta: wp.bool = field(default=False) # If true then the quadratic viscosity term is scaled by the linear viscosity term, as suggested in some papers to reduce excessive viscosity in certain scenarios. This is only relevant for formulations that use a quadratic term, such as Monaghan1992 and Monaghan1997.
+    monaghanSwitch: wp.bool = field(default=True) # Whether to apply the Monaghan switch that turns off viscosity for diverging particles, i.e. particles that are moving away from each other. This is a common technique to reduce excessive viscosity in expanding flows and is used in many formulations such as Monaghan1992 and Monaghan1997.
+    correctXi: wp.bool = field(default=True) # Whether to apply the xi correction factor to the viscosity term. This is a correction factor that can be applied to account for errors in the estimation of the velocity divergence and is discussed in some papers such as "Correcting SPH for accurate viscous forces" by Adami et al. 2013.
+
+    
 def buildDefaultDiffusionParamsCompressibleSPH():
     diffusionParams = DiffusionParameters()
     diffusionParams.c_s = 1

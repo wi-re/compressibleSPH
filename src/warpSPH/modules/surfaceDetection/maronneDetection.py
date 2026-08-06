@@ -21,8 +21,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
@@ -32,7 +32,7 @@ from .maronneNormals import computeNormalsMaronne
 from .wp_maronne import computeMaronneSurfaceDetection
 
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
+
 def detectFreeSurfaceMaronne(
         currentState: Any, 
         config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, 

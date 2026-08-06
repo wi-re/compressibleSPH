@@ -1,7 +1,7 @@
 from .regular import sampleRegularParticles
 import torch
 from sphWarpCore import *
-from sphWarpCore.radiusSearch.verlet import *
+from sphWarpCore import *
 from .wp_deltaShift import computeDeltaShiftWarp
 
 

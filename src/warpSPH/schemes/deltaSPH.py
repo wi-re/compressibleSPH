@@ -1,6 +1,4 @@
 from ..configurations import *
-from sphWarpCore.enumTypes import ViscosityTerms
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi
 from ..systems import *
 from ..modules import *
 from ..enumTypes import *

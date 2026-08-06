@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from warpSPH.utils.math import getPeriodicPositions

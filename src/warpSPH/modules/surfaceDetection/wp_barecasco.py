@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 from ...enumTypes import *
 
 # @torch.jit.script
@@ -115,7 +115,7 @@ def computeBarecascoSurfaceDetection_Func_i_first(
         
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeBarecascoSurfaceDetection_Func_Adjacency_first(
@@ -272,7 +272,7 @@ def computeBarecascoSurfaceDetection_Func_i_second(
         
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeBarecascoSurfaceDetection_Func_Adjacency_second(

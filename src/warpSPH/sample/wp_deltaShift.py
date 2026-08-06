@@ -5,6 +5,7 @@ import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
+from sphWarpCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
 
 
 @wp.func
@@ -98,7 +99,7 @@ def computeDeltaShift_Func_i(
 
         dx_2 = wp.pow(mj / scalar_t(rho0), scalar_t(1.0) /scalar_t(dim))
         
-        dx_ = dx_2 / eval_kernelScale(kernel_int, dim)
+        dx_ = dx_2 / sphKernelScale(kernel_int, dim)
         
         x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
@@ -120,13 +121,13 @@ def computeDeltaShift_Func_i(
         Ma = scalar_t(0.1)
         if computeMach:
             Ma = scalar_t(c_max)
-        h2 = (hi / eval_kernelScale(kernel_int, dim) * scalar_t(2.0))
+        h2 = (hi / sphKernelScale(kernel_int, dim) * scalar_t(2.0))
         shiftScaling = -scalar_t(CFL) * Ma * h2 #* h2
         
         out += shiftAmount
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeDeltaShift_Func_Adjacency(

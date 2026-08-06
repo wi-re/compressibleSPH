@@ -15,7 +15,7 @@ def computeH(rho, m, targetNeighbors, dim):
 
 def F(h, rho, m, targetNeighbors, dim):
     return h - computeH(rho, m, targetNeighbors, dim)
-from sphWarpCore.enumTypes import SupportScheme
+from sphWarpCore import *
 
 def evaluateOptimalSupportMonaghan(
         particleState: BaseState,

@@ -6,9 +6,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
-from sphWarpCore.operations.wp_gradient import outerTensorProduct
+
 
 
 @wp.func
@@ -87,7 +85,7 @@ def computeM_Func_i(
         
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeM_Func_Adjacency(

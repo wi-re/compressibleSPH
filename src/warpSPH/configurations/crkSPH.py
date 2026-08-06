@@ -4,24 +4,13 @@ import torch
 
 import warp as wp
 from enum import Enum
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi
-from sphWarpCore.mathutil import computeDistanceVec, safe_sqrt
+from sphWarpCore import *
 import warp as wp
 from warp.types import vector, matrix
 # from wp_tensor import tensor
 from typing import Any, Optional
 import torch
-from sphWarpCore.utils.wp_autograd import *
-
-from sphWarpCore.radiusSearch.radius_util import AdjacencyList, AdjacencyListWarp, DomainDescription, PointCloud
-from sphWarpCore.mathutil.wp_math import *
-from sphWarpCore.kernels.wp_kernel import *
-
-from sphWarpCore.enumTypes import *
-# from sphWarpCore.util import *
-
 from dataclasses import dataclass, field
-from sphWarpCore.types import *
 
 
 @wp.struct
@@ -47,7 +36,7 @@ def buildDefaultCRKViscosityParams():
     return crkViscosityParams
 
 
-from sphWarpCore.diffusion.viscosity import DiffusionParameters, ViscosityTerms
+from .moduleConfigurations.diffusionParameters import DiffusionParameters, ViscosityTerms
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig
 import torch

@@ -29,19 +29,13 @@ class PointCloud:
 
 from sphWarpCore import *
 
-from sphWarpCore.radiusSearch.verlet import *
-from sphWarpCore.radius import AdjacencyList
-from sphWarpCore.operations import *
-from sphWarpCore.enumTypes import *
-
-from sphWarpCore import *
-
 # from .wp_deltaShift import computeDeltaShiftWarp
 # from waves.utils.sampling import ParticleSet
 
 
 from .support import n_h_to_nH
 # from ..config import SimulationConfig
+from enum import Enum
 
 class SamplingScheme(Enum):
     regular = 1

@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+from .pi import computePi_actual
+from ...configurations.moduleConfigurations.diffusionParameters import DiffusionParameters
 
 @wp.func
 def computeThermalDissipation_Func_i(
@@ -117,7 +117,7 @@ def computeThermalDissipation_Func_i(
         
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeThermalDissipation_Func_Adjacency(

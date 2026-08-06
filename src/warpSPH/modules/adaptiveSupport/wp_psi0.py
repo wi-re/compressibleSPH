@@ -6,7 +6,6 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
 
 
 @wp.func
@@ -105,7 +104,7 @@ def computePsi0_Func_i(
         psi0h += kTerm_H
     return psi0**(scalar_t(1.0)/scalar_t(dim)), psi0h**(scalar_t(1.0)/scalar_t(dim))
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computePsi0_Func_Adjacency(

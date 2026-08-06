@@ -1,4 +1,4 @@
-from sphWarpCore.diffusion.viscosity import DiffusionParameters, ViscosityTerms
+from .moduleConfigurations.diffusionParameters import DiffusionParameters, ViscosityTerms
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig
 import torch

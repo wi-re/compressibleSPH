@@ -3,14 +3,8 @@ from warpSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from warpSPH.modules.timestep.compressible import computeTimestep
 from warpSPH.util import *
 from warpSPH.schemes import *
-from sphWarpCore.diffusion.viscosity import DiffusionParameters
 from sphWarpCore import *
-from sphWarpCore.radiusSearch.verlet import *
-from sphWarpCore.radius import AdjacencyList
-from sphWarpCore.operations import *
 import torch
-from sphWarpCore.enumTypes import *
-
 from warp import Kernel
 
 from warpSPH.configurations import SimulationConfig

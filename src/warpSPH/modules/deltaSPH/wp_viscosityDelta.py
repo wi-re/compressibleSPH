@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 from ...enumTypes import *
 
 @wp.func
@@ -116,7 +116,7 @@ def nuToAlpha(
 ):
     return nu * (2 * (n + 2)) / (c_s * h)
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeVelocityDiffusionDeltaSPH_Func_Adjacency(

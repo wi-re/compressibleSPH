@@ -162,7 +162,7 @@ def compSPH_step(
     drhodt = computeMomentumConsistent(
         currentState,
         config,
-        supportScheme = SupportScheme.Gather,
+        schemeConfig = None,
         adjacency = adjacency,
         gradH = gradHState
     )

@@ -57,7 +57,7 @@ def computeHopkinsTerms(
         v_sig = None
     )
     
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi
+from sphWarpCore import *
 def computeHopkinsUpdate(
         switchState: ViscositySwitchState,
         dt: float,

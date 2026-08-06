@@ -2,7 +2,7 @@
 # from sphWarpCore import SupportScheme
 # from warpSPH.modules import computePressureForceSymmetric, computeDudtMonaghan, computeMomentumConsistent
 # from warpSPH.modules import computeViscosity, computeConductivity, computeThermalDissipation
-from sphWarpCore.diffusion.viscosity import DiffusionParameters
+from ..configurations.moduleConfigurations.diffusionParameters import DiffusionParameters, ViscosityTerms
 from ..systems import CompressibleSystem, CompressibleSystemUpdate
 from ..configurations import SimulationConfig, CompressibleSPHConfig
 import torch

@@ -6,9 +6,6 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-# from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi, sphKernelScale
-# from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
-
 @wp.func
 def computeLiuMatrices_Func_i(
     # General Shape Parameters and indices
@@ -138,7 +135,7 @@ def computeLiuMatrices_Func_i(
         
     return out_shep, out_vec, out_mat, out_nbrs
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeLiuMatrices_Func_Adjacency(
@@ -259,7 +256,7 @@ def computeLiuMatrices_Kernel(
     numNeighbors_out[i] = nnbrs
 
 
-from sphWarpCore.utils.wp_util import _get_warp_vector_dtype, _get_warp_matrix_dtype, _torch_scalar_to_warp_dtype, castTorchToWarpAsBuiltins
+from sphWarpCore import *
 
 from copy import deepcopy
 

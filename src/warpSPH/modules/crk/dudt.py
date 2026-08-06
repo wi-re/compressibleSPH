@@ -6,9 +6,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi, sphKernelScale
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters, getCRK_j
-
+from ..dissipation import DiffusionParameters, computePi_actual
 from ...configurations.crkSPH import CRKViscosity
 
 from .limiter import computeVanLeer, crkLimiter
@@ -232,7 +230,7 @@ def computeCrkSPHdudt_Func_i(
         out += pTerm + vTerm
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeCrkSPHdudt_Func_Adjacency(

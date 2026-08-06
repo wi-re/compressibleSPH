@@ -214,7 +214,7 @@ def compute_vsig(
 
 
 
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi
+from sphWarpCore import *
 def computeCullenTerms(
         dt: float,
         particleState: CompressibleState,

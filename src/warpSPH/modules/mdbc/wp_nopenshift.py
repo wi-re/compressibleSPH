@@ -180,8 +180,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 
 @wp.func
 def computeMdbcNoPenShift_Func_i(
@@ -302,8 +302,7 @@ def computeMdbcNoPenShift_Func_i(
             outCounter += tempCtr
         
     return out, outCounter
-
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+from sphWarpCore import *
 
 @wp.func
 def computeMdbcNoPenShift_Func_Adjacency(

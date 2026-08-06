@@ -1,5 +1,5 @@
 import torch
-from sphWarpCore.enumTypes import KernelFunctions
+from sphWarpCore import *
 from .wp_psi import generatePSILut_warp
 
 

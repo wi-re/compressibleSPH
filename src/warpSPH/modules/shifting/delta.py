@@ -1,11 +1,6 @@
 # 17. If finalize, compute shifting and update positions and velocities
-# from sphWarpCore.radius import HashMapLengthMode
 
-from sphWarpCore import KernelFunctions, KernelFunctions, OperationProperties, SupportScheme, WarpOperation, buildVerletList
-
-from sphWarpCore.enumTypes import HashMapLengthMode, SupportScheme, WarpOperation
-from sphWarpCore import warpOperation
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi, sphKernelScale
+from sphWarpCore import *
 import torch
 
 from warpSPH.sample.wp_deltaShift import computeDeltaShiftWarp

@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh, sphKernel_xi
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
+
+
 
 @wp.func 
 def sgn(x: scalar_t) -> scalar_t:
@@ -154,7 +154,7 @@ def computeCompSPHBalanceTerm_Func_i(
         f_ij[jj] = f
 
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeCompSPHBalanceTerm_Func_Adjacency(

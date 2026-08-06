@@ -6,8 +6,6 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
-from sphWarpCore.diffusion.viscosity import computePi_actual, DiffusionParameters
 
 @wp.func
 def computeVsig_Func_i(
@@ -89,7 +87,7 @@ def computeVsig_Func_i(
         
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeVsig_Func_Adjacency(

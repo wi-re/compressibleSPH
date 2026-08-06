@@ -6,7 +6,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from sphWarpCore import *
 
-from sphWarpCore.kernels.wp_kernel import sphKernelDkDh
+from sphWarpCore import *
 
 @wp.func
 def computeOmega_Func_i(
@@ -78,7 +78,7 @@ def computeOmega_Func_i(
         out += dh_drho * mj * dWdh
     return out
 
-from sphWarpCore.radiusSearch.grid_util import checkOffset
+
 
 @wp.func
 def computeOmega_Func_Adjacency(

@@ -1,7 +1,6 @@
 import torch
 from .wp_mat import computeLiuMatricesWarp
 
-from sphWarpCore.enumTypes import *
 from sphWarpCore import *
 from typing import Any
 from ...configurations.simulationConfig import SimulationConfig

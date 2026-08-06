@@ -1,7 +1,8 @@
 import math
-from sphWarpCore.kernels.wp_kernel import eval_k, eval_dkdq, eval_C_d, iPow
+from sphWarpCore import *
 import warp as wp
 from sphWarpCore import safe_sqrt, scalar_t
+from sphWarpCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
 
 @wp.kernel
 def computePsi(

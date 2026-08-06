@@ -4,7 +4,7 @@ from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompres
 from ...configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
 from typing import Any, Optional
-from sphWarpCore.kernels.wp_kernel import sphKernel_xi, sphKernelScale
+from sphWarpCore import *
 from ...modules.eos import idealGasEOS
 import torch
 import warp as wp
