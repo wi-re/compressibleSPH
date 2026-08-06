@@ -117,7 +117,7 @@ def computeAlpha_Func_i_first(
 
     return alpha
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeAlpha_Func_Adjacency_first(

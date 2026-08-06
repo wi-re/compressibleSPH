@@ -303,7 +303,7 @@ def computeMdbcNoPenShift_Func_i(
         
     return out, outCounter
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeMdbcNoPenShift_Func_Adjacency(

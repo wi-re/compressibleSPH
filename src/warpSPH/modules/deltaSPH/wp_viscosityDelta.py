@@ -116,7 +116,7 @@ def nuToAlpha(
 ):
     return nu * (2 * (n + 2)) / (c_s * h)
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeVelocityDiffusionDeltaSPH_Func_Adjacency(

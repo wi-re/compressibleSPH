@@ -126,7 +126,7 @@ def computeDeltaShift_Func_i(
         out += shiftAmount
     return out
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeDeltaShift_Func_Adjacency(

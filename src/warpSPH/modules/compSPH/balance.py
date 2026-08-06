@@ -154,7 +154,7 @@ def computeCompSPHBalanceTerm_Func_i(
         f_ij[jj] = f
 
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeCompSPHBalanceTerm_Func_Adjacency(

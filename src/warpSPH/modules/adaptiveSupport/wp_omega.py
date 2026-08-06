@@ -78,7 +78,7 @@ def computeOmega_Func_i(
         out += dh_drho * mj * dWdh
     return out
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeOmega_Func_Adjacency(

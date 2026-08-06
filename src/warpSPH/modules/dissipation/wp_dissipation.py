@@ -117,7 +117,7 @@ def computeThermalDissipation_Func_i(
         
     return out
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeThermalDissipation_Func_Adjacency(

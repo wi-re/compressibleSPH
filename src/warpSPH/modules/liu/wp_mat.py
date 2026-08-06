@@ -138,7 +138,7 @@ def computeLiuMatrices_Func_i(
         
     return out_shep, out_vec, out_mat, out_nbrs
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeLiuMatrices_Func_Adjacency(

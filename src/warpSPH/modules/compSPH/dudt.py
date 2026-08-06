@@ -140,7 +140,7 @@ def computeCompSPHdudt_Func_i(
         out += pTerm + vTerm
     return out
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeCompSPHdudt_Func_Adjacency(

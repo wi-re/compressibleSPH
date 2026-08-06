@@ -155,7 +155,7 @@ def computeCompSPHAccel_Func_i(
         out += pressureTerm_ij + viscosityTerm_ij
     return out
 
-from sphWarpCore.operations_grid.grid_util import checkOffset
+from sphWarpCore.radiusSearch.grid_util import checkOffset
 
 @wp.func
 def computeCompSPHAccel_Func_Adjacency(
