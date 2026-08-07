@@ -1,8 +1,8 @@
 import math
-from sphWarpCore import *
+from warpSPHCore import *
 import warp as wp
-from sphWarpCore import safe_sqrt, scalar_t
-from sphWarpCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
+from warpSPHCore import safe_sqrt, scalar_t
+from warpSPHCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
 
 @wp.kernel
 def computePsi(
@@ -100,8 +100,8 @@ def computePsi(
 
     
 import torch
-from sphWarpCore import KernelFunctions
-from sphWarpCore import *
+from warpSPHCore import KernelFunctions
+from warpSPHCore import *
 def generatePSILut_warp(
         
     kernel: KernelFunctions,

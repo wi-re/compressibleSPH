@@ -3,7 +3,7 @@ from typing import NamedTuple
 from warpSPH.configurations import SimulationConfig
 from warpSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from warpSPH.utils import *
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 from ....systems import *
 from ....modules import idealGasEOS, evaluateOptimalSupport

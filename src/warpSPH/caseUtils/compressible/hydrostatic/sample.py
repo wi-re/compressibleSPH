@@ -2,7 +2,7 @@ from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
 from ....modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 def buildHydrostaticInitialState(rho_low, rho_high, nx, config, schemeConfig, SimulationState, SimulationSystem):
     compressibleSystem = setupBasicCompressibleInitialState(nx, config, schemeConfig, SimulationState, SimulationSystem)

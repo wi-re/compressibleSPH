@@ -1,5 +1,5 @@
 
-from sphWarpCore import *
+from warpSPHCore import *
 from ...utils.math import getPeriodicPositions
 # from ...systems.compSPH import CompSPHSystem, CompSPHState
 from ...configurations.compSPHConfig import CompSPHConfig

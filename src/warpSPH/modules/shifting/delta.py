@@ -1,6 +1,6 @@
 # 17. If finalize, compute shifting and update positions and velocities
 
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 
 from warpSPH.sample.wp_deltaShift import computeDeltaShiftWarp

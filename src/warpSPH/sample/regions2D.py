@@ -2,7 +2,7 @@ import numpy as np
 from ..configurations import *
 from warpSPH.modules import *
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 from ..enumTypes import *
 
 def splitDomain(split_x, split_y, domain, nx):

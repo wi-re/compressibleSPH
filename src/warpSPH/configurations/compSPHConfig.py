@@ -5,7 +5,7 @@ import torch
 from ..enumTypes import EnergyScheme
 
 # from ..modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 from dataclasses import dataclass, field
 

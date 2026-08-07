@@ -1,4 +1,4 @@
-from sphWarpCore import *
+from warpSPHCore import *
 from ...systems.compressibleMonaghan import *
 from warpSPH.configurations import SimulationConfig
 

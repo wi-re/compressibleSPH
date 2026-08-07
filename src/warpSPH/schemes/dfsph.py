@@ -2,7 +2,7 @@ from warpSPH.configurations import *
 from warpSPH.systems import *
 from warpSPH.modules import *
 from warpSPH.enumTypes import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 from warpSPH.utils.timer import TimedBlock
 from torch.profiler import profile, record_function, ProfilerActivity

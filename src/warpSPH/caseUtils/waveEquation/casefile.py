@@ -8,8 +8,8 @@ import torch
 from ...configurations import WaveCaseConfig, WaveShapeSpec, SimulationConfig, WaveBoundary, WaveSource
 from ...utils import buildDomainDescription
 from ...utils.sampling import SamplingScheme
-from integrators import IntegrationSchemeType
-from sphWarpCore import GradientScheme, KernelFunctions, LaplacianScheme, SupportScheme
+from warpSPHIntegrators import IntegrationSchemeType
+from warpSPHCore import GradientScheme, KernelFunctions, LaplacianScheme, SupportScheme
 from ...utils.sampling import n_h_to_nH
 
 try:

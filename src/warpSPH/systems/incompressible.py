@@ -1,8 +1,8 @@
-from integrators import *
+from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
 from typing import Optional
-from sphWarpCore import *
+from warpSPHCore import *
 from warpSPH.modules.surfaceDetection.wrapper import detectFreeSurface
 
 from ..rigidBody.integrate import  integrateRigidBody

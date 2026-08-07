@@ -1,7 +1,7 @@
 from .common import *
 from .switchState import *
 
-from sphWarpCore import *
+from warpSPHCore import *
 
 
 
@@ -214,7 +214,7 @@ def compute_vsig(
 
 
 
-from sphWarpCore import *
+from warpSPHCore import *
 def computeCullenTerms(
         dt: float,
         particleState: CompressibleState,

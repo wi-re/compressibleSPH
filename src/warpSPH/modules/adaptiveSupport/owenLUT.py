@@ -1,5 +1,5 @@
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 from .wp_psi import generatePSILut_warp
 
 

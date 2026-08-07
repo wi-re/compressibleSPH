@@ -2,7 +2,7 @@ from ...configurations.compressibleConfig import CompressibleSPHConfig
 
 from .wp_omega import computeOmegaWarp
 from ...systems.baseState import *
-from sphWarpCore import *
+from warpSPHCore import *
 from ...configurations import SimulationConfig
 from ...utils.support import volumeToSupportHelper, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
@@ -15,7 +15,7 @@ def computeH(rho, m, targetNeighbors, dim):
 
 def F(h, rho, m, targetNeighbors, dim):
     return h - computeH(rho, m, targetNeighbors, dim)
-from sphWarpCore import *
+from warpSPHCore import *
 
 def evaluateOptimalSupportMonaghan(
         particleState: BaseState,

@@ -4,7 +4,7 @@ from .regular import sampleRegularParticles
 from ..modules import *
 from ..configurations import CompressibleSPHConfig
 from ..enumTypes import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 def setupBasicCompressibleInitialState(
         nx,

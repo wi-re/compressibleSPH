@@ -2,7 +2,7 @@ from ...systems import CompressibleState
 from ...configurations import SimulationConfig, CompressibleSPHConfig
 import numpy as np
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 from typing import Optional, Union
 
 from .wp_psi0 import computePsi0Warp

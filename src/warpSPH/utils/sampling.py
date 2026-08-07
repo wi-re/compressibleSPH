@@ -27,7 +27,7 @@ class PointCloud:
 # from waves.utils.sampling import sampleRegularParticles
 # from waves.utils.support import n_h_to_nH
 
-from sphWarpCore import *
+from warpSPHCore import *
 
 # from .wp_deltaShift import computeDeltaShiftWarp
 # from waves.utils.sampling import ParticleSet

@@ -1,4 +1,4 @@
-from sphWarpCore import *
+from warpSPHCore import *
 from ...systems.compressibleMonaghan import CompressibleState
 from ...configurations import *
 from typing import Union, Tuple, Dict, Optional

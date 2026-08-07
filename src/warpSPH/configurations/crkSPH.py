@@ -4,7 +4,7 @@ import torch
 
 import warp as wp
 from enum import Enum
-from sphWarpCore import *
+from warpSPHCore import *
 import warp as wp
 from warp.types import vector, matrix
 # from wp_tensor import tensor
@@ -43,7 +43,7 @@ import torch
 from ..enumTypes import EnergyScheme
 
 # from ..modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 from dataclasses import dataclass, field
 

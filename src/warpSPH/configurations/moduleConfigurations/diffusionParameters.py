@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from sphWarpCore import *
+from warpSPHCore import *
 from dataclasses import dataclass, field
 import warp as wp
 from enum import Enum

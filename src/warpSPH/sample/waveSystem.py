@@ -1,7 +1,7 @@
 import torch
 from ..systems.waveSystem import computeDt, WaveSystemv3, WaveSystemStatev3
 from ..caseUtils.waveEquation.sample import smoothValuesWarp
-from sphWarpCore import *
+from warpSPHCore import *
 
 def finalizeWaveSystemSetup(
     particleState,

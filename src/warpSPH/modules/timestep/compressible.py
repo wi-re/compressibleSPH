@@ -4,7 +4,7 @@ from ...systems.compressibleMonaghan import CompressibleState, CompressibleSyste
 from ...configurations.compressibleConfig import CompressibleSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
 from typing import Optional
-from sphWarpCore import *
+from warpSPHCore import *
 from ...modules.eos import idealGasEOS
 import torch
 import warp as wp

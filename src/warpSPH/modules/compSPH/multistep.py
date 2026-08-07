@@ -6,7 +6,7 @@ from ...systems.compressibleMonaghan import CompressibleSystemUpdate
 from ...configurations.compSPHConfig import CompSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
 from ...enumTypes import EnergyScheme
-from sphWarpCore import *
+from warpSPHCore import *
 
 from typing import Any, List, Optional
 import numpy as np

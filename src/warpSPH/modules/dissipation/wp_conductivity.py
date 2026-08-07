@@ -4,7 +4,7 @@ from typing import Any
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
-from sphWarpCore import *
+from warpSPHCore import *
 
 from .pi import computePi_actual
 from ...configurations.moduleConfigurations.diffusionParameters import DiffusionParameters

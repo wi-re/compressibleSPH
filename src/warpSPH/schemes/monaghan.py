@@ -1,5 +1,5 @@
 # from warpSPH.modules import evaluateOptimalSupport, idealGasEOS, computeOmega
-# from sphWarpCore import SupportScheme
+# from warpSPHCore import SupportScheme
 # from warpSPH.modules import computePressureForceSymmetric, computeDudtMonaghan, computeMomentumConsistent
 # from warpSPH.modules import computeViscosity, computeConductivity, computeThermalDissipation
 from ..configurations.moduleConfigurations.diffusionParameters import DiffusionParameters, ViscosityTerms
@@ -8,7 +8,7 @@ from ..configurations import SimulationConfig, CompressibleSPHConfig
 import torch
 
 from ..modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 def compressibleSPH_Monaghan(
     system: CompressibleSystem,

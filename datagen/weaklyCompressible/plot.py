@@ -1,4 +1,4 @@
-from warpPlot import *
+from warpSPHPlotting import *
 
 def buildPlotText(runningState, args, simSetup, config, schemeConfig, timing):
     

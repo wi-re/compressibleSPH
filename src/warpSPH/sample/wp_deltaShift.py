@@ -4,8 +4,8 @@ from typing import Any
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
-from sphWarpCore import *
-from sphWarpCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
+from warpSPHCore import *
+from warpSPHCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
 
 
 @wp.func

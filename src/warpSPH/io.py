@@ -1,6 +1,6 @@
 import h5py as h5
 
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 from typing import Optional, Any
 import numpy as np
@@ -170,7 +170,7 @@ def loadState(stateGroup, device, SimulationState):
             stateDict[fieldName] = fieldValue
     return SimulationState(**stateDict)
 
-from integrators.specs import StageResult
+from warpSPHIntegrators.specs import StageResult
 def loadStage(stageGroup, device, SimulationState, SimulationUpdate):
     index = stageGroup.attrs['index']
 
@@ -527,7 +527,7 @@ def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=T
 
 
 from .enumTypes import *
-from integrators.integration import IntegrationSchemeType
+from warpSPHIntegrators.integration import IntegrationSchemeType
 def parseKernelFunctions(kernelName):
     for kernel in KernelFunctions:
         if kernel.name.lower() == kernelName.lower():

@@ -6,7 +6,7 @@ from typing import Any
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
-from sphWarpCore import *
+from warpSPHCore import *
 
 
 

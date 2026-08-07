@@ -4,7 +4,7 @@ from typing import Any
 import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
-from sphWarpCore import *
+from warpSPHCore import *
 
 @wp.func
 def computeLiuMatrices_Func_i(
@@ -255,7 +255,7 @@ def computeLiuMatrices_Kernel(
     numNeighbors_out[i] = nnbrs
 
 
-from sphWarpCore import *
+from warpSPHCore import *
 
 from copy import deepcopy
 

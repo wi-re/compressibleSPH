@@ -1,4 +1,7 @@
-# compressibleSPH
+# warpSPH
+
+*(formerly `compressibleSPH`; the SPH core previously hosted at this URL now lives at
+[`wi-re/warpSPHCore`](https://github.com/wi-re/warpSPHCore))*
 
 ![](examples/compressible/outputs/15-Triple_Point_equal_mass.gif)
 
@@ -16,17 +19,17 @@ The package currently exposes three compressible SPH schemes via `CompressibleSP
 - `CompSPH`
 - `CRKSPH`
 
-Scheme dispatch is handled by `buildScheme(...)` in `src/compressibleSPH/schemes/builder.py`.
+Scheme dispatch is handled by `buildScheme(...)` in `src/warpSPH/schemes/builder.py`.
 
 ### Kernels
 
-Kernel selection is part of `SimulationConfig.kernel` (type `KernelFunctions`, imported from `sphWarpCore`).
+Kernel selection is part of `SimulationConfig.kernel` (type `KernelFunctions`, imported from `warpSPHCore`).
 
-The parser helper `parseKernelFunctions(...)` accepts any kernel enum name exposed by your installed `sphWarpCore` version.
+The parser helper `parseKernelFunctions(...)` accepts any kernel enum name exposed by your installed `warpSPHCore` version.
 
 ### Integrators
 
-Time integration is selected with `SimulationConfig.integrationScheme` (type `IntegrationSchemeType`, from `integrators`).
+Time integration is selected with `SimulationConfig.integrationScheme` (type `IntegrationSchemeType`, from `warpSPHIntegrators`).
 
 The helper `buildConfig(...)` returns both:
 
@@ -86,13 +89,13 @@ These write/read HDF5 state data and JSON config metadata for reproducible runs.
 
 ## Package Layout
 
-- `src/compressibleSPH/configurations/`: simulation and scheme configuration dataclasses/builders
-- `src/compressibleSPH/schemes/`: scheme implementations and scheme builder
-- `src/compressibleSPH/systems/`: state/system containers
-- `src/compressibleSPH/modules/`: runtime modules (for example timestep support)
-- `src/compressibleSPH/sample/`: sampling utilities
-- `src/compressibleSPH/caseUtils/`: case setup helpers used by examples
-- `src/compressibleSPH/io.py`: export/import and parsing helpers
+- `src/warpSPH/configurations/`: simulation and scheme configuration dataclasses/builders
+- `src/warpSPH/schemes/`: scheme implementations and scheme builder
+- `src/warpSPH/systems/`: state/system containers
+- `src/warpSPH/modules/`: runtime modules (for example timestep support)
+- `src/warpSPH/sample/`: sampling utilities
+- `src/warpSPH/caseUtils/`: case setup helpers used by examples
+- `src/warpSPH/io.py`: export/import and parsing helpers
 - `examples/compressible/`: benchmark notebooks and generated media
 
 ## Environment Setup
@@ -100,17 +103,17 @@ These write/read HDF5 state data and JSON config metadata for reproducible runs.
 Recommended setup uses a dedicated conda environment and editable installs for backend repositories.
 
 ```
-mkdir warpSPH
-cd warpSPH
-git clone https://github.com/wi-re/integrators warpSPHIntegrators
-git clone https://github.com/wi-re/sphPlotting warpSPHPlotting
-git clone https://github.com/wi-re/warpSPH warpSPHCore
-git clone https://github.com/wi-re/compressibleSPH warpSPHFrontend
+mkdir warp-sph-stack
+cd warp-sph-stack
+git clone https://github.com/wi-re/warpSPHIntegrators
+git clone https://github.com/wi-re/warpSPHPlotting
+git clone https://github.com/wi-re/warpSPHCore
+git clone https://github.com/wi-re/warpSPH
 conda create -n warp_env python=3.14
 conda activate warp_env
 pip install tqdm seaborn pandas pyglet dill numba scipy scikit-image h5py ipykernel ipympl
 pip install -e warpSPHIntegrators/ warpSPHPlotting/ warpSPHCore/ 
-cd warpSPHFrontend
+cd warpSPH
 pip install -e .
 ```
 
@@ -128,7 +131,7 @@ Minimal usage pattern:
 
 ```python
 import torch
-from compressibleSPH import *
+from warpSPH import *
 
 # Build global simulation config + integrator
 config, integrator = buildConfig(
@@ -146,7 +149,7 @@ SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, expor
 schemeConfig = SimulationConfig()
 schemeConfig.gamma = 5.0 / 3.0
 
-# Case setup is typically done with helpers in compressibleSPH.caseUtils
+# Case setup is typically done with helpers in warpSPH.caseUtils
 ```
 
 ## Compressible Examples
@@ -173,7 +176,7 @@ A full gallery page with previews and embedded videos is available at:
 | 12. Kelvin-Helmholtz | [12-Kelvin-Helmholtz.ipynb](examples/compressible/12-Kelvin-Helmholtz.ipynb) | ![](examples/compressible/outputs/12-Kelvin_Helmholtz.png) | [MP4](examples/compressible/outputs/12-Kelvin_Helmholtz.mp4) |
 | 13. Rayleigh-Taylor | [13-Rayleigh_Taylor.ipynb](examples/compressible/13-Rayleigh_Taylor.ipynb) | ![](examples/compressible/outputs/13-Rayleigh_Taylor.png) | [MP4](examples/compressible/outputs/13-Rayleigh_Taylor.mp4) |
 | 14. Triple Point (Equal Resolution) | [14-Triple_point.ipynb](examples/compressible/14-Triple_point.ipynb) | ![](examples/compressible/outputs/14-Triple_Point_equal_resolution.png) | [MP4](examples/compressible/outputs/14-Triple_Point_equal_resolution.mp4) |
-| 15. Triple Point (Equal Mass) | [15-Triple_point_equalMass.ipynb](examples/compressible/15-Triple_point_equalMass.ipynb) | ![](examples/compressible/outputs/15-Triple_Point_equal_mass.png) | <video src="https://github.com/wi-re/compressibleSPH/blob/main/examples/compressible/outputs/15-Triple_Point_equal_mass.mp4" width="80%" controls></video>|
+| 15. Triple Point (Equal Mass) | [15-Triple_point_equalMass.ipynb](examples/compressible/15-Triple_point_equalMass.ipynb) | ![](examples/compressible/outputs/15-Triple_Point_equal_mass.png) | <video src="https://github.com/wi-re/warpSPH/blob/main/examples/compressible/outputs/15-Triple_Point_equal_mass.mp4" width="80%" controls></video>|
 
 ## Precision Note (Notebook Workflows)
 

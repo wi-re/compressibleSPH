@@ -1,4 +1,4 @@
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 from warpSPH.systems import *
 from warpSPH.modules import *

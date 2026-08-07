@@ -5,7 +5,7 @@ from ..modules.compSPH.balance import computeCompSPHBalanceTermWarp
 from ..enumTypes import EnergyScheme, ViscositySwitch
 from ..modules import *
 
-from sphWarpCore import *
+from warpSPHCore import *
 from ..systems.compSPH import CompSPHSystem, CompSPHState
 from ..configurations.compSPHConfig import CompSPHConfig
 from ..configurations.simulationConfig import SimulationConfig
@@ -16,7 +16,7 @@ from ..modules.shockCapturing.CullenHopkins import computeHopkinsTerms, computeH
 
 lut = None
 
-from sphWarpCore import *
+from warpSPHCore import *
 
 
 def compSPH_step(

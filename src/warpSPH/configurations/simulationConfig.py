@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 
 from ..utils import *
-from integrators import *
-from sphWarpCore import *
+from warpSPHIntegrators import *
+from warpSPHCore import *
 
 from dataclasses import dataclass, field
 

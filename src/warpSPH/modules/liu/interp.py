@@ -1,7 +1,7 @@
 import torch
 from .wp_mat import computeLiuMatricesWarp
 
-from sphWarpCore import *
+from warpSPHCore import *
 from typing import Any
 from ...configurations.simulationConfig import SimulationConfig
 from torch.profiler import record_function

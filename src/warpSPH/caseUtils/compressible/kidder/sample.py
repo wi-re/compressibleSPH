@@ -1,7 +1,7 @@
 from .kidder import KidderIsentropicCapsuleAnalyticSolution
 from ....modules.timestep.compressible import computeTimestep
 from warpSPH import *
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 import numpy as np
 

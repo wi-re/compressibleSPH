@@ -1,5 +1,5 @@
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 
 from ..shifting.delta import computeDeltaShift
 

@@ -1,17 +1,17 @@
 ## Video Description Boilerplate (General)
 
-This video shows a GPU-based compressible SPH simulation from the compressibleSPH benchmark suite.
+This video shows a GPU-based compressible SPH simulation from the warpSPH benchmark suite.
 
 The render includes every exported simulation time step. If adaptive time stepping is enabled, note that playback time is not the same as physical simulation time.
 
 Simulation stack:
-- Codebase: https://github.com/wi-re/compressibleSPH
-- Warp backend: https://github.com/wi-re/sphWarpCore
-- Timesteppers: https://github.com/wi-re/integrators
+- Codebase: https://github.com/wi-re/warpSPH
+- Warp backend: https://github.com/wi-re/warpSPHCore
+- Timesteppers: https://github.com/wi-re/warpSPHIntegrators
 
 Method summary:
 - SPH Scheme: CRKSPH
-- Time Integration: Runge-Kutta 2 (integrators backend)
+- Time Integration: Runge-Kutta 2 (warpSPHIntegrators backend)
 - Kernel: B7 spline
 - Neighbor Search: Warp compact-hash GPU neighbor search
 - Equation of State: Ideal gas

@@ -5,7 +5,7 @@ from ..modules.compSPH.balance import computeCompSPHBalanceTermWarp
 from ..enumTypes import EnergyScheme
 from ..modules import *
 
-from sphWarpCore import *
+from warpSPHCore import *
 from ..systems.compSPH import CompSPHSystem, CompSPHState
 from ..configurations.compSPHConfig import CompSPHConfig
 from ..configurations.simulationConfig import SimulationConfig

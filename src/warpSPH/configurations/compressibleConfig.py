@@ -4,7 +4,7 @@
 import torch
 
 # from ..modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 from dataclasses import dataclass, field
 from typing import Optional

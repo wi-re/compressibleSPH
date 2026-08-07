@@ -5,7 +5,7 @@ from ...systems.compressibleMonaghan import CompressibleState
 from typing import Optional, Union
 import torch
 from ...configurations import *
-from sphWarpCore import *
+from warpSPHCore import *
 
 from .switchState import ViscositySwitchState
 from .CullenDehnen2010 import computeCullenTerms, computeCullenUpdate

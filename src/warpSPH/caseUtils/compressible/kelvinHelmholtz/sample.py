@@ -2,7 +2,7 @@ from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
 from ....modules import *
-from sphWarpCore import *
+from warpSPHCore import *
 from ....modules.timestep.compressible import computeTimestep
 import math
 import numpy as np

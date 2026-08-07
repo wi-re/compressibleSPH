@@ -1,6 +1,6 @@
 from scipy.interpolate import RegularGridInterpolator
 from ..density.density import computeDensities
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 import numpy as np
 from ...utils.noise import generateNoise

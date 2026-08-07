@@ -1,11 +1,11 @@
 # Boilerplate import code for all libraries
 # Changes to the precision require re-loading the kernel and need to be done before any op uses them.
-import sphWarpCore_config as swc
+import warpSPHCore_config as swc
 from typing import Any
 swc.configure(precision="float32", dim=Any) # precision: float16|half|float32|single|float64|double
 
-import sphWarpCore as sph
-from sphWarpCore.type_config import *
+import warpSPHCore as sph
+from warpSPHCore.type_config import *
 print(get_type_config()) # confirms active settings
 
 # Initialize warp at this point
@@ -32,8 +32,8 @@ import shlex
 import subprocess
 
 # custom SPH libraries
-from integrators.integration import *
-from sphWarpCore import *
+from warpSPHIntegrators.integration import *
+from warpSPHCore import *
 
 # This library
 from warpSPH import *

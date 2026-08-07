@@ -3,13 +3,13 @@ from warpSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from warpSPH.modules.timestep.compressible import computeTimestep
 from warpSPH.util import *
 from warpSPH.schemes import *
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 from warp import Kernel
 
 from warpSPH.configurations import SimulationConfig
 from warpSPH.utils import *
-from sphWarpCore import *
+from warpSPHCore import *
 import torch
 from warpSPH.systems import *
 from warpSPH.modules import idealGasEOS, evaluateOptimalSupport

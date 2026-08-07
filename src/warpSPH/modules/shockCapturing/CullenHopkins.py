@@ -1,7 +1,7 @@
 from .common import *
 from .switchState import *
 
-from sphWarpCore import *
+from warpSPHCore import *
 from .CullenDehnen2010 import *
 
 def computeHopkinsTerms(
@@ -57,7 +57,7 @@ def computeHopkinsTerms(
         v_sig = None
     )
     
-from sphWarpCore import *
+from warpSPHCore import *
 def computeHopkinsUpdate(
         switchState: ViscositySwitchState,
         dt: float,

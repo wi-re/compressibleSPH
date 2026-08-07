@@ -1,4 +1,4 @@
-from sphWarpCore import *
+from warpSPHCore import *
 import warp as wp
 from ...configurations.moduleConfigurations.diffusionParameters import ViscosityTerms
 

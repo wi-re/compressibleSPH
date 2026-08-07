@@ -1,5 +1,5 @@
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 
 def mergeParticles(particles_l, particles_r):
     positions = torch.cat([particles_l.positions, particles_r.positions], dim = 0)

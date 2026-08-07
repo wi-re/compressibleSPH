@@ -1,4 +1,4 @@
-from sphWarpCore import *
+from warpSPHCore import *
 from warpSPH import *
 import torch
 import numpy as np

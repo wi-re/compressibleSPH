@@ -4,7 +4,7 @@ from ...systems.baseState import BaseState
 from ...configurations import SimulationConfig, CompressibleSPHConfig
 import numpy as np
 import torch
-from sphWarpCore import *
+from warpSPHCore import *
 from typing import Optional, Union
 from ...enumTypes import AdaptiveSupportScheme
 from torch.profiler import profile, record_function, ProfilerActivity

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from ...utils import *
 from typing import List, Union
-from sphWarpCore import *
+from warpSPHCore import *
 
 def smoothValuesWarp(quantity, particleState, nIters, neighbors, config):
     sampled  = quantity.clone()

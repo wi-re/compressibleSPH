@@ -6,8 +6,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import numpy as np
 
 # custom SPH libraries
-from integrators.integration import *
-from sphWarpCore import *
+from warpSPHIntegrators.integration import *
+from warpSPHCore import *
 
 # This library
 from warpSPH import *
