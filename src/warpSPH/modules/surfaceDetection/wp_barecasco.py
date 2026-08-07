@@ -45,17 +45,17 @@ def computeBarecascoSurfaceDetection_Func_i_first(
     # Domain and kernel parameters
     # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
-    mode_uint: wp.uint32, kernel_int: wp.int32, 
+    kernelProperties: kernelState,
     
     # Operation specific parameters
-    gradientMode_int: wp.int32, # type: ignore
+     # type: ignore
             
     beginIndex: wp.int32, # type: ignore
     numIndices: wp.int32, # type: ignore
     offsetArray: wp.array(dtype = wp.int64), # type: ignore
 
     # Operation Mode for masking certain kinds of interactions, e.g. for directional operations
-    opInt: wp.int32, ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
+    ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
@@ -76,8 +76,8 @@ def computeBarecascoSurfaceDetection_Func_i_first(
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
         j  = wp.int32(offsetArray[jj])
-        if opInt != 0:
-            if not checkDirectionality_j(referenceKinds[j], opInt):
+        if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+            if not checkDirectionality_j(referenceKinds[j], kernelProperties.operationMode):
                 continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
@@ -90,7 +90,7 @@ def computeBarecascoSurfaceDetection_Func_i_first(
         gradw_ij = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            kernelProperties, domainState,
             useCRK, Ai, Bi, gradAi, gradBi
         )
         if useGradientRenormalization:
@@ -100,12 +100,12 @@ def computeBarecascoSurfaceDetection_Func_i_first(
         w_ij = computeKernelCRK(
             xi, xj,
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            kernelProperties, domainState,
             useCRK, Ai, Bi
         )
 
         
-        x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        x_ij = computeDistanceVec(xi, xj, domainState)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
         n_ij = x_ij / (r_ij + scalar_t(1.0e-14) * hi)
 
@@ -131,11 +131,11 @@ def computeBarecascoSurfaceDetection_Func_Adjacency_first(
     gridState: gridData,
     numOffsets: wp.int32,
 
-    mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
+    kernelProperties: kernelState, 
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
-    if opInt != 0:
-        if not checkDirectionality_i(ki, opInt):
+    if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+        if not checkDirectionality_i(ki, kernelProperties.operationMode):
             return zero_like_warp(queryState.positions[i])
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
@@ -163,10 +163,10 @@ def computeBarecascoSurfaceDetection_Func_Adjacency_first(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
-            mode_uint, kernel_int, gradientMode_int,
+            kernelProperties,
 
             beginIndex, numIndices, adjacencyState.neighborList if useAdjacency else gridState.sortIndex,
-            opInt, ki, referenceState.kinds,
+            ki, referenceState.kinds,
 
             useGradientRenormalization, Li,
             useGradHTerms, omega_i, correctionData.referenceOmegas,
@@ -192,17 +192,17 @@ def computeBarecascoSurfaceDetection_Func_i_second(
     # Domain and kernel parameters
     # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
-    mode_uint: wp.uint32, kernel_int: wp.int32, 
+    kernelProperties: kernelState,
     
     # Operation specific parameters
-    gradientMode_int: wp.int32, # type: ignore
+     # type: ignore
             
     beginIndex: wp.int32, # type: ignore
     numIndices: wp.int32, # type: ignore
     offsetArray: wp.array(dtype = wp.int64), # type: ignore
 
     # Operation Mode for masking certain kinds of interactions, e.g. for directional operations
-    opInt: wp.int32, ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
+    ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
@@ -225,8 +225,8 @@ def computeBarecascoSurfaceDetection_Func_i_second(
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
         j  = wp.int32(offsetArray[jj])
-        if opInt != 0:
-            if not checkDirectionality_j(referenceKinds[j], opInt):
+        if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+            if not checkDirectionality_j(referenceKinds[j], kernelProperties.operationMode):
                 continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
@@ -239,21 +239,21 @@ def computeBarecascoSurfaceDetection_Func_i_second(
         gradw_ij = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            kernelProperties, domainState,
             useCRK, Ai, Bi, gradAi, gradBi
         )
         if useGradientRenormalization:
             gradw_ij = matmul(Li, gradw_ij)
 
         
-        x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        x_ij = computeDistanceVec(xi, xj, domainState)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
         n_ij = x_ij / (r_ij + scalar_t(1.0e-14) * hi)
     
         w_ij = computeKernelCRK(
             xi, xj,
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            kernelProperties, domainState,
             useCRK, Ai, Bi
         )
 
@@ -288,14 +288,14 @@ def computeBarecascoSurfaceDetection_Func_Adjacency_second(
     gridState: gridData,
     numOffsets: wp.int32,
 
-    mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
+    kernelProperties: kernelState, 
 
     coverVector: vector(dtype = scalar_t, length=Any), # type: ignore
     threshold: scalar_t, # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
-    if opInt != 0:
-        if not checkDirectionality_i(ki, opInt):
+    if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+        if not checkDirectionality_i(ki, kernelProperties.operationMode):
             return zero_like_warp(queryState.supports[i])
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
@@ -323,10 +323,10 @@ def computeBarecascoSurfaceDetection_Func_Adjacency_second(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
-            mode_uint, kernel_int, gradientMode_int,
+            kernelProperties,
 
             beginIndex, numIndices, adjacencyState.neighborList if useAdjacency else gridState.sortIndex,
-            opInt, ki, referenceState.kinds,
+            ki, referenceState.kinds,
 
             useGradientRenormalization, Li,
             useGradHTerms, omega_i, correctionData.referenceOmegas,
@@ -348,7 +348,7 @@ def computeBarecascoSurfaceDetection_Kernel(
     useAdjacency: wp.bool, adjacencyState: adjacencyData, gridState: gridData,
     correctionData: Any,
     
-    mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, laplacianMode_int: wp.int32, positiveDivergence_int: wp.int32, divergenceMode_int: wp.int32, opInt: wp.int32,
+    kernelProperties: kernelState,
     # Do not change the parameters above
     barecascoThreshold: scalar_t, # type: ignore
 
@@ -367,7 +367,7 @@ def computeBarecascoSurfaceDetection_Kernel(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
-        mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
+        kernelProperties,  #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
     )
     normalizedCoverVector = wp.normalize(coverVector)
@@ -378,7 +378,7 @@ def computeBarecascoSurfaceDetection_Kernel(
         i, domainState.dim,
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,   
-        mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
+        kernelProperties,  #queryKinds, referenceKinds,
         normalizedCoverVector, barecascoThreshold
     )
 

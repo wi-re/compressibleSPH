@@ -22,17 +22,17 @@ def computePsi0_Func_i(
     # Domain and kernel parameters
     # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
-    mode_uint: wp.uint32, kernel_int: wp.int32, 
+    kernelProperties: kernelState,
     
     # Operation specific parameters
-    gradientMode_int: wp.int32, # type: ignore
+     # type: ignore
             
     beginIndex: wp.int32, # type: ignore
     numIndices: wp.int32, # type: ignore
     offsetArray: wp.array(dtype = wp.int64), # type: ignore
 
     # Operation Mode for masking certain kinds of interactions, e.g. for directional operations
-    opInt: wp.int32, ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
+    ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
@@ -53,8 +53,8 @@ def computePsi0_Func_i(
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
         j  = wp.int32(offsetArray[jj])
-        if opInt != 0:
-            if not checkDirectionality_j(referenceKinds[j], opInt):
+        if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+            if not checkDirectionality_j(referenceKinds[j], kernelProperties.operationMode):
                 continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
@@ -87,14 +87,12 @@ def computePsi0_Func_i(
         kTerm = hScaling_W * sphKernel(
             xi, xj, 
             hi, hj, 
-            kernel_int, wp.uint32(wp.static(SupportScheme.Gather.value)),                           
-            domainState.periodicity, domainState.domainMin, domainState.domainMax
+            kernelProperties, domainState,                   
         )
         gradW = sphKernelGradient(
             xi, xj,
             hi, hj,
-            kernel_int, wp.uint32(wp.static(SupportScheme.Gather.value)),
-            domainState.periodicity, domainState.domainMin, domainState.domainMax
+            kernelProperties, domainState,    
         )
         gradW_norm = safe_sqrt(wp.dot(gradW, gradW))
 
@@ -120,11 +118,11 @@ def computePsi0_Func_Adjacency(
     gridState: gridData,
     numOffsets: wp.int32,
 
-    mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
+    kernelProperties: kernelState, 
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
-    if opInt != 0:
-        if not checkDirectionality_i(ki, opInt):
+    if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+        if not checkDirectionality_i(ki, kernelProperties.operationMode):
             return scalar_t(0.0), scalar_t(0.0)
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
@@ -153,10 +151,10 @@ def computePsi0_Func_Adjacency(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
-            mode_uint, kernel_int, gradientMode_int,
+            kernelProperties,
 
             beginIndex, numIndices, adjacencyState.neighborList if useAdjacency else gridState.sortIndex,
-            opInt, ki, referenceState.kinds,
+            ki, referenceState.kinds,
 
             useGradientRenormalization, Li,
             useGradHTerms, omega_i, correctionData.referenceOmegas,
@@ -180,7 +178,7 @@ def computePsi0_Kernel(
     useAdjacency: wp.bool, adjacencyState: adjacencyData, gridState: gridData,
     correctionData: Any,
     
-    mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, laplacianMode_int: wp.int32, positiveDivergence_int: wp.int32, divergenceMode_int: wp.int32, opInt: wp.int32,
+    kernelProperties: kernelState,
     # Do not change the parameters above
     
     # The last parameter is always the output array and should not be changed
@@ -196,7 +194,7 @@ def computePsi0_Kernel(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
-        mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
+        kernelProperties,  #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
     )
     output_psi0[i] = psi0

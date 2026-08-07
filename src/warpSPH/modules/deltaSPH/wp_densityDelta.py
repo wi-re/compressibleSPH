@@ -24,17 +24,17 @@ def computeDensityDiffusionDeltaSPH_Func_i(
     # Domain and kernel parameters
     # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
-    mode_uint: wp.uint32, kernel_int: wp.int32, 
+    kernelProperties: kernelState,
     
     # Operation specific parameters
-    gradientMode_int: wp.int32, # type: ignore
+     # type: ignore
             
     beginIndex: wp.int32, # type: ignore
     numIndices: wp.int32, # type: ignore
     offsetArray: wp.array(dtype = wp.int64), # type: ignore
 
     # Operation Mode for masking certain kinds of interactions, e.g. for directional operations
-    opInt: wp.int32, ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
+    ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
 
     # Optional Correction Terms:
     # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
@@ -59,8 +59,8 @@ def computeDensityDiffusionDeltaSPH_Func_i(
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
         j  = wp.int32(offsetArray[jj])
-        if opInt != 0:
-            if not checkDirectionality_j(referenceKinds[j], opInt):
+        if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+            if not checkDirectionality_j(referenceKinds[j], kernelProperties.operationMode):
                 continue
         ##########################################################
         #   The core particle-particle interaction starts here   #
@@ -73,14 +73,14 @@ def computeDensityDiffusionDeltaSPH_Func_i(
         gradw_ij = computeKernelGradientCRK(
             xi, xj, 
             hi, hj,
-            kernel_int, mode_uint, domainState.periodicity, domainState.domainMin, domainState.domainMax,
+            kernelProperties, domainState,
             useCRK, Ai, Bi, gradAi, gradBi
         )
         if useGradientRenormalization:
             gradw_ij = matmul(Li, gradw_ij)
 
         
-        x_ij = computeDistanceVec(xi, xj, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+        x_ij = computeDistanceVec(xi, xj, domainState)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
         n_ij = x_ij / (r_ij + scalar_t(1.0e-14) * hi)
 
@@ -133,7 +133,7 @@ def computeDensityDiffusionDeltaSPH_Func_Adjacency(
     gridState: gridData,
     numOffsets: wp.int32,
 
-    mode_uint: wp.uint32, kernel_int: wp.int32, gradientMode_int: wp.int32, opInt: wp.int32, 
+    kernelProperties: kernelState,
     
     queryGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     queryGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
@@ -142,8 +142,8 @@ def computeDensityDiffusionDeltaSPH_Func_Adjacency(
     outputValue : Any, # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
-    if opInt != 0:
-        if not checkDirectionality_i(ki, opInt):
+    if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
+        if not checkDirectionality_i(ki, kernelProperties.operationMode):
             return zero_like_warp(outputValue)
         
     useGradientRenormalization, Li = getL_i(correctionData, i)
@@ -174,10 +174,10 @@ def computeDensityDiffusionDeltaSPH_Func_Adjacency(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
-            mode_uint, kernel_int, gradientMode_int,
+            kernelProperties,
 
             beginIndex, numIndices, adjacencyState.neighborList if useAdjacency else gridState.sortIndex,
-            opInt, ki, referenceState.kinds,
+            ki, referenceState.kinds,
 
             useGradientRenormalization, Li,
             useGradHTerms, omega_i, correctionData.referenceOmegas,
@@ -204,8 +204,8 @@ def computeDensityDiffusionDeltaSPH_Kernel(
 
     useAdjacency: wp.bool, adjacencyState: adjacencyData, gridState: gridData,
     correctionData: Any,
-    
-    mode_uint: wp.uint32, kernel_int : wp.int32, gradientMode_int: wp.int32, laplacianMode_int: wp.int32, positiveDivergence_int: wp.int32, divergenceMode_int: wp.int32, opInt: wp.int32,
+
+    kernelProperties: kernelState,
     # Do not change the parameters above
     queryGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRho: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     queryGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceGradRhoL: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
@@ -223,7 +223,7 @@ def computeDensityDiffusionDeltaSPH_Kernel(
         i, domainState.dim, 
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
-        mode_uint, kernel_int, gradientMode_int,  opInt, #queryKinds, referenceKinds,
+        kernelProperties,
         # The parameters above are default parameters and shold not be changed
         queryGradRho, referenceGradRho,
         queryGradRhoL, referenceGradRhoL,

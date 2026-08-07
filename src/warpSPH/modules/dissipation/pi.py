@@ -54,7 +54,7 @@ def computePi_actual(
     if viscosityParams.scaleBeta:
         C_q = C_q * C_l
 
-    x_ij = computeDistanceVec(x_i, x_j, domainState.periodicity, domainState.domainMin, domainState.domainMax)
+    x_ij = computeDistanceVec(x_i, x_j, domainState)
     r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
 
     u_ij = v_i - v_j
