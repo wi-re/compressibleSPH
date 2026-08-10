@@ -4,7 +4,7 @@ import pytest
 
 from warpSPH.runner import buildContext, listCases
 from warpSPH.runner.caseSpec import CaseSpec
-from warpSPH.runner.runner import _schemeConfigKeyword, resolveEnum
+from warpSPH.runner.runner import resolveEnum
 
 
 def test_allCasesRegister():
@@ -13,15 +13,18 @@ def test_allCasesRegister():
     assert set(listCases()) >= {'sod', 'tgv', 'dambreak'}
 
 
-@pytest.mark.parametrize('caseName, expected', [
-    ('sod', 'compParams'),        # compSPH_step
-    ('tgv', 'schemeConfig'),      # dfsph_step
-    ('dambreak', 'schemeConfig'), # deltaSPH_step
-])
-def test_schemeConfigKeywordIsDetectedPerScheme(caseName, expected):
-    """The step functions disagree on what to call their config; the runner
-    introspects rather than assuming, which is what lets one loop drive all
-    three schemes."""
+@pytest.mark.parametrize('caseName', ['sod', 'tgv', 'dambreak'])
+def test_everySchemeNamesItsConfigTheSame(caseName):
+    """One loop drives every scheme only because they agree on the keyword.
+
+    ``compSPH_step``/``crkSPH_step``/``compressibleSPH_Monaghan`` used to call it
+    ``compParams`` while ``deltaSPH_step``/``dfsph_step`` called it
+    ``schemeConfig``; the integrator forwards ``**kwargs`` verbatim, so a caller
+    that guessed wrong got a ``TypeError``. The runner passes ``schemeConfig=``
+    unconditionally now, so this is the invariant holding that up.
+    """
+    from inspect import signature
+
     from warpSPH.cases import importAll
     from warpSPH.runner import getCase
     importAll()
@@ -29,7 +32,20 @@ def test_schemeConfigKeywordIsDetectedPerScheme(caseName, expected):
     spec = CaseSpec(caseName=case.name, scheme=case.scheme,
                     params=dict(case.params)).merged(**case.defaults)
     ctx = buildContext(case, spec)
-    assert _schemeConfigKeyword(ctx.stepFunction) == expected
+    assert 'schemeConfig' in signature(ctx.stepFunction).parameters
+    assert 'compParams' not in signature(ctx.stepFunction).parameters
+
+
+def test_allStepFunctionsAgreeOnTheKeyword():
+    """The same invariant for the schemes no registered case exercises."""
+    from inspect import signature
+
+    from warpSPH.schemes import buildScheme
+    for name in ('compSPH', 'crkSPH', 'MonaghanCompressibleSPH', 'deltaSPH',
+                 'divergenceFree'):
+        parameters = signature(buildScheme(name).stepFunction).parameters
+        assert 'schemeConfig' in parameters, name
+        assert 'compParams' not in parameters, name
 
 
 def test_resolveEnumIsCaseInsensitiveAndRejectsGarbage():
@@ -38,3 +54,29 @@ def test_resolveEnumIsCaseInsensitiveAndRejectsGarbage():
     assert resolveEnum(KernelFunctions, KernelFunctions.B7) is KernelFunctions.B7
     with pytest.raises(ValueError, match='Invalid KernelFunctions'):
         resolveEnum(KernelFunctions, 'NotAKernel')
+
+
+def test_schemeBundleIsNamedAndStillUnpacks():
+    """`SchemeBundle` replaced a bare 7-tuple. Named access is the point; the
+    positional unpacking is kept so that adding an eighth member (a tangent
+    propagator, once forward-mode AD lands) does not break old call sites."""
+    from warpSPH.schemes import buildScheme
+    from warpSPH.schemes.builder import SchemeBundle
+
+    bundle = buildScheme('compSPH')
+    assert isinstance(bundle, SchemeBundle)
+    assert bundle.stepFunction.__name__ == 'compSPH_step'
+
+    system, state, config, update, step, export, imp = bundle
+    assert (system, state, config, update, step, export, imp) == (
+        bundle.SimulationSystem, bundle.SimulationState, bundle.SimulationConfig,
+        bundle.SimulationUpdate, bundle.stepFunction, bundle.exportFunction,
+        bundle.importFunction)
+
+
+def test_buildSchemeRejectsUnknownSchemes():
+    import pytest as _pytest
+
+    from warpSPH.schemes import buildScheme
+    with _pytest.raises(ValueError, match='not recognized'):
+        buildScheme('notAScheme')

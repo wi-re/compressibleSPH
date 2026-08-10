@@ -14,13 +14,13 @@ def compressibleSPH_Monaghan(
     system: CompressibleSystem,
     dt: float,
     config: SimulationConfig,
-    compParams: CompressibleSPHConfig,
+    schemeConfig: CompressibleSPHConfig,
     verbose = False,
 ):
     currentSystem = system#.initializeNewState()
     currentState = currentSystem.state
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, schemeConfig, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
 
@@ -47,16 +47,16 @@ def compressibleSPH_Monaghan(
         adjacency = adjacency,
     )
 
-    enforceDirichlet(currentSystem, dt, config, compParams)
+    enforceDirichlet(currentSystem, dt, config, schemeConfig)
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
         u = currentState.internalEnergies,
         P = None,
         rho = currentState.densities,
-        gamma = compParams.gamma,
+        gamma = schemeConfig.gamma,
     )
 
-    if compParams.adaptiveSupportCorrections:
+    if schemeConfig.adaptiveSupportCorrections:
         omega = computeOmega(currentState, 
                 OperationProperties(
                     kernel = config.kernel,
@@ -101,7 +101,7 @@ def compressibleSPH_Monaghan(
     )
 
 
-    diffusionParams = compParams.diffusionParams
+    diffusionParams = schemeConfig.diffusionParams
     dvdt_diss = computeViscosity(
         currentState,
         # queryVelocities=currentState.velocities,
@@ -142,7 +142,7 @@ def compressibleSPH_Monaghan(
 
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt + dvdt_diss)) + currentState.masses * (dudt + dudt_diss)
 
-    forcing = computeForcing(currentSystem, dt, config, compParams)
+    forcing = computeForcing(currentSystem, dt, config, schemeConfig)
     dvdt += forcing / currentState.masses.view(-1,1)
 
 
@@ -153,6 +153,6 @@ def compressibleSPH_Monaghan(
         drhodt = drhodt,
         dEdt = dEdt,
     )
-    enforceUpdates(update, currentSystem, dt, config, compParams)
+    enforceUpdates(update, currentSystem, dt, config, schemeConfig)
 
     return update, adjacency, currentState

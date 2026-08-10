@@ -32,21 +32,46 @@ class RunContext:
     device: Any
     dtype: Any
 
-    # buildScheme's tuple, unpacked once and named. Phase 3 replaces the tuple
-    # itself with a SchemeBundle; these names are chosen to match.
-    SimulationSystem: Any = None
-    SimulationState: Any = None
-    SimulationConfig: Any = None
-    SimulationUpdate: Any = None
-    stepFunction: Any = None
-    exportFunction: Any = None
-    importFunction: Any = None
+    #: The scheme's :class:`~warpSPH.schemes.builder.SchemeBundle`, built once.
+    #: The seven properties below read through to it rather than copying it, so
+    #: there is one source of truth for what a scheme is made of.
+    bundle: Any = None
 
     exportPath: Optional[str] = None
     imagePath: Optional[str] = None
     # Free-form slot for a case to stash state between hooks (a plotter handle,
     # a reference solution, the initial energy) without globals.
     scratch: Dict[str, Any] = field(default_factory=dict)
+
+    # Read-through accessors for the bundle's members, kept because cases and
+    # notebooks address them by these names.
+    @property
+    def SimulationSystem(self):
+        return self.bundle.SimulationSystem
+
+    @property
+    def SimulationState(self):
+        return self.bundle.SimulationState
+
+    @property
+    def SimulationConfig(self):
+        return self.bundle.SimulationConfig
+
+    @property
+    def SimulationUpdate(self):
+        return self.bundle.SimulationUpdate
+
+    @property
+    def stepFunction(self):
+        return self.bundle.stepFunction
+
+    @property
+    def exportFunction(self):
+        return self.bundle.exportFunction
+
+    @property
+    def importFunction(self):
+        return self.bundle.importFunction
 
     def param(self, name: str, default: Any = None) -> Any:
         return self.spec.params.get(name, default)

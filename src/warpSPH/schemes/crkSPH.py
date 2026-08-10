@@ -20,7 +20,7 @@ def crkSPH_step(
     system: CompSPHSystem,
     dt: float,
     config: SimulationConfig,
-    compParams: CompSPHConfig,
+    schemeConfig: CompSPHConfig,
     verbose = False,
 ):
 
@@ -37,7 +37,7 @@ def crkSPH_step(
     # print(f'\tmin/max/mean IE: {IE.min().item()}/{IE.max().item()}/{IE.mean().item()}')
     # print(f'\tmin/max/mean KE: {KE.min().item()}/{KE.max().item()}/{KE.mean().item()}')
 
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, schemeConfig, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
 
@@ -91,13 +91,13 @@ def crkSPH_step(
     #     domain = config.domain,
     #     adjacency = adjacency,
     # )
-    enforceDirichlet(currentSystem, t, dt, config, compParams)
+    enforceDirichlet(currentSystem, t, dt, config, schemeConfig)
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
         u = currentState.internalEnergies,
         P = None,
         rho = currentState.densities,
-        gamma = compParams.gamma,
+        gamma = schemeConfig.gamma,
     )
 
     # nabla_dot_v = warpOperation(
@@ -132,7 +132,7 @@ def crkSPH_step(
     # balsara = torch.abs(nabla_dot_v) / (torch.abs(nabla_dot_v) + torch.norm(nabla_times_v, dim=-1) + 1e-4 * currentState.soundspeeds )
     # currentState.alphas = torch.clamp(balsara, 0.0, 1.0) 
 
-    # if compParams.adaptiveSupportCorrections:
+    # if schemeConfig.adaptiveSupportCorrections:
     #     omega = computeOmega(currentState, 
     #             OperationProperties(
     #                 kernel = config.kernel,
@@ -151,7 +151,7 @@ def crkSPH_step(
     # currentState.alphas, switchState = computeViscositySwitchTerms(
     #     dt,
     #     currentState, 
-    #     config, compParams, 
+    #     config, schemeConfig, 
     #     SupportScheme.SuperSymmetric, 
     #     adjacency)   
 
@@ -179,7 +179,7 @@ def crkSPH_step(
     #         supportMode =  SupportScheme.KernelMeanSymmetric
     #     ),
     #     domain = config.domain,
-    #     conductivityParams= compParams.diffusionParams,
+    #     conductivityParams= schemeConfig.diffusionParams,
 
     #     queryEnergies = currentState.internalEnergies,
     #     queryVelocities= currentState.velocities,
@@ -195,7 +195,7 @@ def crkSPH_step(
     currentState.alphas, switchState = computeViscositySwitchTerms(
         dt,
         currentState, 
-        config, compParams, 
+        config, schemeConfig, 
         SupportScheme.SuperSymmetric, 
         adjacency)   
 
@@ -207,7 +207,7 @@ def crkSPH_step(
     #         supportMode =  SupportScheme.KernelMeanSymmetric
     #     ),
     #     domain = config.domain,
-    #     conductivityParams= compParams.diffusionParams,
+    #     conductivityParams= schemeConfig.diffusionParams,
 
     #     queryEnergies = currentState.internalEnergies,
     #     queryVelocities= currentState.velocities,
@@ -226,7 +226,7 @@ def crkSPH_step(
     #         supportMode = SupportScheme.Gather #E.3
     #      ),
     #     domain = config.domain,
-    #     conductivityParams= compParams.diffusionParams,
+    #     conductivityParams= schemeConfig.diffusionParams,
 
     #     queryEnergies = currentState.internalEnergies,
     #     queryVelocities= currentState.velocities,
@@ -245,8 +245,8 @@ def crkSPH_step(
             supportMode =  SupportScheme.KernelMeanSymmetric
         ),
         domain = config.domain,
-        conductivityParams= compParams.diffusionParams,
-        crkViscosityParams = compParams.crkViscosityParams,
+        conductivityParams= schemeConfig.diffusionParams,
+        crkViscosityParams = schemeConfig.crkViscosityParams,
         queryVelocityTensor= velocityGradient,
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,
@@ -267,8 +267,8 @@ def crkSPH_step(
             supportMode = SupportScheme.KernelMeanSymmetric #E.3
          ),
         domain = config.domain,
-        conductivityParams= compParams.diffusionParams,
-        crkViscosityParams = compParams.crkViscosityParams,
+        conductivityParams= schemeConfig.diffusionParams,
+        crkViscosityParams = schemeConfig.crkViscosityParams,
         queryVelocityTensor= velocityGradient,
 
         queryEnergies = currentState.internalEnergies,
@@ -289,7 +289,7 @@ def crkSPH_step(
     #         supportMode = SupportScheme.Gather #E.3
     #      ),
     #     domain = config.domain,
-    #     conductivityParams= compParams.diffusionParams,
+    #     conductivityParams= schemeConfig.diffusionParams,
 
     #     queryEnergies = currentState.internalEnergies,
     #     queryVelocities= currentState.velocities,
@@ -309,7 +309,7 @@ def crkSPH_step(
     #     switchState,
     #     dt, dvdt,
     #     currentState, 
-    #     config, compParams, 
+    #     config, schemeConfig, 
     #     SupportScheme.SuperSymmetric, 
     #     adjacency)   
 
@@ -324,7 +324,7 @@ def crkSPH_step(
     currentState.divergence = -drhodt / currentState.densities
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt)) + currentState.masses * (dudt)
 
-    forcing = computeForcing(currentSystem, t, dt, config, compParams)
+    forcing = computeForcing(currentSystem, t, dt, config, schemeConfig)
     dvdt += forcing / currentState.masses.view(-1,1)
 
     update = CompressibleSystemUpdate(
@@ -336,7 +336,7 @@ def crkSPH_step(
         passive = torch.zeros(currentState.densities.shape, device=currentState.densities.device, dtype=torch.bool)
     )
 
-    enforceUpdates(update, currentSystem, dt, t, config, compParams)
+    enforceUpdates(update, currentSystem, dt, t, config, schemeConfig)
     
     v_halfstep = currentState.velocities + 0.5 * dt * update.dvdt
 
@@ -354,9 +354,9 @@ def crkSPH_step(
 
         pairWise_pressureAccel= currentState.ap_ij,
         pairWise_viscosityAccel = currentState.av_ij,
-        energyScheme = compParams.energyScheme,
+        energyScheme = schemeConfig.energyScheme,
         dt= dt.detach().cpu().item() if isinstance(dt, torch.Tensor) else dt,
-        gamma = compParams.gamma,
+        gamma = schemeConfig.gamma,
 
         adjacency = adjacency,
         gradHState = gradHState

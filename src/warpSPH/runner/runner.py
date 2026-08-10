@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass, field
-from inspect import signature
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
@@ -73,24 +72,6 @@ def _resolveScheme(name: str):
     raise ValueError(f'Unknown scheme {name!r}.')
 
 
-def _schemeConfigKeyword(stepFunction) -> str:
-    """Which keyword this scheme's step function calls its config.
-
-    ``compSPH_step``/``crkSPH_step`` name it ``compParams`` while
-    ``deltaSPH_step`` names it ``schemeConfig``; the integrator forwards
-    ``**kwargs`` verbatim, so the caller has to get this right. Introspecting it
-    is what lets one loop drive every scheme.
-    """
-    parameters = signature(stepFunction).parameters
-    for candidate in ('schemeConfig', 'compParams'):
-        if candidate in parameters:
-            return candidate
-    raise TypeError(
-        f'{getattr(stepFunction, "__name__", stepFunction)} takes neither a '
-        f'`schemeConfig` nor a `compParams` argument; cannot drive it generically.'
-    )
-
-
 def buildContext(case: Case, spec: CaseSpec) -> RunContext:
     """Resolve a spec into a config, a scheme, and a populated context."""
     # Idempotent, and cheap once done. Running a case module directly imports
@@ -134,25 +115,18 @@ def buildContext(case: Case, spec: CaseSpec) -> RunContext:
     )
 
     scheme = _resolveScheme(spec.scheme or case.scheme)
-    (SimulationSystem, SimulationState, SchemeConfig, SimulationUpdate,
-     stepFunction, exportFunction, importFunction) = buildScheme(scheme)
+    bundle = buildScheme(scheme)
 
     return RunContext(
         spec=spec,
         case=case,
         config=config,
         integrator=integrator,
-        schemeConfig=SchemeConfig(),
+        schemeConfig=bundle.SimulationConfig(),
         scheme=scheme,
         device=device,
         dtype=dtype,
-        SimulationSystem=SimulationSystem,
-        SimulationState=SimulationState,
-        SimulationConfig=SchemeConfig,
-        SimulationUpdate=SimulationUpdate,
-        stepFunction=stepFunction,
-        exportFunction=exportFunction,
-        importFunction=importFunction,
+        bundle=bundle,
     )
 
 
@@ -263,7 +237,6 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
         result.trajectory.append(dict(case.diagnostics(ctx, runningState), step=-1, t=0.0,
                                       stepTime_ms=0.0))
 
-    schemeKeyword = _schemeConfigKeyword(ctx.stepFunction)
     stepResult = None
 
     progress = _progressBar(range(nSteps), enabled=spec.progress)
@@ -275,7 +248,7 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
                 dt=ctx.config.dt,
                 config=ctx.config,
                 verbose=False,
-                **{schemeKeyword: ctx.schemeConfig},
+                schemeConfig=ctx.schemeConfig,
             )
         runningState = stepResult.state
 

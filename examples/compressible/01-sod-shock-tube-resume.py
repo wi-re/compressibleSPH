@@ -64,7 +64,10 @@ exportPath = args.exportPath
 fileName = args.fileName
 
 importedSystem, importedStages, importedScheme, extraData = importSimulationSystem(f'{exportPath}/{fileName}', device, dtype)
-SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, export_fn, import_fn = buildScheme(importedScheme)
+bundle = buildScheme(importedScheme)
+SimulationSystem, SimulationState = bundle.SimulationSystem, bundle.SimulationState
+SimulationUpdate = bundle.SimulationUpdate
+fn, export_fn, import_fn = bundle.stepFunction, bundle.exportFunction, bundle.importFunction
 
 config, schemeConfig = importConfigs(f'{exportPath}/config.json', import_fn)
 
@@ -117,7 +120,7 @@ for i in (tq := tqdm(range(startIndex, startIndex + nSteps), leave = True)):
         f = fn,
         dt = config.dt,
         config = config,
-        compParams = schemeConfig,
+        schemeConfig = schemeConfig,
         verbose = False,
         # priorStep = priorStep
     )

@@ -4,10 +4,12 @@ Working document for the cleanup sweep preceding forward-mode AD work.
 Core and Integrators have already been overhauled; this repo (the former frontend,
 `~/dev/warpSPHFrontend` → now `~/dev/warpSPH`) was the lagging piece.
 
-**Status:** Phases 0, 1 and 2 **complete** (Phase 2 done 2026-08-10). Repo weight
-remains **deliberately deferred** — see "Deferred: repo weight"; its precondition
-(Phase 2 done) is now met, so it is unblocked whenever the physics is verified.
-Phase 3 is next.
+**Status:** Phases 0, 1 and 2 **complete**. Phase 3 is **partly done**
+(2026-08-10): `SchemeBundle` and the `compParams`/`schemeConfig` unification have
+landed together with the notebook sweep they gated; **namespace hygiene and
+`__all__` remain open**. Repo weight remains **deliberately deferred** — see
+"Deferred: repo weight" — though its separable piece, the `nbstripout` filter, is
+now installed.
 
 ---
 
@@ -195,7 +197,16 @@ gitignore rule, and attach the polished renders to a GitHub release. That reclai
 
 The `nbstripout` pre-commit hook is **separable and non-destructive** — it can be added
 at any time without a history rewrite, and doing so early stops the notebook history
-from growing further.
+from growing further. **Installed 2026-08-10** (`nbstripout --install --attributes
+.gitattributes`, so `.gitattributes` is committed but the `filter.nbstripout.*` git
+config is local and each clone must re-run it).
+
+Note what the clean filter actually does: the **working tree keeps its rendered
+figures** (11.5 MB of the 12.7 MB of notebooks), while what git *stores* is stripped —
+e.g. `02-Linear_Wave.ipynb` is 141 KB on disk and 13 KB as a blob. So the next commit
+touching a notebook removes its outputs from version control without removing them
+from the working copy. Only the 18 stale error tracebacks were deleted outright, by
+decision; the figures were kept.
 
 ---
 
@@ -292,11 +303,11 @@ from growing further.
   `nu_eff_vs_nu.png` suggests this has been looked at before.)
 
 - [~] Notebooks stay for exploration but import the same runner — **mechanism
-      delivered, bulk conversion not attempted.** `bootstrap()` and `run()` are both
-      usable from a notebook and the README documents the pattern, but converting
-      the 42 notebooks is its own sweep and was not in "convert 2–3 cases as proof".
-      The two Sod notebooks additionally have uncommitted local modifications, so
-      they were left untouched. Until a notebook is converted it can still drift.
+      delivered, bulk conversion still not attempted.** `bootstrap()` and `run()` are
+      both usable from a notebook and the README documents the pattern. The separate
+      **notebook sweep** (2026-08-10, see Phase 3) brought all 41 notebooks onto the
+      current APIs, but they still carry their own hand-rolled step loops rather than
+      calling `run()`. Converting them to the runner remains open.
 
 End state, as delivered:
 
@@ -318,10 +329,28 @@ modules, and a `[tool.pytest.ini_options]` block.
 
 ## Phase 3 — Structural (do before AD, since AD touches every scheme)
 
-- [ ] **`buildScheme` returns a bare 7-tuple** (`schemes/builder.py:12-36`) that every
-      notebook and script unpacks positionally. Adding an 8th element — likely a
-      tangent-propagation fn during AD — is a breaking change to 42 notebooks.
-      Make it a `SchemeBundle` dataclass with named fields.
+- [x] **`buildScheme` returned a bare 7-tuple — DONE 2026-08-10.** It now returns a
+      frozen `SchemeBundle` dataclass (`schemes/builder.py`) with named fields, and the
+      if/elif chain became a `{enum: factory}` table with case-insensitive string
+      aliases. `SchemeBundle.__iter__` still yields the legacy 7 in order, pinned to
+      `_LEGACY_TUPLE_ORDER` rather than to `dataclasses.fields()` — **that pinning is
+      the point**: an 8th field (the AD tangent propagator) can be appended without
+      shifting what any surviving positional unpack binds.
+      `RunContext` now holds the bundle and exposes the seven names as read-through
+      properties, so there is one source of truth.
+
+- [x] **The `compParams` / `schemeConfig` split — DONE 2026-08-10.** All five step
+      functions now name their config `schemeConfig`; `runner._schemeConfigKeyword`
+      and its `signature()` introspection are deleted, and the loop passes
+      `schemeConfig=` unconditionally. Two tests pin the invariant.
+      **The rename had a second site the plan did not predict:** the integrator
+      forwards the same `**kwargs` to `system.finalize`, and `CompSPHSystem.finalize`
+      named the argument `compParams` in its signature — renaming only the step
+      functions left every CompSPH run raising `TypeError: finalize() missing 1
+      required positional argument: 'compParams'`. `modules/` keeps `compParams` as a
+      local parameter name; those are called positionally or by their own keyword and
+      are not reachable through the integrator's kwargs forwarding, so they were left
+      alone deliberately.
 - [x] **Two colliding `DomainDescription` classes — found and FIXED 2026-08-10.**
       `warpSPH.utils.domain` defined its own `DomainDescription` alongside
       `warpSPHCore.dataTypes.domain_t.DomainDescription`. In
@@ -344,6 +373,42 @@ modules, and a `[tool.pytest.ini_options]` block.
       imports after that deletion.**
 - [ ] Only ~30% of modules define `__all__`, so star imports drag in every
       transitively-imported name. Add `__all__` as modules get touched.
+
+### Notebook sweep — DONE 2026-08-10
+
+Run together with `SchemeBundle`, because the rename made it **mandatory rather than
+optional**: once the step functions stopped accepting `compParams=`, every notebook
+that passed it would have raised `TypeError` on its first step.
+
+- [x] **35 positional `buildScheme` unpacks → named bundle access**, across 33
+      notebooks plus `examples/compressible/01-sod-shock-tube-resume.py`. Downstream
+      names (`fn`, `export_fn`, `import_fn`, `SimulationSystem`, …) are preserved, so
+      only the binding line changed.
+- [x] **17 `compParams=` → `schemeConfig=`** at the integrator call sites.
+- [x] **A name-shadowing trap removed in 33 notebooks.** The old unpack bound the
+      scheme's config class to the name `SimulationConfig` — the *same name* as the
+      global simulation config that `from warpSPH import *` provides. Every
+      `schemeConfig = SimulationConfig()` was silently reading the shadowed name.
+      They now say `bundle.SimulationConfig()`, and `SimulationConfig` keeps its one
+      meaning. `datagen/weaklyCompressible/obstacle_init.ipynb` is the deliberate
+      exception: its helper *returns* `SimulationConfig` in a tuple, so the local
+      binding stays.
+- [x] **`from dfsph import *` deleted** from `01-taylor-green-vortex.ipynb` and
+      `periodic-random-flow.ipynb`. It resolved to the zero-byte local `dfsph.py`
+      removed in Phase 0.3, so it had **never** provided anything — `dfsph_step` was
+      always coming from `warpSPH`'s star export. Those calls now use `fn` off the
+      bundle, like every other notebook.
+- [x] **18 stored error tracebacks removed** from 14 notebooks (several still quoting
+      the pre-rename `~/dev/compressibleSPH/...` paths).
+- [x] All 41 notebooks re-validated: JSON parses, every code cell compiles.
+
+Deliberately **not** done, and still open:
+
+- The notebooks keep their own hand-rolled step loops; none call `runner.run()` yet.
+- `datagen/weaklyCompressible/bak/` — 5 tracked `.py` backups (114 KB) superseded by
+  the Phase 2 runner conversion. Left untouched rather than migrated; by the same
+  reasoning that retired the other `bak/` in Phase 0.3, these are **deletion
+  candidates**, not sweep targets.
 
 ---
 
@@ -368,20 +433,21 @@ tangent. Dropping it there is a **silent correctness bug, not a crash.**
 
 ## Suggested order
 
-Phase 0 ✅ → 1 ✅ → 2 ✅ → **3 (next)** → 4 → repo weight (deferred; its Phase 2
+Phase 0 ✅ → 1 ✅ → 2 ✅ → **3 (in progress — `SchemeBundle` ✅, notebook sweep ✅,
+namespace hygiene + `__all__` remain)** → 4 → repo weight (deferred; its Phase 2
 precondition is now met).
 
-Items 1-3 of the original "load-bearing" shortlist are all done (editable plotting
-install, `integrators` import rename, `nx`/`dx` round-trip). What remains of it:
+The original "load-bearing" shortlist is now **fully done**: editable plotting install,
+`integrators` import rename, `nx`/`dx` round-trip, the duplicate `DomainDescription`,
+and — as of 2026-08-10 — `SchemeBundle` together with the `compParams`/`schemeConfig`
+unification.
 
-1. `SchemeBundle` (Phase 3) — cheap now, expensive after AD lands. Phase 2 narrowed
-   the blast radius: the tuple is unpacked once, in `runner.buildContext`, and the
-   three converted cases read named fields off `RunContext` instead. The remaining
-   positional unpacks are in the notebooks. While doing it, also unify the
-   `compParams`/`schemeConfig` argument-name split the runner currently introspects
-   around.
-
-(The duplicate `DomainDescription` was also on this list and is now fixed.)
+What is left in Phase 3 is the namespace work (342 `import *`, `__all__` coverage). It
+is the one remaining item that is *cheaper before* AD than after, but unlike
+`SchemeBundle` it has no forcing function, so it can be sequenced against Phase 4 on
+its merits. The notebook sweep removed one concrete instance of it — the
+`SimulationConfig` shadowing — which is a reasonable model for the rest: fix the
+shadowing at the binding site, leave the star imports alone until a module is touched.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

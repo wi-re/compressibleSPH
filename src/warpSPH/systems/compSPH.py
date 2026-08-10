@@ -84,7 +84,7 @@ class CompSPHSystem(BaseIntegrationSystem):
         self.apply_quantity_update(update, spec, **kwargs)
         return self
     
-    def finalize(self, initialState, dt, returnValues, updateValues, weights, config, compParams, *args, **kwargs):
+    def finalize(self, initialState, dt, returnValues, updateValues, weights, config, schemeConfig, *args, **kwargs):
         self.adjacency = returnValues[-1][0]  # Assuming the adjacency list is the last return value from the derivative function
         # Copy the last substeps values into the current state to ensure the final state is correct
         lastState = returnValues[-1][1]  # Assuming the state is the second return value from the derivative function
@@ -97,7 +97,7 @@ class CompSPHSystem(BaseIntegrationSystem):
         #         print(f'\ttype(item): {type(item)}')
 
         
-        if compParams.compatibleEnergy:
+        if schemeConfig.compatibleEnergy:
             delta_u = compSPH_deltaU_multistep(
                 dt,
                 initialState.state,
@@ -105,7 +105,7 @@ class CompSPHSystem(BaseIntegrationSystem):
                 updateValues,
                 weights,
                 config,
-                compParams,
+                schemeConfig,
                 # verbose = verbose
             )
             self.state.internalEnergies = initialState.state.internalEnergies + delta_u * dt
@@ -126,5 +126,5 @@ class CompSPHSystem(BaseIntegrationSystem):
 
         updateValues[-1].dudt = (self.state.internalEnergies - initialState.state.internalEnergies) /dt
 
-        return super().finalize(initialState, dt, returnValues, updateValues, weights, config, compParams, *args, **kwargs)
+        return super().finalize(initialState, dt, returnValues, updateValues, weights, config, schemeConfig, *args, **kwargs)
     

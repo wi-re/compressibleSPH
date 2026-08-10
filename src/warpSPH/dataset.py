@@ -410,7 +410,7 @@ class SPHDataset(torch.utils.data.Dataset):
 
         scheme = restored_config["scheme"]
         scheme_enum = schemeNameToSimulationScheme(scheme)
-        _, _, _, _, _, _, import_fn = buildScheme(scheme_enum)
+        import_fn = buildScheme(scheme_enum).importFunction
         config = dictToConfig(restored_config["config"])
         _ = import_fn(restored_config["schemeConfig"])
 

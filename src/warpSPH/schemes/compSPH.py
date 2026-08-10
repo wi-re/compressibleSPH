@@ -23,7 +23,7 @@ def compSPH_step(
     system: CompSPHSystem,
     dt: float,
     config: SimulationConfig,
-    compParams: CompSPHConfig,
+    schemeConfig: CompSPHConfig,
     verbose = False,
     # dsphConfig = None,
 ):        
@@ -33,7 +33,7 @@ def compSPH_step(
     # currentSystem.adjacency = None
 
     t = currentSystem.t
-    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, compParams, SupportScheme.Gather, currentSystem.adjacency)
+    rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, schemeConfig, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
     currentState.densities = rho_optimal
 
@@ -77,16 +77,16 @@ def compSPH_step(
 
     # enforceDirichlet(currentSystem.state, dsphConfig, t, dt)
 
-    enforceDirichlet(currentSystem, t, dt, config, compParams)
+    enforceDirichlet(currentSystem, t, dt, config, schemeConfig)
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
         u = currentState.internalEnergies,
         P = None,
         rho = currentState.densities,
-        gamma = compParams.gamma,
+        gamma = schemeConfig.gamma,
     )
 
-    if compParams.adaptiveSupportCorrections:
+    if schemeConfig.adaptiveSupportCorrections:
         omega = computeOmega(currentState, 
                 OperationProperties(
                     kernel = config.kernel,
@@ -105,7 +105,7 @@ def compSPH_step(
     currentState.alphas, switchState = computeViscositySwitchTerms(
         dt,
         currentState, 
-        config, compParams, 
+        config, schemeConfig, 
         SupportScheme.SuperSymmetric, 
         adjacency)   
 
@@ -117,7 +117,7 @@ def compSPH_step(
             supportMode =  SupportScheme.KernelMeanSymmetric
         ),
         domain = config.domain,
-        conductivityParams= compParams.diffusionParams,
+        conductivityParams= schemeConfig.diffusionParams,
 
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,
@@ -136,7 +136,7 @@ def compSPH_step(
             supportMode = SupportScheme.Gather #E.3
          ),
         domain = config.domain,
-        conductivityParams= compParams.diffusionParams,
+        conductivityParams= schemeConfig.diffusionParams,
 
         queryEnergies = currentState.internalEnergies,
         queryVelocities= currentState.velocities,
@@ -154,7 +154,7 @@ def compSPH_step(
         switchState,
         dt, dvdt,
         currentState, 
-        config, compParams, 
+        config, schemeConfig, 
         SupportScheme.SuperSymmetric, 
         adjacency)   
 
@@ -173,7 +173,7 @@ def compSPH_step(
     # dEdt = torch.zeros_like(currentState.densities)
 
     # with TimedBlock('compute forcing', use_cuda=True, device=device):
-    forcing = computeForcing(currentSystem, dt, t, config, compParams)
+    forcing = computeForcing(currentSystem, dt, t, config, schemeConfig)
     dvdt += forcing / currentState.masses.view(-1,1)
 
     update = CompressibleSystemUpdate(
@@ -186,7 +186,7 @@ def compSPH_step(
     )
 
     # with TimedBlock('enforce updates', use_cuda=True, device=device):
-    enforceUpdates(update, currentSystem, dt, t, config, compParams)
+    enforceUpdates(update, currentSystem, dt, t, config, schemeConfig)
 
     v_halfstep = currentState.velocities + 0.5 * dt * update.dvdt
 
@@ -204,9 +204,9 @@ def compSPH_step(
 
         pairWise_pressureAccel= currentState.ap_ij,
         pairWise_viscosityAccel = currentState.av_ij,
-        energyScheme = compParams.energyScheme,
+        energyScheme = schemeConfig.energyScheme,
         dt= dt.detach().cpu().item() if isinstance(dt, torch.Tensor) else dt,
-        gamma = compParams.gamma,
+        gamma = schemeConfig.gamma,
 
         adjacency = adjacency,
         gradHState = gradHState

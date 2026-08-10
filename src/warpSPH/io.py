@@ -219,7 +219,10 @@ def importSimulationSystem(
     scheme = inFile.attrs['scheme']
     schemeEnum = schemeNameToSimulationScheme(scheme)
     if SimulationSystem is None or SimulationState is None or SimulationUpdate is None:
-        SimulationSystem, SimulationState, SimulationConfig, SimulationUpdate, fn, export_fn, import_fn = buildScheme(schemeEnum)
+        bundle = buildScheme(schemeEnum)
+        SimulationSystem = bundle.SimulationSystem
+        SimulationState = bundle.SimulationState
+        SimulationUpdate = bundle.SimulationUpdate
 
     adjacency = loadAdjacency(inFile['adjacency'], device) if 'adjacency' in inFile else None
     state = loadState(inFile['state'], device, SimulationState)
