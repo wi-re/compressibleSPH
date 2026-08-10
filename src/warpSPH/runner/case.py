@@ -109,6 +109,16 @@ class Case:
     #: (ctx, state) -> dict merged into every exported frame's extra data.
     extraData: Optional[Callable[[RunContext, Any], Dict[str, Any]]] = None
 
+    #: (ctx, state, step) -> None, called after every integrator step. This is
+    #: where a case re-imposes something the step function does not know about
+    #: -- Kidder drives its boundary bands from the analytic solution this way.
+    postStep: Optional[Callable[[RunContext, Any, int], None]] = None
+
+    #: (ctx, state) -> float, called after every step to pick the next `dt`.
+    #: Cases that leave it unset run at the fixed `dt` the setup produced;
+    #: `warpSPH.cases.compressible.compressibleTimestep` is the CFL one.
+    timestep: Optional[Callable[[RunContext, Any], float]] = None
+
     #: CaseSpec field overrides that make sense for this case.
     defaults: Dict[str, Any] = field(default_factory=dict)
     #: Case-specific knobs and their defaults; become ``--flags`` and land in

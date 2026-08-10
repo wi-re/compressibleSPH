@@ -10,6 +10,7 @@ module is that code, parameterised by a :class:`~warpSPH.runner.case.Case`.
 
 from __future__ import annotations
 
+import itertools
 import os
 import time
 from dataclasses import dataclass, field
@@ -186,6 +187,11 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     if case.initialConditions is not None:
         case.initialConditions(ctx, system)
 
+    # Setup may replace the spec -- Kidder only learns its time limit once the
+    # analytic collapse time exists -- so the loop reads it back from the
+    # context rather than from the local it started with.
+    spec = ctx.spec
+
     runningState = system.initializeNewState()
 
     if spec.verbose:
@@ -222,7 +228,11 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
             'derive it (e.g. via setupWeaklyCompressibleTimestep).'
         )
     dt = _scalar(ctx.config.dt)
+    # A case with a `timestep` hook re-picks dt every step, so a step count
+    # derived from the initial dt would be wrong -- those runs are bounded by
+    # simulated time instead, exactly as the notebooks' `while t < tLimit` was.
     nSteps = spec.nSteps if spec.nSteps is not None else int(spec.tLimit / dt)
+    timeLimited = spec.nSteps is None and case.timestep is not None
     storeSteps = max(1, int(spec.exportInterval / dt)) if spec.storeMode == 'trajectory' \
         else max(1, spec.storeInterval)
 
@@ -239,8 +249,8 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
 
     stepResult = None
 
-    progress = _progressBar(range(nSteps), enabled=spec.progress)
-    for i in progress:
+    steps, progress = _stepIterator(nSteps, spec.tLimit, timeLimited, spec.progress)
+    for i in steps:
         with _Timer(ctx.device) as timer:
             stepResult = ctx.integrator.function(
                 state=runningState,
@@ -252,36 +262,38 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
             )
         runningState = stepResult.state
 
-        row = {'step': i, 't': _scalar(runningState.t), 'stepTime_ms': timer.elapsed_ms}
+        if case.postStep is not None:
+            case.postStep(ctx, runningState, i)
+        if case.timestep is not None:
+            ctx.config.dt = case.timestep(ctx, runningState)
+
+        t = _scalar(runningState.t)
+        row = {'step': i, 't': t, 'stepTime_ms': timer.elapsed_ms}
         if case.diagnostics is not None:
             row.update(case.diagnostics(ctx, runningState))
         result.trajectory.append(row)
 
-        if hasattr(progress, 'set_description'):
-            progress.set_description(_describeStep(i, nSteps, row))
+        if progress is not None:
+            if timeLimited:
+                progress.n = min(progress.total, int(t / spec.tLimit * progress.total))
+            progress.set_description(
+                _describeStep(i, None if timeLimited else nSteps, row, spec.tLimit))
 
-        if spec.plot and case.updatePlot is not None and i > 0 and \
-                (i % spec.plotInterval == 0 or i == nSteps - 1):
-            case.updatePlot(ctx, runningState, ctx.scratch.get('plot'), i)
+        if timeLimited and t >= spec.tLimit:
+            _plotAndStore(ctx, case, spec, runningState, stepResult, i, extraData,
+                          groups, storeSteps, final=True)
+            break
 
-        if spec.store and i % storeSteps == 0:
-            frameExtra = dict(extraData,
-                              **(case.extraData(ctx, runningState) if case.extraData else {}),
-                              frame_num=i)
-            if spec.storeMode == 'trajectory':
-                writeFrame(groups, i, stepResult.state, stepResult.stages,
-                           config=ctx.config, schemeConfig=ctx.schemeConfig,
-                           uniqueParticles=True, writeStages=False)
-            else:
-                exportSimulationSystem(ctx.exportPath, f'state_{i:04d}', ctx.scheme,
-                                       runningState, exportAdjacency=False,
-                                       stages=stepResult.stages,
-                                       exportStagesAdjacency=True, extraData=frameExtra)
+        _plotAndStore(ctx, case, spec, runningState, stepResult, i, extraData,
+                      groups, storeSteps, final=(not timeLimited and i == nSteps - 1))
 
         if torch.any(torch.isnan(runningState.state.velocities)):
             print(f'NaN detected in velocities at step {i}; stopping.')
             result.diverged = True
             break
+
+    if progress is not None:
+        progress.close()
 
     result.state = runningState
     result.nSteps = len(result.trajectory) - (1 if case.diagnostics is not None else 0)
@@ -300,18 +312,60 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     return result
 
 
-def _progressBar(iterable, enabled: bool):
+def _plotAndStore(ctx: RunContext, case: Case, spec: CaseSpec, state, stepResult,
+                  i: int, extraData: Dict[str, Any], groups, storeSteps: int,
+                  final: bool) -> None:
+    """The per-step output side of the loop: plot every N, export every M."""
+    if spec.plot and case.updatePlot is not None and i > 0 and \
+            (i % spec.plotInterval == 0 or final):
+        case.updatePlot(ctx, state, ctx.scratch.get('plot'), i)
+
+    if spec.store and (i % storeSteps == 0 or final):
+        frameExtra = dict(extraData,
+                          **(case.extraData(ctx, state) if case.extraData else {}),
+                          frame_num=i)
+        if spec.storeMode == 'trajectory':
+            writeFrame(groups, i, stepResult.state, stepResult.stages,
+                       config=ctx.config, schemeConfig=ctx.schemeConfig,
+                       uniqueParticles=True, writeStages=False)
+        else:
+            exportSimulationSystem(ctx.exportPath, f'state_{i:04d}', ctx.scheme,
+                                   state, exportAdjacency=False,
+                                   stages=stepResult.stages,
+                                   exportStagesAdjacency=True, extraData=frameExtra)
+
+
+def _stepIterator(nSteps: int, tLimit: float, timeLimited: bool, enabled: bool):
+    """The loop's index source, plus the tqdm handle to drive (or `None`).
+
+    A time-limited run cannot know its step count up front, so its bar is a
+    fixed 1000-tick scale over simulated time -- the same trick the notebooks
+    used -- while a step-limited run counts steps directly.
+    """
+    steps = itertools.count() if timeLimited else range(nSteps)
     if not enabled:
-        return iterable
+        return steps, None
     try:
         from tqdm.autonotebook import tqdm
     except ImportError:
-        return iterable
-    return tqdm(iterable, leave=True)
+        return steps, None
+    if timeLimited:
+        return steps, tqdm(total=1000, leave=True)
+    bar = tqdm(total=nSteps, leave=True)
+    return _counting(steps, bar), bar
 
 
-def _describeStep(i: int, nSteps: int, row: Dict[str, float]) -> str:
-    parts = [f'{i + 1}/{nSteps}', f't={row["t"]:.4g}']
+def _counting(steps, bar):
+    for i in steps:
+        yield i
+        bar.update(1)
+
+
+def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
+                  tLimit: float) -> str:
+    # A time-limited run has no meaningful step total, so it counts time.
+    parts = [f'{i + 1}/{nSteps}' if nSteps is not None else f'{i + 1}',
+             f't={row["t"]:.4g}' + ('' if nSteps is not None else f'/{tLimit:.4g}')]
     parts += [f'{k}={v:.4g}' for k, v in row.items()
               if k not in ('step', 't', 'stepTime_ms') and isinstance(v, (int, float))]
     parts.append(f'{row["stepTime_ms"]:.1f}ms')

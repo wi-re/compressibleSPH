@@ -4,12 +4,13 @@ Working document for the cleanup sweep preceding forward-mode AD work.
 Core and Integrators have already been overhauled; this repo (the former frontend,
 `~/dev/warpSPHFrontend` → now `~/dev/warpSPH`) was the lagging piece.
 
-**Status:** Phases 0, 1 and 2 **complete**. Phase 3 is **partly done**
-(2026-08-10): `SchemeBundle` and the `compParams`/`schemeConfig` unification have
-landed together with the notebook sweep they gated; **namespace hygiene and
-`__all__` remain open**. Repo weight remains **deliberately deferred** — see
-"Deferred: repo weight" — though its separable piece, the `nbstripout` filter, is
-now installed.
+**Status:** Phases 0, 1 and 2 **complete**; Phase 2's one remaining `[~]` item,
+converting the examples to runnable scripts, is now **done in full** (2026-08-10)
+— see "Phase 2b" below. Phase 3 is **partly done**: `SchemeBundle` and the
+`compParams`/`schemeConfig` unification landed together with the notebook sweep
+they gated; **namespace hygiene and `__all__` remain open**. Repo weight remains
+**deliberately deferred** — see "Deferred: repo weight" — though its separable
+piece, the `nbstripout` filter, is now installed.
 
 ---
 
@@ -302,8 +303,9 @@ decision; the figures were kept.
   mis-scaled without pretending the 0.55 factor is understood. (The deleted
   `nu_eff_vs_nu.png` suggests this has been looked at before.)
 
-- [~] Notebooks stay for exploration but import the same runner — **mechanism
-      delivered, bulk conversion still not attempted.** `bootstrap()` and `run()` are
+- [x] Notebooks stay for exploration but import the same runner — **mechanism
+      delivered; the bulk conversion is Phase 2b below, done 2026-08-10.**
+      (Text below is as written before that; it records what was true then.) `bootstrap()` and `run()` are
       both usable from a notebook and the README documents the pattern. The separate
       **notebook sweep** (2026-08-10, see Phase 3) brought all 41 notebooks onto the
       current APIs, but they still carry their own hand-rolled step loops rather than
@@ -326,6 +328,127 @@ result = run(sodCase, nx=400, nSteps=100)
 Example sweep files live in `examples/sweeps/`; `pyproject.toml` gained the
 `warpsph-run` console script, the `py-modules` entry for the two top-level
 modules, and a `[tool.pytest.ini_options]` block.
+
+## Phase 2b — Every example as a runnable case — DONE (2026-08-10)
+
+Phase 2 converted three cases as proof and left the rest as notebooks. This
+finishes the job: **every notebook under `examples/` that runs a simulation is
+now a case**, 25 in total, each with a thin `.py` wrapper next to its notebook.
+`warpsph-run` with no case name lists them.
+
+### Runner additions the conversion forced
+
+- **`Case.postStep(ctx, state, step)`.** Kidder drives its two boundary bands
+  from the analytic solution *after* each integrator step; there was no hook for
+  "re-impose something the step function does not know about".
+- **`Case.timestep(ctx, state) -> dt`.** Kidder, Woodward-Colella and the
+  equal-mass triple point recompute the acoustic-CFL `dt` every step. The shared
+  implementation is `cases.compressible.compressibleTimestep`.
+- **The loop is time-bounded when a `timestep` hook is present.** `nSteps =
+  tLimit / dt0` is wrong the moment `dt` moves, which is exactly what the hook
+  is for, so those runs loop `while t < tLimit` as the notebooks did. Cases
+  without the hook keep the old fixed-step behaviour, so nothing changed for
+  them. `tests/test_runner.py` pins both halves.
+- **Setup may replace the spec.** `run()` re-reads `ctx.spec` after
+  `buildSystem`/`initialConditions`, because Kidder and Sedov only learn their
+  time limit from the analytic solution (the collapse time; the time to reach
+  `goalRadius`).
+- **List/dict case params no longer generate CLI flags.** argparse inferred
+  `float` from them; Woodward-Colella's shock regions and the dam break's
+  gravity vector are `--config`-only now.
+
+### Three shared modules, not fifteen copies
+
+The notebooks were near-identical within each family, so the shared part is
+factored out rather than duplicated:
+
+- `cases/compressible.py` — CRKSPH + B7 + `gamma`/`rho0` + viscosity switch +
+  Owen adaptive support, and the kinetic/thermal/total-energy diagnostics.
+- `cases/weaklyCompressible.py` — the band-widened domain, the SDF region
+  helpers, and `setupTimestep` (sound speed and `dt` chosen *together* from
+  `targetDt`), plus density-bound diagnostics.
+- `cases/plotting.py` — `particlePlot(fields)` for the `warpSPHPlotting`
+  mosaics every 2D notebook built by hand, and `profilePlot(axes)` for the 1D
+  scatter panels. **Backend default changed from `vispy` to `matplotlib`**:
+  vispy needs a GL context, which a script over ssh or in CI does not have.
+  `--plotBackend vispy` restores it.
+
+### Cases that cover more than one notebook
+
+Where two notebooks differed only in a flag they became one case, and the
+example scripts pin the flag:
+
+| case | notebooks | what differed |
+|---|---|---|
+| `sedov` | 06, 07 | `--dim 1` vs `--dim 2` |
+| `triplePoint` | 14, 15 | `--equalMass` (equal particle mass) vs `--no-equalMass` |
+| `impact` | wc 01, 02 | `--shape circle` vs `--shape box` |
+| `squarePatch` | wc 03, incomp 03 | `--scheme deltaSPH` vs `--scheme divergenceFree` |
+| `randomFlow` | wc 06, 07, incomp periodic | `--bounded`, `--scheme` |
+| `openFlow` / `drivenSquare` | wc 13, 11 | dam-break hooks under channel defaults |
+
+`openFlow` and `drivenSquare` deserve a note: both notebooks hand-wrote the
+obstacle SDF, the Dirichlet band and the inflow ramp that
+`caseUtils.weaklyCompressible` already implements for the dam break — 13 had
+even started importing `buildObstacleSDF` from there. They are the dam break's
+hooks under different defaults rather than a third copy.
+
+### Latent breakages surfaced, as in Phase 2
+
+- **Both Sedov notebooks crashed on their own default.** They ask for
+  `initialization='hat'`, and `buildSedov` raises `NotImplementedError` for it.
+  The dead code below that raise calls `warpKernelToDiffSPHKernel` /
+  `diffSPHKernel`, names left over from the pre-warp diffSPH stack that exist
+  nowhere in the tree. The case defaults to `'singular'`, which runs; reviving
+  `'hat'` is a separate job and is **not** done.
+- **`--store` had never worked for the incompressible family.**
+  `io.exportSimulationSystem` name-checked only `CompressibleSPHScheme` and
+  `WeaklyCompressibleSPHScheme`, so an `IncompressibleSPHScheme` member reached
+  `attrs` as a Python object and h5py rejected it with "Object dtype has no
+  native HDF5 equivalent". Three sites disagreed about this — one already had
+  the third enum. Unified into `io.schemeAttribute`, and
+  `schemeNameToSimulationScheme` learned to read the names back.
+- **`RigidBody.toDict` assumed tensors.** The moving-obstacle notebook sets
+  `body.angularVelocity = 1.0`, a plain float, so exporting the config threw
+  `'float' object has no attribute 'detach'`. `bodyID` was a second instance:
+  annotated `int`, populated from a tensor, so it arrived as a numpy `int32`
+  that `json.dump` refused. Both now go through one converter.
+
+### Verification
+
+- All 25 cases run 3 steps at coarse resolution, and again with `--plot
+  --store`, writing frames and HDF5. No failures.
+- `pytest` is 28 tests (was 20); the new ones pin the registry/`CASE_MODULES`
+  agreement, that every case names a resolvable scheme, that params stay
+  serialisable, and the two new hooks.
+
+### Still open
+
+- The notebooks keep their own hand-rolled step loops; none call `runner.run()`
+  yet. That was true after Phase 2 and is still true — the *scripts* are the
+  supported path now, and the notebooks are for exploration.
+- `examples/weaklyCompressible/naca.ipynb` has no case: it is a standalone
+  NACA-airfoil SDF visualisation with no simulation in it.
+- `examples/incompressible/1d-test.ipynb` has no case: an exploratory 1D DFSPH
+  scratchpad, not a published example.
+- `datagen/weaklyCompressible/bak/` — still the deletion candidates flagged in
+  the notebook sweep.
+
+### The TGV effective-viscosity note is resolved, not open
+
+Phase 2 flagged the measured TGV decay rate sitting at 0.55–0.60x the analytic
+rate and stable under refinement, and left it as "worth following up". It is
+**expected SPH behaviour**: the diffusion operator carries a **Monaghan switch**
+that deactivates viscosity for particle pairs that are *separating*, so only the
+approaching half of the pairs dissipates at any instant and the effective
+viscosity is roughly half the prescribed `nu`. Disabling the switch does recover
+the analytic decay rate, but causes problems in other aspects of the simulation,
+so it stays on. The wide band in `tests/test_physics.py` is therefore correct as
+written — it catches viscosity being disconnected or mis-scaled without treating
+the ~0.55 factor as an error to drive out. Recorded in the test's docstring and
+in `cases/tgvWeaklyCompressible.py`.
+
+---
 
 ## Phase 3 — Structural (do before AD, since AD touches every scheme)
 
@@ -433,9 +556,11 @@ tangent. Dropping it there is a **silent correctness bug, not a crash.**
 
 ## Suggested order
 
-Phase 0 ✅ → 1 ✅ → 2 ✅ → **3 (in progress — `SchemeBundle` ✅, notebook sweep ✅,
-namespace hygiene + `__all__` remain)** → 4 → repo weight (deferred; its Phase 2
-precondition is now met).
+Phase 0 ✅ → 1 ✅ → 2 ✅ → 2b ✅ → **3 (in progress — `SchemeBundle` ✅, notebook
+sweep ✅, namespace hygiene + `__all__` remain)** → 4 → repo weight (deferred; its
+Phase 2 precondition is now fully met — the examples are runnable `.py`, so the
+polished renders that a history rewrite should operate on can now be
+regenerated unattended).
 
 The original "load-bearing" shortlist is now **fully done**: editable plotting install,
 `integrators` import rename, `nx`/`dx` round-trip, the duplicate `DomainDescription`,

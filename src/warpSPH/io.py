@@ -60,6 +60,21 @@ import os
 import h5py
 import torch
 
+
+def schemeAttribute(scheme) -> str:
+    """The scheme's name, as an HDF5 attribute can store it.
+
+    All three scheme enums have to be named here: an enum member that falls
+    through lands in `attrs` as a Python object, and h5py rejects it with
+    "Object dtype has no native HDF5 equivalent". `IncompressibleSPHScheme` was
+    missing from two of the three sites, so `--store` had never worked for the
+    incompressible family.
+    """
+    return scheme.name if isinstance(
+        scheme, (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
+                 IncompressibleSPHScheme)) else scheme
+
+
 def exportSimulationSystem(
     exportPath,
     tag,
@@ -74,7 +89,7 @@ def exportSimulationSystem(
     os.makedirs(outFolderPath, exist_ok=True)
     outFile = h5py.File(f'{exportPath}/trajectory/{tag}.h5', 'w')
 
-    outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme
+    outFile.attrs['scheme'] = schemeAttribute(scheme)
     outFile.attrs['time'] = system.t if isinstance(system.t, float) else system.t.cpu().item()
 
     if system.adjacency is not None:
@@ -200,6 +215,10 @@ def schemeNameToSimulationScheme(name: str) -> CompressibleSPHScheme:
     for scheme in WeaklyCompressibleSPHScheme:
         if scheme.name.lower() == name.lower():
             return scheme
+    # Mirrors `schemeAttribute`: whatever can be written must be readable back.
+    for scheme in IncompressibleSPHScheme:
+        if scheme.name.lower() == name.lower():
+            return scheme
     raise ValueError(f'Unsupported scheme name: {name}')
 
 
@@ -300,7 +319,7 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=Non
     schemeCfg = export_fn(schemeConfig)
 
     exportDict = {
-        'scheme': scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) or isinstance(scheme, IncompressibleSPHScheme) else scheme,
+        'scheme': schemeAttribute(scheme),
         'config': cfg,
         'schemeConfig': schemeCfg,
         'timestamp': currentTime,
@@ -400,7 +419,7 @@ def writeInitialData(
     if extraData is None:
         extraData = {}
 
-    outFile.attrs['scheme'] = scheme.name if isinstance(scheme, CompressibleSPHScheme) or isinstance(scheme, WeaklyCompressibleSPHScheme) else scheme
+    outFile.attrs['scheme'] = schemeAttribute(scheme)
     outFile.attrs['time'] = runningState.t if isinstance(runningState.t, float) else runningState.t.cpu().item()
     outFile.create_group('states')
     outFile.create_group('stages')

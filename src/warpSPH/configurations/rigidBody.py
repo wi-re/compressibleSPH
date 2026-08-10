@@ -1,4 +1,5 @@
 from .moduleConfigurations.boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition, BCType
+import numpy as np
 import torch
 from dataclasses import dataclass, field
 
@@ -53,13 +54,26 @@ class RigidBody:
     kind: BCType = BCType.constant
 
     def toDict(self) -> dict:
+        # These fields are tensors as constructed, but a caller driving a body
+        # by hand assigns plain Python numbers -- `body.angularVelocity = 1.0`
+        # is what the moving-obstacle example does -- so serialising has to
+        # accept both rather than assuming a tensor. `bodyID` is annotated
+        # `int` but is populated from a tensor, so it arrives as a numpy int32,
+        # which `json.dump` also refuses.
+        def value(field):
+            if isinstance(field, torch.Tensor):
+                return field.detach().cpu().numpy().tolist()
+            if isinstance(field, np.generic):
+                return field.item()
+            return field
+
         return {
-            'centerOfMass': self.centerOfMass.detach().cpu().numpy().tolist(),
-            'orientation': self.orientation.detach().cpu().numpy().tolist(),
-            'angularVelocity': self.angularVelocity.detach().cpu().numpy().tolist(),
-            'linearVelocity': self.linearVelocity.detach().cpu().numpy().tolist(),
-            'mass': self.mass.detach().cpu().numpy().tolist(),
-            'inertia': self.inertia.detach().cpu().numpy().tolist(),
+            'centerOfMass': value(self.centerOfMass),
+            'orientation': value(self.orientation),
+            'angularVelocity': value(self.angularVelocity),
+            'linearVelocity': value(self.linearVelocity),
+            'mass': value(self.mass),
+            'inertia': value(self.inertia),
             # 'particlePositions': self.particlePositions.detach().cpu().numpy().tolist(),
             # 'particleVelocities': self.particleVelocities.detach().cpu().numpy().tolist(),
             # 'particleMasses': self.particleMasses.detach().cpu().numpy().tolist(),
@@ -73,7 +87,7 @@ class RigidBody:
             # 'ghostParticleBoundaryDistances': self.ghostParticleBoundaryDistances.detach().cpu().numpy().tolist(),
             # 'ghostParticleBoundaryNormals': self.ghostParticleBoundaryNormals.detach().cpu().numpy().tolist(),
             'sdf': _encode_callable(self.sdf),
-            'bodyID': self.bodyID,
+            'bodyID': value(self.bodyID),
             'kind': self.kind.name
         }
 

@@ -188,6 +188,11 @@ def buildArgumentParser(description: str = 'Run a warpSPH case.',
         _addField(parser, f.name, f.default, f.type, f'CaseSpec.{f.name} (default: {f.default!r})')
 
     for name, value in (caseParams or {}).items():
+        # A list/dict-valued parameter (Woodward-Colella's shock regions, the
+        # dam break's gravity vector) has no sensible flag form -- argparse
+        # would infer `float` from it. Those stay settable via --config only.
+        if isinstance(value, (list, dict)):
+            continue
         _addField(parser, name, value, type(value), f'case parameter (default: {value!r})')
 
     return parser

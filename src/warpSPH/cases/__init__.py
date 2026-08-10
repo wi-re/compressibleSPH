@@ -4,11 +4,44 @@ Each module here declares one :class:`~warpSPH.runner.case.Case` and nothing
 else -- the boilerplate, the config plumbing and the step loop all live in
 :mod:`warpSPH.runner`. Import a case module to register it; ``warpSPHRun``
 imports them all so it can dispatch by name.
+
+The three ``*.py`` modules that are *not* cases -- :mod:`compressible`,
+:mod:`weaklyCompressible` and :mod:`plotting` -- hold what the cases of each
+family share: the scheme settings, the domain construction, and the plot hooks.
 """
 
 from __future__ import annotations
 
-CASE_MODULES = ('sod', 'tgv', 'dambreak')
+#: Every module declaring a case, in the order the examples are numbered.
+CASE_MODULES = (
+    # compressible -- examples/compressible/*.ipynb
+    'sod',
+    'linearWave',
+    'kidder',
+    'noh',
+    'woodwardColella',
+    'sedov',
+    'hydrostatic',
+    'greshoVortex',
+    'yeeVortex',
+    'shearingNoh',
+    'kelvinHelmholtz',
+    'rayleighTaylor',
+    'triplePoint',
+    # weakly compressible -- examples/weaklyCompressible/*.ipynb
+    'impact',
+    'rotatingSquarePatch',
+    'oscillatingDroplet',
+    'tgvWeaklyCompressible',
+    'randomFlow',
+    'kolmogorov',
+    'lidDrivenCavity',
+    'movingObstacle',
+    'dambreak',
+    'channelFlow',
+    # incompressible -- examples/incompressible/*.ipynb
+    'tgv',
+)
 
 
 def importAll():

@@ -96,7 +96,7 @@ These write/read HDF5 state data and JSON config metadata for reproducible runs.
 - `src/warpSPH/sample/`: sampling utilities
 - `src/warpSPH/caseUtils/`: case setup helpers used by examples
 - `src/warpSPH/runner/`: `CaseSpec`, the `Case` hooks, and the shared step loop
-- `src/warpSPH/cases/`: runnable cases built on the runner (`sod`, `tgv`, `dambreak`)
+- `src/warpSPH/cases/`: one runnable case per example, built on the runner
 - `src/warpSPH/io.py`: export/import and parsing helpers
 - `src/warpSPHBootstrap.py`: pre-import precision/warp setup (must be imported first)
 - `src/warpSPHRun.py`: the `warpsph-run` CLI
@@ -170,10 +170,51 @@ warpsph-run tgv --nx 128 --tLimit 2.0
 warpsph-run dambreak --config examples/sweeps/dambreak_obstacle.yaml
 ```
 
+`warpsph-run` with no case name lists every case with its description.
+
 `warpsph-run --precision float64 ...` works because the CLI selects the
 precision before `warpSPH` is imported. `python -m warpSPH.cases.sod ...` runs
 the same case but is stuck with whatever precision is already active (float32 by
 default, or `warpSPHCore_PRECISION` from the environment).
+
+### The cases
+
+Every notebook under `examples/` that runs a simulation has a case, and a
+`.py` script next to the notebook that runs it with that example's settings.
+The notebooks stay for exploration; the scripts are what you run unattended.
+
+| case | example | notes |
+|---|---|---|
+| `sod` | compressible/01 | Sod shock tube, 1D |
+| `linearWave` | compressible/02 | linear acoustic wave, 1D |
+| `kidder` | compressible/03 | isentropic compression; analytically driven boundary bands |
+| `noh` | compressible/04 | Noh implosion, 1D |
+| `woodwardColella` | compressible/05 | interacting blast waves, 1D |
+| `sedov` | compressible/06, 07 | Sedov-Taylor blast; `--dim 1` or `--dim 2` |
+| `hydrostatic` | compressible/08 | hydrostatic equilibrium |
+| `gresho` | compressible/09 | Gresho-Chan vortex |
+| `yee` | compressible/10 | Yee isentropic vortex |
+| `shearingNoh` | compressible/11 | Noh implosion with transverse shear |
+| `kelvinHelmholtz` | compressible/12 | Kelvin-Helmholtz instability |
+| `rayleighTaylor` | compressible/13 | Rayleigh-Taylor instability |
+| `triplePoint` | compressible/14, 15 | `--equalMass` or `--no-equalMass` sampling |
+| `impact` | weaklyCompressible/01, 02 | two bodies colliding; `--shape circle\|box` |
+| `squarePatch` | weaklyCompressible/03, incompressible/03 | rotating square patch |
+| `droplet` | weaklyCompressible/04 | oscillating droplet in a central potential |
+| `tgv-wc` | weaklyCompressible/05 | Taylor-Green vortex, deltaSPH |
+| `randomFlow` | weaklyCompressible/06, 07, incompressible/periodic | `--bounded` adds walls |
+| `kolmogorov` | weaklyCompressible/08 | Kolmogorov flow |
+| `ldc` | weaklyCompressible/09 | lid-driven cavity |
+| `movingObstacle` | weaklyCompressible/10 | flow past a spinning rigid body |
+| `drivenSquare` | weaklyCompressible/11 | driven channel flow past a cylinder |
+| `dambreak` | weaklyCompressible/12, datagen | dam break with optional obstacle |
+| `openFlow` | weaklyCompressible/13 | open channel flow past an obstacle |
+| `tgv` | incompressible/01 | Taylor-Green vortex, divergence-free |
+
+Several cases cover more than one notebook, because those notebooks differed
+only in a flag. Where that is the case the example scripts pin the flag, so
+`examples/compressible/06-sedov-taylor-blastwave-1d.py` and `07-...-2d.py` are
+the same case at `--dim 1` and `--dim 2`.
 
 Every flag corresponds to a field of `CaseSpec`, so a run is fully described by
 a JSON or YAML file. CLI flags override the file; the file overrides the case's

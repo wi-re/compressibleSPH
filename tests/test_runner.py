@@ -1,5 +1,7 @@
 """The generic machinery: does one loop really drive every scheme?"""
 
+import dataclasses
+
 import pytest
 
 from warpSPH.runner import buildContext, listCases
@@ -80,3 +82,76 @@ def test_buildSchemeRejectsUnknownSchemes():
     from warpSPH.schemes import buildScheme
     with _pytest.raises(ValueError, match='not recognized'):
         buildScheme('notAScheme')
+
+
+def test_everyCaseModuleRegistersItsCase():
+    """`CASE_MODULES` and the registry have to stay in step.
+
+    A case module that stops registering (a renamed `registerCase` target, a
+    module dropped from the tuple) is otherwise invisible until someone runs
+    `warpsph-run` and gets "Unknown case".
+    """
+    from warpSPH.cases import CASE_MODULES, importAll
+    importAll()
+    # channelFlow declares two cases and dambreak's hooks back them, so the
+    # count is not one-per-module; the floor is what matters.
+    assert len(listCases()) >= len(CASE_MODULES)
+
+
+def test_everyCaseNamesAResolvableScheme():
+    """Each case's declared scheme has to exist in one of the three enums."""
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase
+    from warpSPH.runner.runner import _resolveScheme
+    importAll()
+    for name in listCases():
+        assert _resolveScheme(getCase(name).scheme) is not None, name
+
+
+def test_everyCaseDeclaresItsParamsAsScalarsOrLists():
+    """`params` becomes both CLI flags and HDF5 attributes.
+
+    Only scalars get flags (`buildArgumentParser` skips lists and dicts) and
+    only scalars are written per frame, so anything else has to be a deliberate
+    list/dict rather than, say, an enum or a tensor that would fail at export.
+    """
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase
+    importAll()
+    for name in listCases():
+        for key, value in getCase(name).params.items():
+            assert isinstance(value, (int, float, str, bool, list, dict)), \
+                f'{name}.{key} is {type(value).__name__}'
+
+
+def test_timeLimitedLoopStopsOnTimeNotStepCount():
+    """A case with a `timestep` hook is bounded by `tLimit`, not by an estimate.
+
+    `nSteps = tLimit / dt0` is wrong the moment dt changes, which is exactly
+    what the hook exists to do -- so those runs loop on simulated time.
+    """
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase, run
+    importAll()
+    case = getCase('woodwardColella')
+    assert case.timestep is not None
+
+    tLimit = 5e-4
+    result = run(case, nx=100, tLimit=tLimit, progress=False, plot=False, store=False)
+    assert not result.diverged
+    assert result.trajectory[-1]['t'] >= tLimit
+    # The step before the last must still be short of the limit, or the loop
+    # ran past its stopping condition.
+    assert result.trajectory[-2]['t'] < tLimit
+
+
+def test_postStepHookRunsAfterEveryStep():
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase, run
+    importAll()
+
+    case = getCase('sod')
+    calls = []
+    case = dataclasses.replace(case, postStep=lambda ctx, state, i: calls.append(i))
+    result = run(case, nx=100, nSteps=4, progress=False, plot=False, store=False)
+    assert calls == list(range(result.nSteps))
