@@ -58,6 +58,8 @@ def buildConfig(
     maxDt: Optional[float] = None,
     dtGrowthFactor: Optional[float] = None,
     adaptiveDt: Optional[bool] = None,
+    dx: Optional[float] = None,
+    nx: Optional[int] = None,
     targetNeighbors: Optional[int] = None,
     supportMode: Optional[SupportScheme] = None,
     gradientMode: Optional[GradientScheme] = None,
@@ -113,6 +115,8 @@ def buildConfig(
         maxDt=maxDt,
         dtGrowthFactor=dtGrowthFactor,
         adaptiveDt=adaptiveDt,
+        dx=dx,
+        nx=nx,
         targetNeighbors=targetNeighbors,
         supportMode=supportMode,
         gradientMode=gradientMode,
@@ -121,84 +125,133 @@ def buildConfig(
     ), getIntegrator(integrationScheme)
 
 import numpy as np
+import enum
+import types
+import typing
+from dataclasses import fields as _dataclassFields
+
+# Bind the domain type explicitly rather than relying on whichever `import *` above
+# happens to win. `warpSPHCore.DomainDescription` is the single owner; `..utils.domain`
+# re-exports it and `buildDomainDescription` returns it.
+from warpSPHCore import DomainDescription as _DomainDescription
+
+
+def _unwrapOptional(annotation):
+    """Strip ``Optional[X]`` / ``X | None`` down to ``X``."""
+    origin = typing.get_origin(annotation)
+    if origin is typing.Union or origin is getattr(types, 'UnionType', None):
+        args = [a for a in typing.get_args(annotation) if a is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
+
+
+def _encodeValue(value: Any) -> Any:
+    """Serialize a single config field to a JSON/HDF5-friendly value.
+
+    Dispatches on the runtime type, so a newly added field of an already
+    supported type serializes without touching this function.
+    """
+    if value is None:
+        return None
+    if isinstance(value, torch.Tensor):
+        value = value.detach().cpu()
+        return value.item() if value.numel() == 1 else value.numpy().tolist()
+    if isinstance(value, enum.Enum):
+        return value.name
+    if isinstance(value, (torch.device, torch.dtype)):
+        return str(value)
+    if isinstance(value, _DomainDescription):
+        return {
+            'min': _encodeValue(value.min),
+            'max': _encodeValue(value.max),
+            'periodic': _encodeValue(value.periodic),
+            'dim': value.dim,
+        }
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    return value
+
+
+def _decodeValue(annotation: Any, value: Any, device, dtype) -> Any:
+    """Inverse of :func:`_encodeValue`, dispatching on the declared field type.
+
+    Only *structural* types are converted (enums, device, dtype, domain).
+    Numeric fields are passed through rather than coerced to their annotation:
+    ``targetNeighbors`` is annotated ``int`` but legitimately holds a float
+    (``n_h_to_nH(4, 2) == 50.265...``), and coercing it would silently change
+    the support radius.
+    """
+    if value is None:
+        return None
+    annotation = _unwrapOptional(annotation)
+    if isinstance(annotation, type):
+        if issubclass(annotation, enum.Enum):
+            return annotation[value] if isinstance(value, str) else annotation(value)
+        if annotation is torch.device:
+            return torch.device(value)
+        if annotation is torch.dtype:
+            return getattr(torch, str(value).split('.')[-1])
+        if annotation is _DomainDescription:
+            return _DomainDescription(
+                min=torch.tensor(value['min'], device=device, dtype=dtype),
+                max=torch.tensor(value['max'], device=device, dtype=dtype),
+                periodic=torch.tensor(value['periodic'], device=device, dtype=torch.bool),
+                dim=int(value['dim']),
+            )
+        if annotation is bool:
+            return bool(value)
+    # Normalize numpy scalars that come back out of HDF5 without changing width.
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _configFieldTypes() -> Dict[str, Any]:
+    """Resolved annotations for :class:`SimulationConfig`, with a safe fallback."""
+    try:
+        return typing.get_type_hints(SimulationConfig)
+    except Exception:
+        return {f.name: f.type for f in _dataclassFields(SimulationConfig)}
+
 
 def configurationToDict(config: SimulationConfig) -> Dict[str, Any]:
-    exdict = {
-        'device': str(config.device),
-        'dtype': str(config.dtype),
-        'domain': {
-            'min': config.domain.min.cpu().numpy().tolist(),
-            'max': config.domain.max.cpu().numpy().tolist(),
-            'periodic': config.domain.periodic.cpu().numpy().tolist(),
-            'dim': config.domain.dim,
-        },
-        'dim': config.dim,
-        'verletScale': config.verletScale,
-        'kernel': config.kernel.name,
-        'integrationScheme': config.integrationScheme.name,
-        'cflFactor': config.cflFactor,
-        'dt': config.dt if not isinstance(config.dt, torch.Tensor) else config.dt.detach().cpu().item(),
-        'minDt': config.minDt,
-        'maxDt': config.maxDt,
-        'dtGrowthFactor': config.dtGrowthFactor,
-        'adaptiveDt': config.adaptiveDt,
-        'targetNeighbors': config.targetNeighbors,
-        'supportMode': config.supportMode.name,
-        'gradientMode': config.gradientMode.name,
-        'laplacianMode': config.laplacianMode.name,
-        'samplingScheme': config.samplingScheme.name,
+    """Serialize every declared field of ``config``.
+
+    Driven by ``dataclasses.fields`` rather than a hand-written list, so a field
+    added to :class:`SimulationConfig` can never again be silently dropped from
+    the round-trip (this previously lost ``nx`` and ``dx``, i.e. resolution).
+    """
+    return {
+        f.name: _encodeValue(getattr(config, f.name))
+        for f in _dataclassFields(config)
     }
-    for key, value in exdict.items():
-        if isinstance(value, (torch.Tensor)):
-            exdict[key] = value.detach().cpu().numpy().tolist()
-    
-    return exdict
+
 
 def dictToConfig(
     configDict: Dict[str, Any]
 ) -> SimulationConfig:
-    device = torch.device(configDict['device'])
-    dtype = getattr(torch, configDict['dtype'].split('.')[-1])
-    domainDict = configDict['domain']
-    domain = DomainDescription(
-        min=torch.tensor(domainDict['min'], device=device, dtype=dtype),
-        max=torch.tensor(domainDict['max'], device=device, dtype=dtype),
-        periodic=torch.tensor(domainDict['periodic'], device=device, dtype=torch.bool),
-        dim=domainDict['dim']
-    )
-    dim = int(configDict['dim'])
-    verletScale = float(configDict['verletScale'])
-    kernel = KernelFunctions[configDict['kernel']]
-    integrationScheme = IntegrationSchemeType[configDict['integrationScheme']]
-    cflFactor = float(configDict['cflFactor'])
-    dt = float(configDict['dt'])
-    minDt = float(configDict['minDt'])
-    maxDt = float(configDict['maxDt'])
-    dtGrowthFactor = float(configDict['dtGrowthFactor'])
-    adaptiveDt = bool(configDict['adaptiveDt'])
-    targetNeighbors = float(configDict['targetNeighbors'])
-    supportMode = SupportScheme[configDict['supportMode']]
-    gradientMode = GradientScheme[configDict['gradientMode']]
-    laplacianMode = LaplacianScheme[configDict['laplacianMode']]
-    samplingScheme = SamplingScheme[configDict['samplingScheme']]
+    """Rebuild a :class:`SimulationConfig` from :func:`configurationToDict` output.
 
-    return SimulationConfig(
-        device=device,
-        dtype=dtype,
-        domain=domain,
-        dim=dim,
-        verletScale=verletScale,
-        kernel=kernel,
-        integrationScheme=integrationScheme,
-        cflFactor=cflFactor,
-        dt=dt,
-        minDt=minDt,
-        maxDt=maxDt,
-        dtGrowthFactor=dtGrowthFactor,
-        adaptiveDt=adaptiveDt,
-        targetNeighbors=targetNeighbors,
-        supportMode=supportMode,
-        gradientMode=gradientMode,
-        laplacianMode=laplacianMode,
-        samplingScheme=samplingScheme
+    Fields absent from ``configDict`` fall back to their dataclass defaults, so
+    dicts written by older versions still load.
+    """
+    fieldTypes = _configFieldTypes()
+
+    device = torch.device(configDict['device']) if 'device' in configDict else None
+    dtype = (
+        getattr(torch, str(configDict['dtype']).split('.')[-1])
+        if 'dtype' in configDict else torch.float32
     )
+
+    kwargs = {}
+    for f in _dataclassFields(SimulationConfig):
+        if f.name not in configDict:
+            continue
+        kwargs[f.name] = _decodeValue(
+            fieldTypes.get(f.name, f.type), configDict[f.name], device, dtype
+        )
+
+    return SimulationConfig(**kwargs)

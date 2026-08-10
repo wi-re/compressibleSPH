@@ -1,8 +1,6 @@
 
 __version__ = "0.5.0"
 
-import sys as _sys
-
 # from .casefile import argparse_defaults_from_casefile, build_configs_from_casefile, load_casefile
 # from .shape_generation import populateSourceObstacleGridsStructured, sampleShapeStructured
 
@@ -51,8 +49,3 @@ __all__.extend(regions.__all__)
 
 from .dataset import DatasetParams, SPHDataset, sph_collate_variable, sample_to_state, sample_to_domain, restore_config_from_h5
 __all__.extend(['DatasetParams', 'SPHDataset', 'sph_collate_variable', 'sample_to_state', 'sample_to_domain', 'restore_config_from_h5'])
-
-# Backward compatibility for legacy dill payloads that resolve functions from
-# a top-level module named "utils".
-from . import legacy_utils as _legacy_utils
-_sys.modules.setdefault("utils", _legacy_utils)

@@ -283,7 +283,14 @@ import codecs
 from .utils import getCurrentTimestamp
 from .configurations import *
 
-def prepExport(caseName, config, schemeConfig, scheme, export_fn):
+def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=None):
+    """Write ``config.json`` for a run and return its output directory.
+
+    ``exportRoot`` selects the parent directory for ``caseName``. It defaults to
+    the ``WARPSPH_EXPORT_ROOT`` environment variable, falling back to ``export``
+    relative to the CWD -- the historical behaviour. Overriding it lets parallel
+    sweeps write to separate trees instead of colliding on ``export/{caseName}``.
+    """
     currentTime = getCurrentTimestamp()
 
     cfg = configurationToDict(config)
@@ -296,12 +303,16 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn):
         'timestamp': currentTime,
     }
 
-    exportPath = f'export/{caseName}'
+    if exportRoot is None:
+        exportRoot = os.environ.get('WARPSPH_EXPORT_ROOT', 'export')
 
-    os.makedirs(f'export/{caseName}', exist_ok=True)
-    configPath = f'export/{caseName}/config.json'
+    exportPath = os.path.join(exportRoot, caseName)
 
-    json.dump(exportDict, open(configPath, 'w'), indent=4)
+    os.makedirs(exportPath, exist_ok=True)
+    configPath = os.path.join(exportPath, 'config.json')
+
+    with open(configPath, 'w') as f:
+        json.dump(exportDict, f, indent=4)
 
     return exportPath
 
