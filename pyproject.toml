@@ -44,5 +44,19 @@ dev = [
     "twine",
 ]
 
+[project.scripts]
+warpsph-run = "warpSPHRun:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+# Must be importable before `warpSPH` -- they choose the precision that
+# `warpSPHCore.type_config` locks in at its first import.
+py-modules = ["warpSPHBootstrap", "warpSPHRun"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+

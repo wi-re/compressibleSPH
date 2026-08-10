@@ -1,0 +1,14 @@
+# Sod shock tube, refined, run to the usual t = 0.15 with output.
+caseName: 01-sodShockTube-highres
+nx: 1600
+tLimit: 0.15
+kernel: B7
+integrationScheme: rungeKutta4
+store: true
+storeInterval: 50
+params:
+  gamma: 1.6666666666666667
+  samplingRatio: 4
+  smoothIC: true
+  viscositySwitch: CullenDehnen
+  adaptiveSupportScheme: Owen

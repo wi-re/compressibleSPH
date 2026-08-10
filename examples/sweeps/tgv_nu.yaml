@@ -1,0 +1,11 @@
+# Taylor-Green vortex; vary `nu` across the sweep to scan Reynolds number.
+# At L = 2*pi, u = 1 and k = 2 the analytic decay rate is 4 * nu * (k/2)^2.
+caseName: tgv-nu0.005
+nx: 128
+tLimit: 2.0
+dt: 0.001
+params:
+  nu: 0.005
+  k: 2
+  uMag: 1.0
+  relaxSteps: 32

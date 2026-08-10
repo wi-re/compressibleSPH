@@ -4,9 +4,10 @@ Working document for the cleanup sweep preceding forward-mode AD work.
 Core and Integrators have already been overhauled; this repo (the former frontend,
 `~/dev/warpSPHFrontend` → now `~/dev/warpSPH`) was the lagging piece.
 
-**Status:** Phase 0 **complete** (0.3 deletions done 2026-08-10). Phase 1 complete
-except repo weight, which is **deliberately deferred until after Phase 2** — see
-"Deferred: repo weight". Phase 2 is next.
+**Status:** Phases 0, 1 and 2 **complete** (Phase 2 done 2026-08-10). Repo weight
+remains **deliberately deferred** — see "Deferred: repo weight"; its precondition
+(Phase 2 done) is now met, so it is unblocked whenever the physics is verified.
+Phase 3 is next.
 
 ---
 
@@ -198,41 +199,122 @@ from growing further.
 
 ---
 
-## Phase 2 — Examples → runnable scripts + first tests
+## Phase 2 — Examples → runnable scripts + first tests — DONE (2026-08-10)
 
-The conversion is already half-designed; the pattern just hasn't been extracted.
+- [x] Extract `warpSPH.runner`:
+  - `bootstrap(precision, dim)` — **could not live in `warpSPH.runner`.**
+    `warpSPHCore.type_config` resolves precision at *its own import*, and any
+    `warpSPH.*` import pulls `warpSPHCore` in transitively, so by the time
+    `warpSPH.runner` is importable the choice is already locked. It is therefore a
+    top-level module, `src/warpSPHBootstrap.py`, mirroring how core already ships
+    `warpSPHCore_config` via `py-modules`. It is the one thing a script may import
+    first. Verified end to end: `warpsph-run sod --precision float64` really does
+    run at `torch.float64`.
+  - `CaseSpec` (`runner/caseSpec.py`) — dataclass over the union of the argparse
+    surfaces from `parser.py` and `01-sod-shock-tube-1d.py`. Round-trips through
+    JSON and YAML; case-specific knobs live in `params`. Precedence is
+    CaseSpec defaults → case defaults → `--config` file → explicit CLI flags,
+    which works because every generated flag defaults to `None`, so "not passed"
+    stays distinguishable from "passed the default". Booleans get both `--x` and
+    `--no-x` so a `true` in a config file is still overridable. Unknown keys raise
+    rather than being silently dropped.
+  - `run(case, spec)` (`runner/runner.py`) — step loop, CUDA-event timing,
+    diagnostics accumulation, plot hook, both export modes (`states` = one file per
+    stored step, the examples' pattern; `trajectory` = one growing `trajectory.h5`,
+    the datagen pattern), NaN bail-out, ffmpeg encode. Returns a `RunResult` whose
+    `series(key)` gives one diagnostic across the run.
+  - each case is a `Case` (`runner/case.py`) of hooks over a `RunContext`:
+    `configureScheme` / `buildSystem` / `initialConditions` / `diagnostics`
+    (+ optional `setupPlot` / `updatePlot` / `extraData`).
+  - `runner/media.py` — the ffmpeg block; degrades to a no-op when ffmpeg is absent
+    rather than failing a run that already produced its frames.
+  - `runner/cli.py` + `src/warpSPHRun.py` — `warpsph-run <case>` console script.
 
-**The duplication:** all 42 notebooks open with a near-identical ~35-line boilerplate
-cell (precision config → `wp.init()` → `TORCH_CUDA_ARCH_LIST` → warning filters → star
-imports). Four drifting copies exist:
-`examples/compressible/01-sod-shock-tube-1d.py:1-42`,
-`examples/incompressible/01-tgv-incomp.py:1-40`,
-`datagen/weaklyCompressible/generator.py:1-47`, and every notebook's cell 0.
-Same story for the step loop, plotter setup, and the ffmpeg export cell.
+  **Found while extracting: the three step functions disagree on the name of their
+  own config argument.** `compSPH_step`/`crkSPH_step` take `compParams`;
+  `deltaSPH_step`/`dfsph_step` take `schemeConfig`. The integrator forwards
+  `**kwargs` verbatim, so a caller that guesses wrong gets a `TypeError`. The runner
+  introspects `signature(stepFunction)` instead of assuming — that one detail is what
+  lets a single loop drive all three schemes. Worth unifying alongside `SchemeBundle`
+  in Phase 3; the introspection is a bridge, not the destination.
 
-**Existing files that are already the target form** — use as templates:
-`examples/compressible/01-sod-shock-tube-1d.py` (argparse, 264 lines),
-`examples/incompressible/01-tgv-incomp.py`,
-and `datagen/weaklyCompressible/{parser,generator}.py` — the most mature pair, already
-does config-sweep-as-data-generator.
+- [x] Convert 2–3 cases as proof — all three done, one per family:
+  - `warpSPH/cases/sod.py` (compressible, CompSPH)
+  - `warpSPH/cases/tgv.py` (incompressible, DFSPH)
+  - `warpSPH/cases/dambreak.py` (weakly compressible, deltaSPH)
 
-- [ ] Extract `warpSPH.runner`:
-  - `bootstrap(precision, dim)` — the boilerplate cell, once
-  - `CaseSpec` — dataclass over the argparse surface currently duplicated across
-    `parser.py` / `01-sod-shock-tube-1d.py`; serializable to/from JSON or YAML so
-    sweeps are config files, not shell strings
-  - `run(case_spec)` — step loop + export/plot hooks
-  - each case reduces to a `build_regions` / `initial_conditions` / `diagnostics` triple
-- [ ] Convert 2–3 cases as proof (suggest: TGV, Sod, dambreak — one per family)
-- [ ] First tests: run 20 steps at nx=32, assert a physical invariant
-      (e.g. TGV kinetic-energy decay slope within tolerance). **There are currently
-      zero tests in this repo** — Core and Integrators both have suites.
-- [ ] Notebooks stay for exploration but import the same runner, so they can't drift
+  The three former entry points are now thin wrappers over the same case objects:
+  `examples/compressible/01-sod-shock-tube-1d.py` (264 → 21 lines),
+  `examples/incompressible/01-tgv-incomp.py` (259 → 21 lines), and
+  `datagen/weaklyCompressible/generator.py` (256 → 76 lines, keeping only its
+  dataset-specific timestamped naming and `compressed/` archival step).
+  `datagen/weaklyCompressible/parser.py` was **deleted** — fully superseded by
+  `dambreakCase.params`, and verified to have no remaining importers (`.py` or
+  `.ipynb`). `datagen/weaklyCompressible/plot.py` moved into the package as
+  `warpSPH/caseUtils/weaklyCompressiblePlot.py` with a re-export shim left behind,
+  matching the `utils.py` shims from Phase 0.3. It is deliberately *not* in
+  `caseUtils/__init__.py`'s star imports, so `from warpSPH.caseUtils import *` still
+  does not drag in `warpSPHPlotting`.
 
-End state: `python -m warpSPH.cases.tgv --config sweep/tgv_re1000.yaml`,
-and ML data generation is a sweep over config files.
+  **Three latent breakages surfaced by the conversion**, all pre-existing:
+  - `datagen/weaklyCompressible/generator.py` **crashed on its own defaults**:
+    `parser.py` defaulted `--obstacleType` to `circle`, which is not a key
+    `buildPresetObstacles` returns any more (the presets are now
+    `circleBottom`/`circleMiddle`/`circleTop`, …). `presets.get(...)` returned
+    `None` and the next line indexed it. The case defaults to `circleMiddle` and
+    validates the key with a message listing the valid ones.
+  - `examples/incompressible/01-tgv-incomp.py` called `solveIncompressible(...)`
+    without the `dt` argument it has since grown — a `TypeError` on any run.
+  - the same script imported the local zero-byte `dfsph.py` / `dfsph_step.py`
+    deleted in Phase 0.3; the real step function comes from `buildScheme`. It also
+    built a `regions` list that was never passed anywhere. Both dropped.
 
----
+- [x] First tests — `tests/`, 20 tests, ~7 s warm (**previously zero tests in this
+      repo**). `tests/conftest.py` bootstraps in `conftest` because that is the last
+      point before pytest imports the test modules — the same ordering constraint as
+      above.
+  - `test_physics.py` — 20 steps per case at coarse resolution, asserting properties
+    rather than golden numbers: Sod total-energy conservation (measured drift is
+    **exactly 0** — CompSPH is energy-conserving by construction), Sod
+    thermal→kinetic conversion, TGV monotone decay and decay rate vs the analytic
+    `KE(t) = KE(0) e^(-4 ν k² t)`, dam-break density bounds and gravitational work.
+  - `test_caseSpec.py` — serialization and the override precedence above. No GPU.
+  - `test_runner.py` — case registry, enum resolution, and the `compParams` vs
+    `schemeConfig` introspection, parameterized over all three schemes.
+
+  **Physics note worth following up separately:** the measured TGV decay rate sits at
+  **0.55–0.60× the analytic rate** and is *stable under refinement* — 0.605 at
+  nx=32/20 steps, 0.564 at nx=32/50, 0.550 at nx=64/200. So it is not a
+  discretisation error that refines away; the effective viscosity of this DFSPH
+  viscous operator is roughly half the prescribed ν. The test therefore asserts a
+  wide band (0.6 ± 45%), which catches viscosity being disconnected (rate → 0) or
+  mis-scaled without pretending the 0.55 factor is understood. (The deleted
+  `nu_eff_vs_nu.png` suggests this has been looked at before.)
+
+- [~] Notebooks stay for exploration but import the same runner — **mechanism
+      delivered, bulk conversion not attempted.** `bootstrap()` and `run()` are both
+      usable from a notebook and the README documents the pattern, but converting
+      the 42 notebooks is its own sweep and was not in "convert 2–3 cases as proof".
+      The two Sod notebooks additionally have uncommitted local modifications, so
+      they were left untouched. Until a notebook is converted it can still drift.
+
+End state, as delivered:
+
+```bash
+warpsph-run tgv --config examples/sweeps/tgv_nu.yaml --nx 128
+python -m warpSPH.cases.sod --plot --store      # same case, precision fixed at import
+```
+
+```python
+from warpSPHBootstrap import bootstrap; bootstrap(precision='float64')
+from warpSPH.runner import run
+from warpSPH.cases.sod import sodCase
+result = run(sodCase, nx=400, nSteps=100)
+```
+
+Example sweep files live in `examples/sweeps/`; `pyproject.toml` gained the
+`warpsph-run` console script, the `py-modules` entry for the two top-level
+modules, and a `[tool.pytest.ini_options]` block.
 
 ## Phase 3 — Structural (do before AD, since AD touches every scheme)
 
@@ -286,12 +368,18 @@ tangent. Dropping it there is a **silent correctness bug, not a crash.**
 
 ## Suggested order
 
-Phase 0 ✅ → 1 ✅ → **2 (next)** → 3 → 4 → repo weight (deferred; needs Phase 2 done first).
+Phase 0 ✅ → 1 ✅ → 2 ✅ → **3 (next)** → 4 → repo weight (deferred; its Phase 2
+precondition is now met).
 
 Items 1-3 of the original "load-bearing" shortlist are all done (editable plotting
 install, `integrators` import rename, `nx`/`dx` round-trip). What remains of it:
 
-1. `SchemeBundle` (Phase 3) — cheap now, expensive after AD lands
+1. `SchemeBundle` (Phase 3) — cheap now, expensive after AD lands. Phase 2 narrowed
+   the blast radius: the tuple is unpacked once, in `runner.buildContext`, and the
+   three converted cases read named fields off `RunContext` instead. The remaining
+   positional unpacks are in the notebooks. While doing it, also unify the
+   `compParams`/`schemeConfig` argument-name split the runner currently introspects
+   around.
 
 (The duplicate `DomainDescription` was also on this list and is now fixed.)
 

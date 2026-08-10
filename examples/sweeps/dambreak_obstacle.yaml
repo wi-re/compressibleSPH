@@ -1,0 +1,17 @@
+# Dam break onto a mid-height circular obstacle, stored as a single trajectory.h5.
+caseName: 3-dambreak-circle
+nx: 128
+tLimit: 4.0
+store: true
+storeMode: trajectory
+exportInterval: 0.002
+params:
+  W: 4.0
+  band: 5
+  targetDt: 0.0005
+  fillRatio: 0.3333333333333333
+  obstacleActive: true
+  obstacleType: circleMiddle
+  maxExtent: 0.0625
+  offsetX: 0.75
+  aoa: 0.0

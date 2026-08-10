@@ -95,8 +95,14 @@ These write/read HDF5 state data and JSON config metadata for reproducible runs.
 - `src/warpSPH/modules/`: runtime modules (for example timestep support)
 - `src/warpSPH/sample/`: sampling utilities
 - `src/warpSPH/caseUtils/`: case setup helpers used by examples
+- `src/warpSPH/runner/`: `CaseSpec`, the `Case` hooks, and the shared step loop
+- `src/warpSPH/cases/`: runnable cases built on the runner (`sod`, `tgv`, `dambreak`)
 - `src/warpSPH/io.py`: export/import and parsing helpers
+- `src/warpSPHBootstrap.py`: pre-import precision/warp setup (must be imported first)
+- `src/warpSPHRun.py`: the `warpsph-run` CLI
 - `examples/compressible/`: benchmark notebooks and generated media
+- `examples/sweeps/`: example `CaseSpec` config files
+- `tests/`: pytest suite (short runs asserting physical invariants)
 
 ## Environment Setup
 
@@ -152,6 +158,53 @@ schemeConfig.gamma = 5.0 / 3.0
 # Case setup is typically done with helpers in warpSPH.caseUtils
 ```
 
+## Running Cases
+
+Cases are run through a shared runner rather than per-script boilerplate. Each
+case declares only its geometry, initial conditions and diagnostics; the config
+construction, step loop, export, plotting and video encoding are shared.
+
+```bash
+warpsph-run sod --nx 800 --plot --store
+warpsph-run tgv --nx 128 --tLimit 2.0
+warpsph-run dambreak --config examples/sweeps/dambreak_obstacle.yaml
+```
+
+`warpsph-run --precision float64 ...` works because the CLI selects the
+precision before `warpSPH` is imported. `python -m warpSPH.cases.sod ...` runs
+the same case but is stuck with whatever precision is already active (float32 by
+default, or `warpSPHCore_PRECISION` from the environment).
+
+Every flag corresponds to a field of `CaseSpec`, so a run is fully described by
+a JSON or YAML file. CLI flags override the file; the file overrides the case's
+own defaults. `--saveConfig out.yaml` writes the fully resolved spec back out.
+See [examples/sweeps/](examples/sweeps/).
+
+From Python or a notebook:
+
+```python
+from warpSPHBootstrap import bootstrap
+bootstrap(precision='float32')          # before importing warpSPH
+
+from warpSPH.runner import run
+from warpSPH.cases.tgv import tgvCase
+
+result = run(tgvCase, nx=64, nSteps=200)
+result.series('kineticEnergy')          # one diagnostic across the run
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+The suite runs each converted case for 20 steps at a coarse resolution and
+asserts a physical invariant: total energy conservation for Sod, Taylor-Green
+kinetic-energy decay against the analytic rate, and density bounds plus
+gravitational work for the dam break. It needs a CUDA device and takes a few
+seconds once the warp kernel cache is warm.
+
 ## Compressible Examples
 
 A full gallery page with previews and embedded videos is available at:
@@ -180,4 +233,13 @@ A full gallery page with previews and embedded videos is available at:
 
 ## Precision Note (Notebook Workflows)
 
-In the example notebooks, floating-point precision is configured early in the import/setup cell. If precision is changed (for example float32 to float64), restart the Jupyter kernel before rerunning.
+Floating-point precision is resolved when `warpSPHCore` is first imported and
+cannot be changed afterwards, so it has to be chosen before any other import:
+
+```python
+from warpSPHBootstrap import bootstrap
+runtime = bootstrap(precision='float64')   # also runs wp.init() and pins TORCH_CUDA_ARCH_LIST
+```
+
+If precision is changed (for example float32 to float64), restart the Jupyter
+kernel before rerunning.
