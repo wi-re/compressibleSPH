@@ -1,4 +1,4 @@
-from warpSPH.utils.support import volumeToSupportHelper
+from warpSPH.utils.support import volumeToSupport
 
 from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompressibleSystem, WeaklyCompressibleSystemUpdate
 from ...configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
@@ -91,7 +91,7 @@ def setupWeaklyCompressibleTimestep(
         config, schemeConfig, compressibleSystem, targetDt, verbose = True
 ):
     dx = config.dx
-    c0 = 0.3 * volumeToSupportHelper(dx**2, config.targetNeighbors, 2) / float(sphKernelScale(config.kernel.value, 2)) / targetDt
+    c0 = 0.3 * volumeToSupport(dx**2, config.targetNeighbors, 2) / float(sphKernelScale(config.kernel.value, 2)) / targetDt
     if verbose:
         print(f'Computed c0: {c0}, target c0: {schemeConfig.fluid.fixedSoundSpeed}, diff: {abs(c0 - schemeConfig.fluid.fixedSoundSpeed)}')
         

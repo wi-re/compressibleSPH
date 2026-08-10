@@ -1,7 +1,7 @@
-from ..utils.sampling import PointCloud, ParticleSet
+from ..sampling import PointCloud, ParticleSet
 from ..utils.domain import DomainDescription
-from ..utils.support import volumeToSupportHelper
-from ..utils.math import getPeriodicPositions
+from ..utils.support import volumeToSupport
+from ..math.math import getPeriodicPositions
 
 from .regular import sampleRegularParticles
 from .optimal import sampleOptimal
@@ -13,4 +13,4 @@ __all__ = [
     
     'PointCloud', 'ParticleSet', 
     
-    'DomainDescription', 'volumeToSupportHelper', 'getPeriodicPositions', 'sampleRegionSystem']
+    'DomainDescription', 'volumeToSupport', 'getPeriodicPositions', 'sampleRegionSystem']

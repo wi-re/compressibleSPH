@@ -1,6 +1,6 @@
 import random
-from ..utils.sampling import ParticleSet
-from ..utils.support import volumeToSupportHelper
+from ..sampling import ParticleSet
+from ..utils.support import volumeToSupport
 import torch
 
 def sampleShell(nx, domain, targetNeighbors, circle = True, extraRings = 0):
@@ -74,7 +74,7 @@ def sampleShell(nx, domain, targetNeighbors, circle = True, extraRings = 0):
     # print(shellArea / optimalArea)
 
     
-    supports = volumeToSupportHelper(areas, targetNeighbors, domain.dim)
+    supports = volumeToSupport(areas, targetNeighbors, domain.dim)
     # supports = torch.ones_like(positions[:, 0]) * support
 
     return ParticleSet(
@@ -127,7 +127,7 @@ def sampleShellv2(nr, domain, targetNeighbors):
 
     positions = torch.vstack([s[4] for s in shells])
     areas = torch.hstack([s[5] for s in shells])
-    supports = volumeToSupportHelper(areas, targetNeighbors, domain.dim)
+    supports = volumeToSupport(areas, targetNeighbors, domain.dim)
 
     return ParticleSet(
         positions = positions,

@@ -22,7 +22,8 @@ from ..initializers import initializeWeaklyCompressibleSimulation
 from ..modules import setupWeaklyCompressibleTimestep
 from ..regions import buildRegion, filterRegion, sampleDomainSDF
 from ..runner import RunContext, resolveEnum
-from ..utils import buildDomainDescription, getSDF, operatorDict, sampleSDF
+from ..utils import buildDomainDescription
+from ..sampling import getSDF, operatorDict, sampleSDF
 from .plotting import Field
 
 __all__ = [

@@ -10,8 +10,8 @@ if torch.cuda.is_available():
 
 import torch
 
-from ...utils.sdf import operatorDict, getSDF
-from ...utils.math import getPeriodicPositions
+from ...sampling.sdf import operatorDict, getSDF
+from ...math.math import getPeriodicPositions
 
 
 def sampleDamping(particleState, config, dampingWidth=0.2, dampingStrength=5.0, profile='cosine', periodic_mode=False, global_damping=0.0):

@@ -1,4 +1,4 @@
-from warpSPH.utils.support import volumeToSupportHelper
+from warpSPH.utils.support import volumeToSupport
 
 from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompressibleSystem, WeaklyCompressibleSystemUpdate
 from ...configurations.weaklyCompressible import WeaklyCompressibleSPHConfig

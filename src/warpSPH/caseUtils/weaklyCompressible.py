@@ -15,8 +15,9 @@ from ..modules.noise.sampleDivergenceFree import (
 from ..regions.domain import domainSDF, sampleDomainSDF
 from ..regions.filter import filterRegion
 from ..regions.region import buildRegion
-from ..utils import buildDomainDescription, getPeriodicPositions
-from ..utils.sdf import getSDF, operatorDict, sampleSDF
+from ..utils import buildDomainDescription
+from ..math import getPeriodicPositions
+from ..sampling.sdf import getSDF, operatorDict, sampleSDF
 
 
 @dataclass

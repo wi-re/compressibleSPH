@@ -16,7 +16,8 @@ import torch
 from ..configurations import BoundaryCondition, BoundaryConditionType
 from ..modules.noise.sampleDivergenceFree import generateNoiseInterpolator
 from ..runner import Case, RunContext, caseMain, registerCase
-from ..utils import buildDomainDescription, getPeriodicPositions
+from ..utils import buildDomainDescription
+from ..math import getPeriodicPositions
 from .plotting import particlePlot
 from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  WEAKLY_COMPRESSIBLE_PARAMS, buildRegionSystem,

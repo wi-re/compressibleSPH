@@ -205,3 +205,6 @@ images/
 
 **/__pycache__/
 **/compressed/
+# Output of scripts/run_sweep.py (repo root only -- examples/sweeps/ holds
+# tracked sweep *configs* and must stay visible)
+/sweeps/

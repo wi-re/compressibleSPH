@@ -1,6 +1,4 @@
-
 import torch
-
 
 def getPeriodicPositions(x, domain):
     minD = domain.min.detach().to(x.device)

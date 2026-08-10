@@ -75,7 +75,7 @@ def maskParticlesSymmetric(particles, split_x, split_y, domain, nx):
     return maskParticles(particles, [split_x, domain.max[0] - split_x], [split_y, domain.max[1] - split_y], domain, nx)
 
 
-from ..utils.sampling import ParticleSet
+from ..sampling import ParticleSet
 from .regular import sampleRegularParticles
 
 def sampleRegions(domain, nx, targetNeighbors, splitX, splitY, jitter = 0.0):

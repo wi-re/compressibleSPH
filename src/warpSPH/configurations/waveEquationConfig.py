@@ -9,7 +9,7 @@ from warpSPHCore import *
 from dataclasses import dataclass, field
 
 # from waves.utils.domain import buildDomainDescription
-from ..utils.sampling import SamplingScheme
+from ..sampling import SamplingScheme
 
 @dataclass
 class ShapeSpec:

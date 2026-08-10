@@ -122,3 +122,7 @@ operatorDict ={
     'blend': op_blend,
     'select': op_select
 }
+
+__all__ =[
+    'operatorDict'
+]

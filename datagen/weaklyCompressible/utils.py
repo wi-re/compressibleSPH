@@ -16,7 +16,7 @@ from warpSPH.caseUtils import (
     setupFreestream,
     setupKolmogorov,
 )
-from warpSPH.io import copy_dict_to_h5, restore_config_from_h5
+from warpSPH.io.io import copy_dict_to_h5, restore_config_from_h5
 
 
 # Backward-compatible legacy name.

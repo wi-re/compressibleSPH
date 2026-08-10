@@ -4,13 +4,13 @@ from .wp_omega import computeOmegaWarp
 from ...systems.baseState import *
 from warpSPHCore import *
 from ...configurations import SimulationConfig
-from ...utils.support import volumeToSupportHelper, nH_to_n_h
+from ...utils.support import volumeToSupport, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
 
 def computeH(rho, m, targetNeighbors, dim):
     safe_rho = torch.clamp(torch.nan_to_num(rho, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
     V = m / safe_rho
-    return volumeToSupportHelper(V, targetNeighbors, dim)
+    return volumeToSupport(V, targetNeighbors, dim)
     return targetNeighbors / 2 * V
 
 def F(h, rho, m, targetNeighbors, dim):

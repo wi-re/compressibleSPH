@@ -6,11 +6,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 from ...configurations import WaveCaseConfig, WaveShapeSpec, SimulationConfig, WaveBoundary, WaveSource
-from ...utils import buildDomainDescription
-from ...utils.sampling import SamplingScheme
+from ...utils import buildDomainDescription, n_h_to_nH
+from ...sampling import SamplingScheme
 from warpSPHIntegrators import IntegrationSchemeType
 from warpSPHCore import GradientScheme, KernelFunctions, LaplacianScheme, SupportScheme
-from ...utils.sampling import n_h_to_nH
 
 try:
     import tomllib  # Python 3.11+

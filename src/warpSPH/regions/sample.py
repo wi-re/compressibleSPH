@@ -1,6 +1,6 @@
 from ..sample import sampleRegularParticles
 import torch
-from ..utils.sampling import ParticleSet
+from ..sampling import ParticleSet
 import numpy as np
 
 def sampleParticles(config, schemeConfig, sdf, nx, filter = True, shortEdge = True):

@@ -3,7 +3,7 @@ from ..density.density import computeDensities
 from warpSPHCore import *
 import torch
 import numpy as np
-from ...utils.noise import generateNoise
+from ...math.noise import generateNoise
 
 
 def getSpacing(nx, domain: DomainDescription):
@@ -25,7 +25,7 @@ def generateNoiseInterpolator(fluidResolution, noiseResolution, domain: DomainDe
     return lambda x: torch.tensor(interpolator(x.cpu().numpy()).reshape(x.shape[0])).to(x.device)
 
 
-from ...utils.sdf import operatorDict
+from ...sampling.sdf import operatorDict
 
 def rampDivergenceFree(positions, noise, sdf_func, offset, d0 = 0.25):
     sdf = sdf_func(positions)

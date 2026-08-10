@@ -1,4 +1,4 @@
-from warpSPH.utils.support import volumeToSupportHelper
+from warpSPH.utils.support import volumeToSupport
 
 from ...systems.compressibleMonaghan import CompressibleState, CompressibleSystem
 from ...configurations.compressibleConfig import CompressibleSPHConfig
@@ -45,7 +45,7 @@ def computeTimestep(
         # accordingly, the higher resolution is always the unmultiplied L/2 /nx
         # L = config.domain.max - config.domain.min
         # dx = L / (nx * 2)
-        h = volumeToSupportHelper(config.dx, config.targetNeighbors, config.dim)
+        h = volumeToSupport(config.dx, config.targetNeighbors, config.dim)
         h = system.state.supports.min()
         xi = float(sphKernel_xi(config.kernel.value, config.dim))
         # xi = 1

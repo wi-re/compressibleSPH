@@ -14,6 +14,13 @@ modules, reclassified as legibility rather than correctness. Repo weight remains
 **deliberately deferred** — see "Deferred: repo weight" — though its separable
 piece, the `nbstripout` filter, is now installed.
 
+**Phase 3b** (2026-08-10) records the repair of the manual package reshuffle
+(`io/`, `math/`, `sampling/`) and the backlog it left behind. The repair itself is
+done and verified — including one *silent* tensor/scalar bug the move introduced —
+and the repo now carries `scripts/check_imports.py`, `run_tests.sh` and
+`run_sweep.py` to make that verification one command each. What remains there is
+naming/structure tidying and the notebook simplification, neither load-bearing.
+
 ---
 
 ## Decisions already made
@@ -728,6 +735,121 @@ Deliberately **not** done, and still open:
 
 ---
 
+## Phase 3b — Post-reshuffle repair and backlog (2026-08-10)
+
+Follows the manual package reshuffle that split `util.py`/`io.py`/`dataset.py` and
+`utils/{math,naca,noise,sampling,scatter,sdf}` into the new `io/`, `math/` and
+`sampling/` packages.
+
+### Repaired — DONE (2026-08-10)
+
+Eight breaks, found by the new `scripts/check_imports.py`:
+
+| break | fix |
+|---|---|
+| `caseUtils/waveEquation/casefile.py` imported `n_h_to_nH` from `...sampling` | merged into the existing `...utils` import |
+| 3 notebooks importing `warpSPH.utils.naca` | → `warpSPH.sampling.naca` |
+| 2 notebooks importing `warpSPH.caseUtils.sedov` | → `warpSPH.caseUtils.compressible.sedov` |
+| 2 docstrings citing pre-move paths | updated |
+
+**One was a silent runtime bug, not an import error.** The reshuffle replaced
+`volumeToSupportHelper` (tensor-aware) with warpSPHCore's `volumeToSupport`, which
+uses `math.sqrt` and raises on a multi-element tensor. It killed `yee` outright and
+left `modules/adaptiveSupport/optimalSupportMonaghan.py:13` **latently broken for 2D
+and 3D** — `computeH` passes a per-particle `V = m / rho`, and only the `dim == 1`
+branch avoids the sqrt. Nothing caught it because `Owen` is the default scheme.
+
+`utils/support.py` now wraps core with a tensor-aware dispatch; tensor and scalar
+paths verified identical in all three dimensions.
+
+- [ ] Upstream the tensor support into `warpSPHCore.util.support.volumeToSupport`,
+      then collapse the wrapper back to a plain re-export. Deliberately **not** done
+      here — it is a separate repo, and this is the kind of cross-repo change that
+      should be made once, on purpose.
+
+### Export folders are timestamped — DONE (2026-08-10)
+
+`export/<caseName>_<YYYY-MM-DD_HH-MM-SS>/`, applied at the single choke point in
+`prepExport`, which already computed the timestamp and simply was not using it.
+Same-second collisions take a `-1` suffix. Added `latestExportPath()` /
+`findExportRuns()` so readers need not know a run's exact name; both fall back to the
+old flat layout, so existing trees still resolve. `WARPSPH_EXPORT_TIMESTAMP=0` opts
+out. The Sod resume notebook and script now resolve the newest run instead of
+hardcoding `export/01-sodShockTube`.
+
+- [ ] `datagen/weaklyCompressible/loader.ipynb` still hardcodes read paths
+      (`export/semiPeriodic/`, …). Existing data loads; **newly generated data will
+      not be found there.** Left alone pending a decision on the dataset workflow.
+
+### Three scripts — DONE (2026-08-10)
+
+```bash
+scripts/check_imports.py     # 273 modules + 1535 first-party imports
+scripts/run_tests.sh         # 42 tests
+scripts/run_sweep.py         # 25/25 cases, ~3.5 min smoke
+```
+
+`check_imports.py` runs two passes: a real import of every module under `warpSPH`,
+then an AST scan of every `.py` and notebook code cell that checks module *and*
+symbol. The second pass is what caught the notebook and function-level imports — the
+runtime pass alone never executes them. `run_sweep.py` runs one case per process,
+sequentially (a case must tear down before the next starts, and one crash must not
+take the sweep with it); anything after `--` forwards to every case, so the configs
+in `examples/sweeps/` compose with it.
+
+This replaces the hand-rolled `for case in $(warpsph-run …)` loop previously
+documented in the README.
+
+### Open: naming and structure
+
+None of these are correctness issues — they are the legibility cost of the reshuffle,
+and worth clearing before AD makes tracebacks harder to read.
+
+- [ ] **`sample/` vs `sampling/` is the main hazard.** Two packages with near-identical
+      names, and `sample/sampling.py` sits inside the wrong one. The real distinction is
+      *samplers* vs *what samplers are defined in terms of* (SDF, NACA, `ParticleSet`).
+      Renaming the latter to `geometry/` or `primitives/` would make it self-evident.
+- [ ] **20 duplicate basenames across packages** — `sod.py`, `noh.py`, `domain.py`,
+      `region.py`, `sdf.py`, `enumTypes.py` each appear 2–3×. Ambiguous in tracebacks
+      and editor tabs. Notably `warpSPH/enumTypes.py` (9 solver enums) vs
+      `warpSPH/sampling/enumTypes.py` (NamedTuples + one enum) — different content,
+      same name; the latter reads more like `sampling/types.py`.
+- [ ] **Stutter modules**: `io/io.py` (667 lines), `math/math.py` (9), `utils/util.py`
+      (15). Inline the two tiny ones into their `__init__.py`; split `io/io.py` along
+      export / import / HDF5 plumbing.
+- [ ] **`math/` shadows a stdlib name.** Harmless under absolute imports, but it costs
+      a beat of thought at every reading.
+- [ ] **Dead code left by the move**: `utils/__init__.py` has 7 commented-out import
+      lines. Wider sweep: `schemes/crkSPH.py` (119 commented code lines),
+      `modules/mdbc/wp_nopenshift.py` (69), `shockCapturing/CullenDehnen2010.py` (63),
+      `schemes/dfsph.py` (58), `caseUtils/compressible/sod/sod.py` (57),
+      `schemes/deltaSPH.py` (55).
+
+### Open: simplifying the examples
+
+The `.py` examples are already thin wrappers — Phase 2b did that. **The notebooks are
+the remaining fat: 13,112 lines of code across 34 notebooks, against 42 KB total for
+33 scripts.**
+
+- [ ] **The boilerplate cell is duplicated verbatim in 16 notebooks** — and it still
+      uses the older `warpSPHCore_config.configure(...)` path rather than
+      `warpSPHBootstrap.bootstrap()`. ~20 lines × 16 collapsing to two, and it puts
+      notebooks and scripts on one bootstrap story. **Cheapest win; do this first.**
+- [ ] **34 notebooks for 25 cases**, most duplicating a `.py` sibling. A notebook that
+      only re-derives what `warpsph-run <case>` already does could become the same thin
+      wrapper the scripts are, keeping bespoke cells only for the analysis and plotting
+      that is genuinely notebook-shaped.
+- [ ] **Worst offenders first**: `13-openFlow.ipynb` (1178 LOC, 3.6 MB),
+      `12-dambreak.ipynb` (720), and the three incompressible notebooks (~1950 combined).
+- Committed media under `examples/compressible/outputs/` is **not** listed here as a
+  separate item — it is the same 338 MB already covered by "Deferred: repo weight",
+  and the reasoning there still holds.
+
+Suggested order: bootstrap cell (mechanical, 16 files, immediate) → collapse the
+duplicate notebooks → media, with the repo-weight rewrite.
+
+---
+
 ## Phase 4 — AD readiness audit
 
 First-pass scan, not yet verified case by case:
@@ -751,6 +873,7 @@ tangent. Dropping it there is a **silent correctness bug, not a crash.**
 
 Phase 0 ✅ → 1 ✅ → 2 ✅ → 2b ✅ → **3 (in progress — `SchemeBundle` ✅, notebook
 sweep ✅, `schemes/` explicit imports ✅, `__all__` coverage elsewhere remains)** →
+3b (repair ✅, backlog open) →
 4 → repo weight (deferred; its
 Phase 2 precondition is now fully met — the examples are runnable `.py`, so the
 polished renders that a history rewrite should operate on can now be
@@ -770,7 +893,11 @@ as a per-scheme dependency manifest — to audit which `.item()`/`.cpu()` sites 
 can reach you now read 8 lines instead of resolving a star import by hand. Do the rest
 opportunistically, as AD touches each module.
 
-**Go to Phase 4 next.** It is now the only remaining item with real correctness stakes.
+**Go to Phase 4 next.** It is now the only remaining item with real correctness
+stakes — Phase 3b's repair is already done, and everything still open there is
+legibility. The one exception worth folding into Phase 4 rather than leaving in 3b:
+upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD will care
+whether that path is differentiable.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

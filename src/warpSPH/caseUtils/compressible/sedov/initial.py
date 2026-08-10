@@ -1,7 +1,7 @@
 
 from warpSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from warpSPH.modules.timestep.compressible import computeTimestep
-from warpSPH.util import *
+
 from warpSPH.schemes import *
 from warpSPHCore import *
 import torch

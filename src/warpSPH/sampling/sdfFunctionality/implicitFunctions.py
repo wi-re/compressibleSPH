@@ -255,3 +255,7 @@ functionDict = {
     'egg': sdEgg,
     'polygon': sdPolygon
 }
+
+__all__ = [
+    'batchedSDF', 'functionDict', 'sdCircle', 'sdBox', 'sdRoundedBox', 'sdOrientedBox', 'sdSegment', 'sdRhombus', 'sdTrapezoid', 'sdParallelogram', 'sdEquilateralTriangle', 'sdTriangleIsosceles', 'sdTriangle', 'sdUnevenCapsule', 'sdPentagon', 'sdHexagon', 'sdOctogon', 'sdHexagram', 'sdStar5', 'sdStar', 'sdPie', 'sdCutDisk', 'sdArc', 'sdRing', 'sdHorseshoe', 'sdVesica', 'sdMoon', 'sdEgg', 'ndot'
+]

@@ -1,5 +1,6 @@
 import torch
-from .sdfFunctionality.operators import *
+import numpy as np
+from .sdfFunctionality import *
 from .sdfFunctionality.implicitFunctions import *
 
 def getSDF(function):
@@ -95,3 +96,4 @@ def sampleSDFNumeric(x, sdf, invert = False, eps = 1e-3):
     else:
         return d, grad
 
+__all__ = ['getSDF', 'sdfFunctions', 'sampleSDF', 'sampleSDFNumeric', 'functionDict', 'operatorDict']

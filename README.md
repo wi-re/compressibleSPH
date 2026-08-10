@@ -166,7 +166,7 @@ they have no sensible flag form.
 `--store` writes state, `--plot` writes frames, `--video` encodes them:
 
 ```
-export/<caseName>/
+export/<caseName>_<YYYY-MM-DD_HH-MM-SS>/
   caseSpec.json         the fully resolved spec, so a run can be reproduced
   config.json           the simulation and scheme configuration
   trajectory/           one .h5 per stored step   (storeMode: states, the default)
@@ -174,6 +174,21 @@ export/<caseName>/
   images/frame_*.png    plot frames
   output.mp4, out.gif   if --video and ffmpeg is present
 ```
+
+Each run gets its own timestamped folder, so re-running a case accumulates
+results instead of overwriting the previous one. To pick a run back up without
+knowing its exact name:
+
+```python
+from warpSPH.io import latestExportPath, findExportRuns
+
+path = latestExportPath('01-sodShockTube')   # newest run of that case
+runs = findExportRuns('01-sodShockTube')     # all of them, oldest first
+```
+
+Set `WARPSPH_EXPORT_TIMESTAMP=0` (or pass `timestamped=False` to `prepExport`)
+for the old flat `export/<caseName>/` layout. `latestExportPath` falls back to
+that layout, so trees written before this change still resolve.
 
 `--exportRoot` (or `$WARPSPH_EXPORT_ROOT`) moves the whole tree; it defaults to
 `export/`.
@@ -447,41 +462,62 @@ src/
     configurations/        simulation and scheme configuration dataclasses
     systems/               state and system containers
     modules/               timestep, viscosity, shifting, boundary conditions, …
-    sample/                particle sampling
+    sample/                particle samplers (regular, shell, per-family)
+    sampling/              what a sampler is defined in terms of: SDFs, NACA,
+                           ParticleSet/PointCloud, SamplingScheme
     regions/               SDF regions and filtering
+    math/                  periodic positions, noise, scatter
+    utils/                 domain description, support radii, timers
     caseUtils/             per-case setup helpers shared with the notebooks
-    io.py                  HDF5/JSON export, import and parsing
+    io/                    HDF5/JSON export, import, parsing and datasets
 examples/                  notebooks, runnable scripts, sweeps, rendered media
 datagen/                   dataset generation on top of the same cases
+scripts/                   check_imports.py, run_tests.sh, run_sweep.py
 tests/                     pytest suite
 ```
 
 ## Tests
 
 ```bash
-pytest
+scripts/run_tests.sh          # or plain `pytest`
 ```
 
-32 tests, a few seconds once the warp kernel cache is warm; a CUDA device is
-required. They assert *properties* rather than golden numbers — total-energy
+42 tests, a few seconds once the warp kernel cache is warm; a CUDA device is
+required. The script just wraps pytest, silencing the third-party warnings that
+otherwise bury the result; it forwards any extra arguments
+(`scripts/run_tests.sh -k sod -v`). They assert *properties* rather than golden numbers — total-energy
 conservation for Sod, Taylor-Green decay against the analytic rate, density
 bounds and gravitational work for the dam break — plus the runner's own
 invariants: that every case registers and names a resolvable scheme, that the
 spec round-trips through JSON and YAML, and that the banner, report and
 `--quiet` behave.
 
-To exercise every case rather than the three the physics tests cover, run them
-one at a time — each opens a real window, so a loop inside one process stacks
-them all on screen:
+To exercise every case rather than the three the physics tests cover, sweep
+them:
 
 ```bash
-for case in $(warpsph-run 2>&1 | sed -n '/^cases:/,$p' | awk 'NR>1 {print $1}'); do
-    warpsph-run "$case" --nSteps 3 --nx 48 -q || echo "FAILED: $case"
-done
+scripts/run_sweep.py                # every case, 5 steps each, ~3 min
+scripts/run_sweep.py --full         # every case to its own tLimit (long)
+scripts/run_sweep.py --cases sod noh
 ```
 
-The `-q` matters here: a diverged run exits non-zero, so the exit code is the
-check and the output stays short.
+Each case runs in its own process, sequentially — a diverged run exits
+non-zero, and one crashing case must not take the sweep down with it. Logs, a
+per-case export tree and a `summary.json` land in a timestamped
+`sweeps/sweep_<timestamp>/`, and failures are printed with the tail of their
+log. Anything after `--` is forwarded to every case, so the configs in
+`examples/sweeps/` compose with it.
+
+After a refactor, the matching check is:
+
+```bash
+scripts/check_imports.py            # every module imports; every import resolves
+```
+
+It imports each module under `warpSPH` for real, then AST-scans every `.py` and
+notebook cell in the repo for `warpSPH*` imports and verifies both the module
+and the imported symbol exist — which catches function-level and notebook
+imports that nothing else executes.
 
 ## Gallery
 

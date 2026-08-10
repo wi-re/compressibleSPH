@@ -55,7 +55,7 @@ def dumpStage(stage, stageGroups, index, SimulationState, exportStagesAdjacency)
 
 
 from typing import Any
-from .enumTypes import CompressibleSPHScheme
+from ..enumTypes import CompressibleSPHScheme
 import os
 import h5py
 import torch
@@ -222,7 +222,7 @@ def schemeNameToSimulationScheme(name: str) -> CompressibleSPHScheme:
     raise ValueError(f'Unsupported scheme name: {name}')
 
 
-from .schemes import buildScheme
+from ..schemes import buildScheme
 
 def importSimulationSystem(
     importPath,
@@ -302,16 +302,75 @@ import pickle
 import dill
 import codecs
 
-from .utils import getCurrentTimestamp
-from .configurations import *
+from ..utils import getCurrentTimestamp
+from ..configurations import *
 
-def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=None):
+def exportDirName(caseName, timestamp):
+    """Directory name for one run: ``{caseName}_{timestamp}``."""
+    return f'{caseName}_{timestamp}'
+
+
+def resolveExportRoot(exportRoot=None):
+    """Parent directory that holds per-run folders."""
+    if exportRoot is None:
+        exportRoot = os.environ.get('WARPSPH_EXPORT_ROOT', 'export')
+    return exportRoot
+
+
+def findExportRuns(caseName, exportRoot=None):
+    """Every run directory for ``caseName``, oldest first.
+
+    Relies on the timestamp format sorting lexicographically, so a plain sort
+    is chronological.
+    """
+    root = resolveExportRoot(exportRoot)
+    if not os.path.isdir(root):
+        return []
+    prefix = f'{caseName}_'
+    runs = [
+        os.path.join(root, entry)
+        for entry in os.listdir(root)
+        if entry.startswith(prefix) and os.path.isdir(os.path.join(root, entry))
+    ]
+    return sorted(runs)
+
+
+def latestExportPath(caseName, exportRoot=None):
+    """Most recent run directory for ``caseName``.
+
+    Use this to pick up a run whose folder name you do not know -- resuming,
+    post-processing, plotting. Falls back to an untimestamped
+    ``{root}/{caseName}`` so trees written before run folders were timestamped
+    still resolve.
+
+    Raises ``FileNotFoundError`` when nothing matches.
+    """
+    runs = findExportRuns(caseName, exportRoot)
+    if runs:
+        return runs[-1]
+    legacy = os.path.join(resolveExportRoot(exportRoot), caseName)
+    if os.path.isdir(legacy):
+        return legacy
+    raise FileNotFoundError(
+        f'No export directory for case {caseName!r} under '
+        f'{resolveExportRoot(exportRoot)!r}'
+    )
+
+
+def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=None,
+               timestamped=None):
     """Write ``config.json`` for a run and return its output directory.
 
     ``exportRoot`` selects the parent directory for ``caseName``. It defaults to
     the ``WARPSPH_EXPORT_ROOT`` environment variable, falling back to ``export``
     relative to the CWD -- the historical behaviour. Overriding it lets parallel
     sweeps write to separate trees instead of colliding on ``export/{caseName}``.
+
+    Run folders are named ``{caseName}_{YYYY-MM-DD_HH-MM-SS}`` so repeated runs
+    of the same case accumulate side by side instead of overwriting each other.
+    Set ``timestamped=False`` (or ``WARPSPH_EXPORT_TIMESTAMP=0``) to get the old
+    ``{exportRoot}/{caseName}`` behaviour. Use :func:`latestExportPath` to find
+    the newest run of a case afterwards.
     """
     currentTime = getCurrentTimestamp()
 
@@ -325,10 +384,21 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=Non
         'timestamp': currentTime,
     }
 
-    if exportRoot is None:
-        exportRoot = os.environ.get('WARPSPH_EXPORT_ROOT', 'export')
+    exportRoot = resolveExportRoot(exportRoot)
 
-    exportPath = os.path.join(exportRoot, caseName)
+    if timestamped is None:
+        timestamped = os.environ.get('WARPSPH_EXPORT_TIMESTAMP', '1') not in ('0', 'false', 'False')
+
+    if timestamped:
+        exportPath = os.path.join(exportRoot, exportDirName(caseName, currentTime))
+        # Two runs launched inside the same second must not share a folder.
+        if os.path.exists(exportPath):
+            suffix = 1
+            while os.path.exists(f'{exportPath}-{suffix}'):
+                suffix += 1
+            exportPath = f'{exportPath}-{suffix}'
+    else:
+        exportPath = os.path.join(exportRoot, caseName)
 
     os.makedirs(exportPath, exist_ok=True)
     configPath = os.path.join(exportPath, 'config.json')
@@ -559,7 +629,7 @@ def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=T
         rbg.attrs[f'rigidBody_{r:02d}_inertia'] = rigidBody.inertia.cpu().numpy()
 
 
-from .enumTypes import *
+from ..enumTypes import *
 from warpSPHIntegrators.integration import IntegrationSchemeType
 def parseKernelFunctions(kernelName):
     for kernel in KernelFunctions:

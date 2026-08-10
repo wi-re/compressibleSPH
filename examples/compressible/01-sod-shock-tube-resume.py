@@ -44,7 +44,7 @@ from warpSPH.caseUtils import *
 
 
 argparser = argparse.ArgumentParser(description='Resume a Sod Shock Tube 1D simulation from a saved state.')
-argparser.add_argument('--exportPath', type=str, default='export/01-sodShockTube', help='Path to the export directory containing the saved state and config to resume from.')
+argparser.add_argument('--exportPath', type=str, default=None, help='Export directory to resume from. Defaults to the newest run of the case.')
 argparser.add_argument('--fileName', type=str, default='trajectory/finalState.h5', help='Name of the saved state file to import from the exportPath/trajectory directory.')
 argparser.add_argument('--plot', action='store_true', help='Whether to plot the results during the simulation.')
 argparser.add_argument('--store', action='store_true', help='Whether to resume save the simulationstates.')
@@ -54,6 +54,11 @@ argparser.add_argument('--storeInterval', type=int, default=50, help='Interval (
 argparser.add_argument('--t_limit', type=float, default=0.3, help='Time limit to run the simulation to.')
 
 args = argparser.parse_args()
+
+if args.exportPath is None:
+    from warpSPH.io import latestExportPath
+    args.exportPath = latestExportPath('01-sodShockTube')
+    print(f'resuming from {args.exportPath}')
 ############################################################################################################
 
 

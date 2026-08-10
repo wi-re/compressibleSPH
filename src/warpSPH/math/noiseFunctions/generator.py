@@ -2,7 +2,7 @@ from .simplex1d import _noise1
 from .simplex2d import _noise2
 from .simplex3d import _noise3,_noise3periodic
 from .simplex4d import _noise4
-from .util import _init
+
 from .perlin import interpolant, perlinNoise1D, perlinNoise2D, perlinNoise3D
 
 import numpy as np

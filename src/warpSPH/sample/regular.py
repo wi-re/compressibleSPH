@@ -1,5 +1,6 @@
 from ..utils.domain import DomainDescription
-from ..utils.sampling import PointCloud, ParticleSet, volumeToSupportHelper
+from ..sampling import PointCloud, ParticleSet
+from ..utils.support import volumeToSupport
 
 import torch
 
@@ -45,7 +46,7 @@ def buildPointCloud(nx, domain: DomainDescription = None, targetNeighbors = 16, 
     if jitter > 0:
         pos += torch.rand_like(pos) * dx * jitter
     area = dx ** domain.dim
-    support = volumeToSupportHelper(area, targetNeighbors, domain.dim)
+    support = volumeToSupport(area, targetNeighbors, domain.dim)
     supports = torch.ones_like(pos[:, 0]) * support
     return PointCloud(positions = pos, supports = supports), area, support
 

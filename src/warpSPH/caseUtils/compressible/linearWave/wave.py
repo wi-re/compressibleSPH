@@ -32,7 +32,7 @@ def sampleLinearWave(
     P0 = c_s**2 * rho0 / gamma
 
     pressures = P0 + delta_i
-    supports = volumeToSupportHelper(1 / nx, dim = 1, targetNeighbors = config.targetNeighbors)
+    supports = volumeToSupport(1 / nx, dim = 1, targetNeighbors = config.targetNeighbors)
 
     # print(f'Initial Pressures: {pressures.min().item()} to {pressures.max().item()}')
 

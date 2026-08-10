@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
+import torch
 
 def naca_4digit_camber_line(x_over_c, m, p):
     """Mean camber line and slope for NACA 4-digit airfoils."""

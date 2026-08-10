@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, List, Tuple, Dict, Any
-from warpSPH.utils.sdf import *
+from warpSPH.sampling.sdf import *
 import torch
 
 

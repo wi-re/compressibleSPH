@@ -1,5 +1,5 @@
 from ..configurations.region import RegionType
-from ..utils.sampling import ParticleSet
+from ..sampling import ParticleSet
 
 def filterRegion(region, regions):
     particles = region.particles

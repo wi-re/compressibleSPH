@@ -1,6 +1,8 @@
-from .domain import *
+from ..utils.domain import *
 import torch
-from .support import volumeToSupportHelper
+from ..utils.support import volumeToSupport
+
+from warpSPHCore.dataTypes import ParticleState, PointCloud
 
 from typing import NamedTuple
 class ParticleSet(NamedTuple):
@@ -10,17 +12,17 @@ class ParticleSet(NamedTuple):
     masses: torch.Tensor
     densities: torch.Tensor
     
-@torch.jit.script
-@dataclass#(slots=True)
-class PointCloud:
-    """
-    A named tuple containing the positions of the particles and the number of particles.
-    """
-    positions: torch.Tensor
-    supports: torch.Tensor
+# @torch.jit.script
+# @dataclass#(slots=True)
+# class PointCloud:
+#     """
+#     A named tuple containing the positions of the particles and the number of particles.
+#     """
+#     positions: torch.Tensor
+#     supports: torch.Tensor
 
-    def __ne__(self, other: 'PointCloud') -> bool:
-        return not self.__eq__(other)
+#     def __ne__(self, other: 'PointCloud') -> bool:
+#         return not self.__eq__(other)
     
 
 
@@ -33,7 +35,7 @@ from warpSPHCore import *
 # from waves.utils.sampling import ParticleSet
 
 
-from .support import n_h_to_nH
+from ..utils.support import n_h_to_nH
 # from ..config import SimulationConfig
 from enum import Enum
 
