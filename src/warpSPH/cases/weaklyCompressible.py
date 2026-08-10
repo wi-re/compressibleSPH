@@ -63,7 +63,6 @@ WEAKLY_COMPRESSIBLE_PARAMS = dict(
     inviscid=True,
     nu=0.0,
     markerSize=4,
-    plotBackend='matplotlib',
 )
 
 #: The two panels almost every weakly compressible notebook plotted.

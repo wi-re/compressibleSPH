@@ -20,7 +20,9 @@ from warpSPH.runner import caseMain                # noqa: E402
 
 #: What this example fixes relative to the case defaults; still overridable,
 #: because these are prepended to the command line rather than appended.
-PRESET = ['--scheme', 'divergenceFree', '--L', '6.283185307179586']
+#: `--plot` is on because an example is meant to be watched -- pass `--no-plot`
+#: for a headless run, or `--no-show` to keep the frames without a window.
+PRESET = ['--plot', '--scheme', 'divergenceFree', '--L', '6.283185307179586']
 
 if __name__ == '__main__':
     caseMain(randomFlowCase, PRESET + sys.argv[1:])

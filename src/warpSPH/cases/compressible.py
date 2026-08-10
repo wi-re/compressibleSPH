@@ -53,7 +53,6 @@ COMPRESSIBLE_PARAMS = dict(
     adaptiveSupportScheme='Owen',
     adaptiveSupportCorrections=False,
     markerSize=2,
-    plotBackend='matplotlib',
 )
 
 

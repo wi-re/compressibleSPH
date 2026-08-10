@@ -21,6 +21,8 @@ from ..configurations.moduleConfigurations.gravity import GravityType
 from ..initializers import initializeWeaklyCompressibleSimulation
 from ..modules import setupWeaklyCompressibleTimestep
 from ..runner import Case, RunContext, caseMain, registerCase
+from ..runner.display import resolvePlotBackend
+from .plotting import openWindow, pumpEvents
 
 __all__ = ['dambreakCase', 'caseArgs', 'simulationProperties']
 
@@ -144,10 +146,23 @@ def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
 
 def setupPlot(ctx: RunContext, state):
     from ..caseUtils.weaklyCompressiblePlot import setupPlotter
-    plotter = setupPlotter(state, ctx.scratch['args'], ctx.scratch['simSetup'],
-                           ctx.config, ctx.schemeConfig)
+
+    backend = resolvePlotBackend(ctx)
+    try:
+        plotter = setupPlotter(state, ctx.scratch['args'], ctx.scratch['simSetup'],
+                               ctx.config, ctx.schemeConfig, backend=backend)
+    except Exception as exc:
+        if backend == 'matplotlib':
+            raise
+        print(f'the {backend!r} plotting backend failed to start '
+              f'({type(exc).__name__}: {exc}); falling back to matplotlib.')
+        plotter = setupPlotter(state, ctx.scratch['args'], ctx.scratch['simSetup'],
+                               ctx.config, ctx.schemeConfig, backend='matplotlib')
+        backend = 'matplotlib'
+    ctx.scratch['plotBackend'] = backend
     if ctx.imagePath:
         plotter.export(os.path.join(ctx.imagePath, 'frame_00000.png'), dpi=300)
+    openWindow(ctx, plotter)
     return plotter
 
 
@@ -157,6 +172,7 @@ def updatePlot(ctx: RunContext, state, plotter, step: int) -> None:
             ctx.config, ctx.schemeConfig, None)
     if ctx.imagePath:
         plotter.export(os.path.join(ctx.imagePath, f'frame_{step:05d}.png'), dpi=300)
+    pumpEvents(plotter)
 
 
 def extraData(ctx: RunContext, state) -> Dict[str, Any]:

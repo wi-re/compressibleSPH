@@ -14,6 +14,7 @@ import torch
 from ..caseUtils import buildSod1D, plotSod, plotSod_, sodInitialState
 from ..enumTypes import AdaptiveSupportScheme, ViscositySwitch
 from ..runner import Case, RunContext, caseMain, registerCase, resolveEnum
+from .plotting import openWindow, pumpEvents
 
 __all__ = ['sodCase', 'states']
 
@@ -68,6 +69,7 @@ def setupPlot(ctx: RunContext, state):
                         plotReference=True, plotLabels=False, scatter=False, t_=state.t)
     if ctx.imagePath:
         fig.savefig(os.path.join(ctx.imagePath, 'frame_00000.png'))
+    openWindow(ctx, (fig, axis))
     return (fig, axis)
 
 
@@ -79,10 +81,9 @@ def updatePlot(ctx: RunContext, state, handle, step: int) -> None:
     plotSod_(fig, axis, state.state, ctx.config, ctx.schemeConfig, ctx.config.domain,
              ctx.param('gamma'), left, right,
              plotReference=True, plotLabels=False, scatter=True, t_=state.t)
-    fig.canvas.draw()
-    fig.canvas.flush_events()
     if ctx.imagePath:
         fig.savefig(os.path.join(ctx.imagePath, f'frame_{step:05d}.png'))
+    pumpEvents(handle)
 
 
 def extraData(ctx: RunContext, state) -> Dict[str, Any]:

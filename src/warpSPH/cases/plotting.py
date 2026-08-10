@@ -9,9 +9,18 @@ data, so a case declares the fields and gets a matching `setupPlot` /
 The 1D compressible examples instead scattered a few state fields against `x`;
 :func:`profilePlot` is that, with an optional analytic overlay.
 
-Note the backend default: the notebooks ask for ``vispy``, which needs a GL
-context. A script run over ssh or in CI has none, so these default to
-``matplotlib`` and take ``--plotBackend vispy`` when the display is there.
+The plotting backend is chosen by dimension -- **vispy for 2D**, matplotlib for
+1D -- because a matplotlib scatter of a large 2D particle set costs more per
+frame than the step it is drawing. ``--plotBackend`` overrides, and a vispy
+canvas that cannot start (no GL context over ssh, in a container) falls back to
+matplotlib rather than taking the run down with it.
+
+Plots are *live* by default when run from a console: :func:`openWindow` puts
+matplotlib into interactive mode and shows the figure, and :func:`pumpEvents`
+gives the GUI toolkit a chance to repaint after every redraw. Without those two
+calls a script builds the figure, writes its PNGs and never opens a window --
+which is what a notebook gets away with, because the notebook frontend displays
+the figure for it. ``--no-show`` turns the window off and keeps the frames.
 """
 
 from __future__ import annotations
@@ -24,7 +33,18 @@ import torch
 
 from ..runner import RunContext
 
-__all__ = ['Field', 'particlePlot', 'profilePlot', 'ProfileAxis', 'figureTitle']
+__all__ = ['Field', 'particlePlot', 'profilePlot', 'ProfileAxis', 'figureTitle',
+           'openWindow', 'pumpEvents', 'holdWindow', 'closeWindow', 'figureOf']
+
+
+# -- live display -----------------------------------------------------------
+# Implemented in `warpSPH.runner.display` so the runner can tear a figure down
+# without importing from `warpSPH.cases`; re-exported here because that is
+# where a case looks for them.
+
+from ..runner.display import (closeWindow, figureOf,  # noqa: E402
+                              holdWindow, openWindow, pumpEvents,
+                              resolvePlotBackend, visualizeWithFallback)
 
 
 @dataclass
@@ -92,10 +112,9 @@ def particlePlot(fields: Sequence[Field], figsize: Tuple[float, float] = (11, 5)
     keys = [chr(ord('A') + i) for i in range(len(fields))]
 
     def setupPlot(ctx: RunContext, state):
-        from warpSPHPlotting import visualize
-
         markerSize = ctx.param('markerSize', 2)
-        plotter = visualize(
+        plotter = visualizeWithFallback(
+            ctx, resolvePlotBackend(ctx),
             particleState=state.state,
             domain=ctx.config.domain,
             quantities={k: f.tensor(state) for k, f in zip(keys, fields)},
@@ -103,9 +122,9 @@ def particlePlot(fields: Sequence[Field], figsize: Tuple[float, float] = (11, 5)
             figTitle=figureTitle(ctx, state),
             mosaic=''.join(keys),
             figsize=figsize,
-            backend=ctx.param('plotBackend', 'matplotlib'),
         )
         _export(ctx, plotter, 0, dpi)
+        openWindow(ctx, plotter)
         return plotter
 
     def updatePlot(ctx: RunContext, state, plotter, step: int) -> None:
@@ -118,6 +137,7 @@ def particlePlot(fields: Sequence[Field], figsize: Tuple[float, float] = (11, 5)
         # what it is showing.
         plotter.updateTitle(figureTitle(ctx, state))
         _export(ctx, plotter, step, dpi)
+        pumpEvents(plotter)
 
     return setupPlot, updatePlot
 
@@ -187,17 +207,18 @@ def profilePlot(axes: Sequence[ProfileAxis], shape: Tuple[int, int],
         import matplotlib.pyplot as plt
 
         fig, axis = plt.subplots(rows, cols, figsize=figsize, squeeze=False)
+        ctx.scratch['plotBackend'] = 'matplotlib'   # profile plots are axes-based
         handle = (fig, axis)
         draw(ctx, state, handle)
         _save(ctx, fig, 0, dpi)
+        openWindow(ctx, handle)
         return handle
 
     def updatePlot(ctx: RunContext, state, handle, step: int) -> None:
         fig, _ = handle
         draw(ctx, state, handle)
-        fig.canvas.draw()
-        fig.canvas.flush_events()
         _save(ctx, fig, step, dpi)
+        pumpEvents(handle)
 
     return setupPlot, updatePlot
 

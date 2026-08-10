@@ -231,8 +231,12 @@ class IncompressibleSystem(BaseIntegrationSystem):
         )
         # config.kernel = kernel
 
-        print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
-        print(f'Solver Iterations: {len(errors_incomp)}, Incompressible Error: {errors_incomp[0]:.4g}->{errors_incomp[-1]:.4g}')
+        # Gated on `verbose`, which the integrator forwards from the caller.
+        # These fired unconditionally on every step, which made a DFSPH run
+        # unusable under --quiet and buried the end-of-run report in a log.
+        if kwargs.get('verbose', False):
+            print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
+            print(f'Solver Iterations: {len(errors_incomp)}, Incompressible Error: {errors_incomp[0]:.4g}->{errors_incomp[-1]:.4g}')
 
         gradVel = warpOperation(
             self.state,

@@ -75,6 +75,17 @@ class CaseSpec:
     # --- output -------------------------------------------------------------
     plot: bool = False
     plotInterval: int = 10
+    #: Open a live, updating window alongside the exported frames. Ignored when
+    #: matplotlib has no interactive backend, so leaving it on is safe headless.
+    show: bool = True
+    #: Block on the final figure when the run ends, instead of closing it.
+    #: `caseMain` turns this on -- a person at a console wants to look at the
+    #: result -- while a programmatic `run()` leaves it off so nothing stalls.
+    holdPlot: bool = False
+    #: 'matplotlib', 'vispy' or 'pyVista'. `None` picks by dimension: a 2D
+    #: particle plot goes to vispy because a matplotlib scatter of ~10^5
+    #: points costs more per frame than the physics step it is drawing.
+    plotBackend: Optional[str] = None
     store: bool = False
     #: 'states' writes one HDF5 file per stored step (the examples' pattern);
     #: 'trajectory' writes a single growing trajectory.h5 (the datagen pattern).
@@ -84,8 +95,15 @@ class CaseSpec:
     exportInterval: float = 0.002
     exportRoot: Optional[str] = None
     video: bool = False
-    progress: bool = True
+    #: `None` means "when a terminal is watching". Redirected to a file, a tqdm
+    #: bar writes a carriage-return smear that buries the report an unattended
+    #: run exists to produce, so it is off unless asked for.
+    progress: Optional[bool] = None
     verbose: bool = False
+    #: Suppress the setup banner, the progress bar and the completion report.
+    #: Everything a run says about itself goes through these three, so this is
+    #: the one switch that makes a run silent.
+    quiet: bool = False
 
     # --- case-specific knobs ------------------------------------------------
     params: Dict[str, Any] = field(default_factory=dict)
@@ -147,12 +165,18 @@ class CaseSpec:
 
 # -- argparse generation -----------------------------------------------------
 
+#: Short options for the flags reached for often enough to earn one.
+_SHORT_FLAGS = {'quiet': '-q', 'verbose': '-v'}
+
+
 def _addField(parser: argparse.ArgumentParser, name: str, default: Any, annotation: Any, help: str):
     """Declare one flag, inferring its type from the dataclass default."""
+    short = _SHORT_FLAGS.get(name)
     if isinstance(default, bool):
         # store_true would make `plot: true` in a config file un-overridable from
         # the CLI, so both polarities get a flag.
-        parser.add_argument(f'--{name}', dest=name, action='store_true', default=None, help=help)
+        names = [f'--{name}'] + ([short] if short else [])
+        parser.add_argument(*names, dest=name, action='store_true', default=None, help=help)
         parser.add_argument(f'--no-{name}', dest=name, action='store_false', default=None,
                             help=argparse.SUPPRESS)
         return

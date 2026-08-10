@@ -155,3 +155,61 @@ def test_postStepHookRunsAfterEveryStep():
     case = dataclasses.replace(case, postStep=lambda ctx, state, i: calls.append(i))
     result = run(case, nx=100, nSteps=4, progress=False, plot=False, store=False)
     assert calls == list(range(result.nSteps))
+
+
+def test_runReportsItselfUnlessQuiet(capsys):
+    """A run left unattended has to say what it did when it finishes.
+
+    Both blocks are checked because they answer different questions: the banner
+    says what is about to run (at the resolved dt, not the requested one), the
+    report says whether it finished and where the output went.
+    """
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase, run
+    importAll()
+
+    run(getCase('sod'), nx=100, nSteps=2, plot=False, store=False)
+    printed = capsys.readouterr().out
+    assert 'warpSPH | sod' in printed          # banner
+    assert 'particles' in printed and 'timestep' in printed
+    assert 'sod finished in' in printed        # report
+    assert 'totalEnergy' in printed            # diagnostics summary
+
+    run(getCase('sod'), nx=100, nSteps=2, plot=False, store=False, quiet=True)
+    assert capsys.readouterr().out == ''
+
+
+def test_reportNamesDivergenceLoudly():
+    """A diverged run must not read like a successful one."""
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase, run
+    from warpSPH.runner.report import reportRun
+    importAll()
+
+    result = run(getCase('noh'), nx=64, nSteps=6, dt=0.5, adaptiveDt=False,
+                 plot=False, store=False, quiet=True)
+    assert result.diverged
+    assert result.wallTime > 0
+
+
+def test_progressBarIsOffWhenNothingIsWatching(capsys):
+    """`progress=None` means "only for a terminal".
+
+    Redirected to a file, a tqdm bar writes a carriage-return smear that buries
+    the report the run exists to produce.
+    """
+    from warpSPH.cases import importAll
+    from warpSPH.runner import getCase, run
+    importAll()
+
+    # capsys replaces stderr with a non-tty, which is the condition under test.
+    run(getCase('sod'), nx=100, nSteps=2, plot=False, store=False)
+    assert 'it/s' not in capsys.readouterr().err
+
+
+def test_formatDurationReadsAsTime():
+    from warpSPH.runner.report import formatDuration
+    assert formatDuration(0.812) == '812ms'
+    assert formatDuration(4.21) == '4.21s'
+    assert formatDuration(192) == '3m 12s'
+    assert formatDuration(3852) == '1h 04m 12s'

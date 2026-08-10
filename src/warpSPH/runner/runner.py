@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -29,7 +30,9 @@ from ..schemes import buildScheme
 from ..utils import buildDomainDescription
 from .case import Case, RunContext
 from .caseSpec import CaseSpec
+from .display import closeWindow, holdWindow
 from .media import encodeFrames
+from .report import describeRun, quietedWarp, reportRun
 
 __all__ = ['RunResult', 'run', 'buildContext', 'resolveEnum']
 
@@ -45,6 +48,8 @@ class RunResult:
     videoPath: Optional[str] = None
     nSteps: int = 0
     diverged: bool = False
+    #: Wall-clock seconds for the whole run, setup included.
+    wallTime: float = 0.0
 
     def series(self, key: str) -> np.ndarray:
         """One diagnostic across the whole run, as an array."""
@@ -178,6 +183,12 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     if overrides:
         spec = spec.merged(**overrides)
 
+    startedAt = time.perf_counter()
+    with quietedWarp(spec.quiet):
+        return _run(case, spec, startedAt)
+
+
+def _run(case: Case, spec: CaseSpec, startedAt: float) -> RunResult:
     ctx = buildContext(case, spec)
 
     if case.configureScheme is not None:
@@ -193,9 +204,6 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     spec = ctx.spec
 
     runningState = system.initializeNewState()
-
-    if spec.verbose:
-        _describe(ctx, runningState)
 
     # --- output setup -------------------------------------------------------
     outFile = None
@@ -236,6 +244,9 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     storeSteps = max(1, int(spec.exportInterval / dt)) if spec.storeMode == 'trajectory' \
         else max(1, spec.storeInterval)
 
+    if not spec.quiet:
+        describeRun(ctx, runningState, nSteps, timeLimited)
+
     if spec.store and spec.storeMode == 'states':
         exportSimulationSystem(ctx.exportPath, 'initialState', ctx.scheme, runningState,
                                exportAdjacency=False, stages=None,
@@ -249,7 +260,9 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
 
     stepResult = None
 
-    steps, progress = _stepIterator(nSteps, spec.tLimit, timeLimited, spec.progress)
+    showProgress = spec.progress if spec.progress is not None else sys.stderr.isatty()
+    steps, progress = _stepIterator(nSteps, spec.tLimit, timeLimited,
+                                    showProgress and not spec.quiet)
     for i in steps:
         with _Timer(ctx.device) as timer:
             stepResult = ctx.integrator.function(
@@ -257,7 +270,9 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
                 f=ctx.stepFunction,
                 dt=ctx.config.dt,
                 config=ctx.config,
-                verbose=False,
+                # Forwarded to the step function *and* to `system.finalize`, so
+                # this is what makes --verbose reach the scheme's own reporting.
+                verbose=spec.verbose,
                 schemeConfig=ctx.schemeConfig,
             )
         runningState = stepResult.state
@@ -309,7 +324,26 @@ def run(case: Case, spec: Optional[CaseSpec] = None, **overrides) -> RunResult:
     if spec.video and ctx.imagePath is not None:
         result.videoPath = encodeFrames(ctx.imagePath, ctx.exportPath)
 
+    _teardownPlot(ctx)
+
+    result.wallTime = time.perf_counter() - startedAt
+    if not spec.quiet:
+        reportRun(result, result.wallTime)
+
     return result
+
+
+def _teardownPlot(ctx: RunContext) -> None:
+    """Hold the final figure if asked, then release it.
+
+    Releasing matters because the figures are pyplot-managed: a process that
+    runs several cases would otherwise keep every one of their windows alive.
+    """
+    handle = ctx.scratch.pop('plot', None)
+    if handle is None:
+        return
+    holdWindow(ctx, handle)
+    closeWindow(handle)
 
 
 def _plotAndStore(ctx: RunContext, case: Case, spec: CaseSpec, state, stepResult,
@@ -370,15 +404,3 @@ def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
               if k not in ('step', 't', 'stepTime_ms') and isinstance(v, (int, float))]
     parts.append(f'{row["stepTime_ms"]:.1f}ms')
     return ' | '.join(parts)
-
-
-def _describe(ctx: RunContext, state) -> None:
-    print('-' * 80)
-    print(f'case: {ctx.case.name}  scheme: {ctx.scheme}')
-    print(f'device: {ctx.device}, dtype: {ctx.dtype}')
-    print(f'particles: {len(state.state.positions)}')
-    print(f'domain: {ctx.config.domain.min.cpu().numpy()} to {ctx.config.domain.max.cpu().numpy()}')
-    print(f'dt: {ctx.config.dt}, minDt: {ctx.config.minDt}, adaptiveDt: {ctx.config.adaptiveDt}, '
-          f'cflFactor: {ctx.config.cflFactor}')
-    print(f'kernel: {ctx.config.kernel}, targetNeighbors: {ctx.config.targetNeighbors}')
-    print('-' * 80)

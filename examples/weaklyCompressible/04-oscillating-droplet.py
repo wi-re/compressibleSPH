@@ -20,7 +20,9 @@ from warpSPH.runner import caseMain                # noqa: E402
 
 #: What this example fixes relative to the case defaults; still overridable,
 #: because these are prepended to the command line rather than appended.
-PRESET = []
+#: `--plot` is on because an example is meant to be watched -- pass `--no-plot`
+#: for a headless run, or `--no-show` to keep the frames without a window.
+PRESET = ['--plot']
 
 if __name__ == '__main__':
     caseMain(oscillatingDropletCase, PRESET + sys.argv[1:])

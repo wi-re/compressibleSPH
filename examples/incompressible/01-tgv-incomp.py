@@ -10,6 +10,8 @@ Equivalent invocations::
     warpsph-run tgv --nx 256 --tLimit 2.0
 """
 
+import sys
+
 from warpSPHBootstrap import bootstrap
 
 bootstrap(precision='float32')
@@ -17,5 +19,9 @@ bootstrap(precision='float32')
 from warpSPH.cases.tgv import tgvCase          # noqa: E402
 from warpSPH.runner import caseMain            # noqa: E402
 
+#: `--plot` is on because an example is meant to be watched -- pass `--no-plot`
+#: for a headless run, or `--no-show` to keep the frames without a window.
+PRESET = ['--plot']
+
 if __name__ == '__main__':
-    caseMain(tgvCase)
+    caseMain(tgvCase, PRESET + sys.argv[1:])

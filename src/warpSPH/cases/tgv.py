@@ -9,7 +9,7 @@ zero-byte `dfsph.py` / `dfsph_step.py` -- the real step function comes from
 
 from __future__ import annotations
 
-import os
+import sys
 from typing import Any, Dict
 
 import numpy as np
@@ -18,6 +18,7 @@ import torch
 from ..modules import computeDensities, shuffleParticles
 from ..runner import Case, RunContext, caseMain, registerCase
 from ..sample.weaklyCompressible import setupBasicWeaklyCompressibleInitialState
+from .plotting import Field, particlePlot
 
 __all__ = ['tgvCase', 'analyticDecayRate']
 
@@ -94,7 +95,12 @@ def _relax(ctx: RunContext, system) -> None:
 
     adjacency = None
     dt = ctx.param('relaxDt')
-    for _ in _maybeProgress(range(steps), ctx.spec.progress, 'relaxing'):
+    # `progress` is tri-state (None = auto), so resolve it the same way the
+    # runner's own loop does rather than treating None as false.
+    showProgress = ctx.spec.progress
+    if showProgress is None:
+        showProgress = sys.stderr.isatty()
+    for _ in _maybeProgress(range(steps), showProgress and not ctx.spec.quiet, 'relaxing'):
         adjacency = buildVerletList(state.state, ctx.config.domain, verletScale=1.4,
                                     supportMode=SupportScheme.SuperSymmetric,
                                     priorNeighborhood=adjacency, verbose=False)
@@ -128,26 +134,15 @@ def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     }
 
 
-def setupPlot(ctx: RunContext, state):
-    import matplotlib.pyplot as plt
-    fig, axis = plt.subplots(1, 1, figsize=(7, 6), squeeze=False)
-    ctx.scratch['figure'] = (fig, axis)
-    updatePlot(ctx, state, (fig, axis), 0)
-    return (fig, axis)
-
-
-def updatePlot(ctx: RunContext, state, handle, step: int) -> None:
-    fig, axis = handle
-    ax = axis[0][0]
-    ax.clear()
-    positions = state.state.positions.detach().cpu().numpy()
-    speed = torch.linalg.norm(state.state.velocities, dim=-1).detach().cpu().numpy()
-    ax.scatter(positions[:, 0], positions[:, 1], c=speed, s=2, cmap='viridis')
-    ax.set_aspect('equal')
-    ax.set_title(f'TGV  t = {float(state.t):.4f}')
-    fig.canvas.draw()
-    if ctx.imagePath:
-        fig.savefig(os.path.join(ctx.imagePath, f'frame_{step:05d}.png'), dpi=150)
+# This was a hand-rolled matplotlib scatter, which at the case's default
+# nx=256 cost more per frame than the step it was drawing. It now goes through
+# the shared particle plot, so a 2D run renders on vispy like every other 2D
+# case -- see `warpSPH.runner.display.resolvePlotBackend`.
+setupPlot, updatePlot = particlePlot([
+    Field('velocities', 'velocities', colorMap='viridis', mapping='L2Norm'),
+    Field('densities', 'densities', colorMap='RdBu', colorMapKind='diverging',
+          flip=True, midPoint=1.0),
+])
 
 
 def extraData(ctx: RunContext, state) -> Dict[str, Any]:

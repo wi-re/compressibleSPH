@@ -22,7 +22,10 @@ def buildPlotText(runningState, args, simSetup, config, schemeConfig, timing):
     return titleString
 
 
-def setupPlotter(runningState, args, simSetup, config, schemeConfig):
+def setupPlotter(runningState, args, simSetup, config, schemeConfig, backend = 'vispy'):
+    # `backend` is a parameter rather than the hardcoded 'vispy' it used to be,
+    # so a caller without a GL context can ask for matplotlib. Notebooks that
+    # omit it keep the original behaviour.
     titleString = buildPlotText(runningState, args, simSetup, config, schemeConfig, None)
     markerSize = args.markerSize
     velocityPlot = PlottingOptions(
@@ -92,7 +95,7 @@ def setupPlotter(runningState, args, simSetup, config, schemeConfig):
         figTitle = titleString,
         mosaic = 'ABC' if args.plotDensity else 'AB',
         figsize= (args.plotWidth,args.plotHeight),
-        backend='vispy',
+        backend=backend,
         # backend='pyVista',
         # backendOptions = {
         #     # In notebooks, use trame for reliable live updates.

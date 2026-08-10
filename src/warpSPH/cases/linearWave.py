@@ -17,6 +17,7 @@ from ..runner import Case, RunContext, caseMain, registerCase, resolveEnum
 from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            compressibleDiagnostics, configureCompressible,
                            paramExtraData)
+from .plotting import openWindow, pumpEvents
 
 __all__ = ['linearWaveCase']
 
@@ -49,14 +50,13 @@ def setupPlot(ctx: RunContext, state):
     fig, axis = plt.subplots(1, 3, figsize=(10, 5), squeeze=False)
     handle = (fig, axis)
     _draw(ctx, state, handle)
+    openWindow(ctx, handle)
     return handle
 
 
 def updatePlot(ctx: RunContext, state, handle, step: int) -> None:
-    fig, _ = handle
     _draw(ctx, state, handle, step)
-    fig.canvas.draw()
-    fig.canvas.flush_events()
+    pumpEvents(handle)
 
 
 def _draw(ctx: RunContext, state, handle, step: int = 0) -> None:

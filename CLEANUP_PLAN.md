@@ -373,6 +373,86 @@ factored out rather than duplicated:
   vispy needs a GL context, which a script over ssh or in CI does not have.
   `--plotBackend vispy` restores it.
 
+### Live plots, and the backend that makes them affordable
+
+The notebooks never had to display anything -- the notebook frontend does that
+for you. A console script does, so a straight port built the figure, wrote its
+PNGs and **opened no window at all**. `runner/display.py` is that missing piece:
+`openWindow` (matplotlib interactive mode + `show`), `pumpEvents` (a `draw_idle`
+alone never repaints inside a tight step loop), `holdWindow` and `closeWindow`.
+It lives in `runner/` rather than `cases/` because the runner has to tear a
+figure down at the end of a run and must not import from `warpSPH.cases`;
+`cases/plotting.py` re-exports the names.
+
+**Backend is chosen by dimension: vispy for 2D, matplotlib for 1D.** Measured on
+a 16k-particle Kelvin-Helmholtz run, 6 frames: matplotlib spent **19.97 s** in
+plotting against 1.65 s of physics -- the observer costing an order of magnitude
+more than the thing observed. vispy brings that to **3.97 s**, of which the
+redraw itself is 0.08 s and the rest is the 300-dpi PNG export. `--plotBackend`
+overrides; a vispy canvas that cannot start falls back to matplotlib with a
+message rather than killing the run (verified with `DISPLAY` unset).
+
+**Both backends leak without an explicit close**, and this was found the hard
+way -- a sweep left 20+ windows open. matplotlib figures are registered with
+pyplot's global manager by `subplots`/`subplot_mosaic`; a vispy `SceneCanvas`
+holds a live GL window. `run()` now tears the handle down in `_teardownPlot`.
+`caseMain` sets `holdPlot=True` so a person at a terminal keeps the final frame
+on screen, while programmatic `run()` leaves it off so a sweep never stalls.
+
+`warpSPH.cases.tgv` gave up its hand-rolled matplotlib scatter for the shared
+`particlePlot` in the process, so it benefits like every other 2D case, and
+`caseUtils.weaklyCompressiblePlot.setupPlotter` took a `backend` argument in
+place of its hardcoded `'vispy'` (default unchanged, so notebooks are unaffected).
+
+### What a run prints
+
+Added after the live-plot work, for the case that motivates scripts over
+notebooks in the first place: a long run nobody is sitting in front of.
+
+- **Banner**, printed once setup is done and `dt` is final, so it shows what
+  will run rather than what was asked for — resolved dt, derived step count,
+  particle count, domain, and the output paths.
+- **Report**, printed at the end: finished-or-DIVERGED, wall time, step-time
+  statistics, every diagnostic as initial/final/min/max, and the files actually
+  written (counted from disk, not inferred from the configured intervals — a
+  run that stopped early would otherwise be credited with output it never
+  produced). A diverged run also exits non-zero, so a shell script can tell.
+- **`--quiet` / `-q`** suppresses all three of banner, report and progress bar,
+  and drops warp's per-module load logging to `LOG_WARNING` for the duration
+  (restored afterwards — it is a third-party global).
+- **`progress` became tri-state** (`None` = auto). A tqdm bar redirected to a
+  file writes a carriage-return smear that buries the report the run exists to
+  produce, so it is on only when `sys.stderr.isatty()`.
+
+Lives in `runner/report.py`, and replaces the old `_describe` that only ran
+under `--verbose`.
+
+### README rewritten
+
+The old README was organised as a reference dump -- seven sections of bare enum
+listings before anything about running a simulation -- and had gone stale in two
+ways that mattered: it described the package as compressible-only (it is three
+families now) and its Quick Start showed the **pre-`SchemeBundle` 7-tuple
+unpack**, which is both wrong and the exact `SimulationConfig` shadowing trap the
+notebook sweep removed.
+
+Rewritten around what someone actually does with it: install, run a case, the
+runner (CLI, config precedence, output layout, plots, the banner/report), the
+case tables linking each `.py` script, **how to write a new case** (hook table
+and a worked skeleton), the Python/notebook API, then the enum reference, layout,
+tests and gallery. Every relative link is checked, every documented case name is
+checked against the registry (25/25), every documented hook against
+`dataclasses.fields(Case)`, every flag against `CaseSpec`, and both Python
+snippets and the case-listing shell snippet were executed.
+
+**One bug fell out of writing it.** The README claims `--quiet` makes a run
+silent; it did not. `systems/incompressible.py` carried two leftover debug
+`print`s in `finalize` -- the same lines are commented out at the two sibling
+sites -- that fired on *every step of every DFSPH run*. They are now gated on
+`verbose`, and the runner forwards `spec.verbose` to the integrator instead of a
+hardcoded `False`, so `--verbose` reaches a scheme's own reporting and `--quiet`
+is finally true.
+
 ### Cases that cover more than one notebook
 
 Where two notebooks differed only in a flag they became one case, and the
@@ -417,10 +497,15 @@ hooks under different defaults rather than a third copy.
 ### Verification
 
 - All 25 cases run 3 steps at coarse resolution, and again with `--plot
-  --store`, writing frames and HDF5. No failures.
-- `pytest` is 28 tests (was 20); the new ones pin the registry/`CASE_MODULES`
+  --store`, writing frames and HDF5. No failures. The plot pass is run **one
+  case per process, sequentially**, so each window is gone before the next
+  starts and a leak cannot hide behind another case's; every case is checked
+  for leftover matplotlib figures and live vispy canvases, and all report zero.
+- The headless path is verified with `DISPLAY`/`WAYLAND_DISPLAY` unset: vispy
+  falls back to matplotlib, frames are still written, nothing leaks.
+- `pytest` is 32 tests (was 20); the new ones pin the registry/`CASE_MODULES`
   agreement, that every case names a resolvable scheme, that params stay
-  serialisable, and the two new hooks.
+  serialisable, the two new hooks, and the banner/report/quiet behaviour.
 
 ### Still open
 
