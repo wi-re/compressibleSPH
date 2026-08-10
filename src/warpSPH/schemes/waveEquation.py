@@ -1,9 +1,12 @@
-from ..systems import *
-from ..utils import *
-from warpSPHIntegrators import *
-from warpSPHCore import *
+from ..systems import WaveSystemUpdatev3, WaveSystemv3
+from warpSPHIntegrators import get_reference_state
+from warpSPHCore import (
+    GradientScheme, KernelFunctions, LaplacianScheme,
+    OperationProperties, SupportScheme, WarpOperation,
+    buildVerletList, warpOperation,
+)
 
-from ..modules import *
+__all__ = ['f_wave_equation']
 
 
 def f_wave_equation(system: WaveSystemv3, dt: float, verbose: bool = False):

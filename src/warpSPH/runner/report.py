@@ -78,8 +78,11 @@ def describeRun(ctx, state, nSteps: int, timeLimited: bool) -> None:
     if ctx.case.description:
         print(f'  {ctx.case.description}')
     print(_RULE)
+    # The step function, not just the enum: a comparison run across schemes is
+    # judged on which solver actually ran, and the enum name alone does not say.
+    solver = getattr(ctx.stepFunction, '__name__', str(ctx.stepFunction))
     print(_row('scheme', f'{_enumName(ctx.scheme)} '
-                         f'({type(ctx.scheme).__name__})'))
+                         f'({type(ctx.scheme).__name__}) | solver {solver}'))
     print(_row('device', f'{_deviceDescription(ctx.device)} | {spec.precision}'))
     print(_row('particles', f'{particles:,} | dim {spec.dim} | nx {spec.nx}'))
     print(_row('domain', _domainDescription(config.domain)))

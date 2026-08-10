@@ -21,18 +21,21 @@ def caseMain(case: Case, argv: Optional[List[str]] = None) -> RunResult:
     ``warpSPH`` first, so use ``python -m warpSPHRun sod`` or set
     ``warpSPHCore_PRECISION`` when a non-default precision is wanted.
     """
-    parser = buildArgumentParser(
-        description=case.description or f'Run the {case.name} case.',
-        caseParams=case.params,
-    )
-    args = parser.parse_args(argv)
-
     defaults = dict(case.defaults)
     defaults.setdefault('caseName', case.name)
     defaults.setdefault('scheme', case.scheme)
     # A person ran this from a terminal, so leave the final figure up to be
     # read. `--no-holdPlot` overrides, and programmatic `run()` never sets it.
     defaults.setdefault('holdPlot', True)
+
+    # Built after `defaults`, so `--help` can report what this case actually
+    # runs rather than the generic CaseSpec value.
+    parser = buildArgumentParser(
+        description=case.description or f'Run the {case.name} case.',
+        caseParams=case.params,
+        defaults=defaults,
+    )
+    args = parser.parse_args(argv)
     spec = specFromArgs(args, caseParams=case.params, defaults=defaults)
 
     from warpSPHBootstrap import activePrecision, bootstrap

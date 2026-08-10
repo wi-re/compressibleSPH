@@ -1,11 +1,17 @@
-from ..modules.adaptiveSupport import computeOmega
+from ..modules.adaptiveSupport import computeOmega, evaluateOptimalSupport
+from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates
 from ..modules.compSPH.accel import computeCompSPHAccelWarp
 from ..modules.compSPH.dudt import computeCompSPHdudtWarp
 from ..modules.compSPH.balance import computeCompSPHBalanceTermWarp
+from ..modules.eos import idealGasEOS
+from ..modules.momentum import computeMomentumConsistent
+from ..modules.shockCapturing import computeViscositySwitchTerms, updateViscositySwitch
 from ..enumTypes import EnergyScheme, ViscositySwitch
-from ..modules import *
 
-from warpSPHCore import *
+from warpSPHCore import (
+    GradHState, OperationProperties, SupportScheme,
+    WarpOperation, buildVerletList, warpOperation,
+)
 from ..systems.compSPH import CompSPHSystem, CompSPHState
 from ..configurations.compSPHConfig import CompSPHConfig
 from ..configurations.simulationConfig import SimulationConfig
@@ -16,7 +22,7 @@ from ..modules.shockCapturing.CullenHopkins import computeHopkinsTerms, computeH
 
 lut = None
 
-from warpSPHCore import *
+__all__ = ['compSPH_step']
 
 
 def compSPH_step(
@@ -69,7 +75,7 @@ def compSPH_step(
         drhodt = computeMomentumConsistent(
             currentState,
             config,
-            supportScheme = SupportScheme.Gather, 
+            schemeConfig = schemeConfig,
             adjacency = adjacency,
             gradH = gradHState
         )

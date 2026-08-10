@@ -7,8 +7,20 @@ from ..systems import CompressibleSystem, CompressibleSystemUpdate
 from ..configurations import SimulationConfig, CompressibleSPHConfig
 import torch
 
-from ..modules import *
-from warpSPHCore import *
+from ..modules.adaptiveSupport import computeOmega, evaluateOptimalSupport
+from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates
+from ..modules.dissipation import computeConductivity, computeThermalDissipation, computeViscosity
+from ..modules.eos import idealGasEOS
+from ..modules.internalEnergy import computeDudtMonaghan
+from ..modules.momentum import computeMomentumConsistent
+from ..modules.pressure import computePressureForceSymmetric
+from warpSPHCore import (
+    GradHState, OperationProperties, SupportScheme,
+    WarpOperation, buildVerletList, warpOperation,
+)
+
+__all__ = ['compressibleSPH_Monaghan']
+
 
 def compressibleSPH_Monaghan(
     system: CompressibleSystem,
@@ -19,6 +31,7 @@ def compressibleSPH_Monaghan(
 ):
     currentSystem = system#.initializeNewState()
     currentState = currentSystem.state
+    t = currentSystem.t
 
     rho_optimal, h_optimal, currentSystem.adjacency, *_ = evaluateOptimalSupport(currentState, config, schemeConfig, SupportScheme.Gather, currentSystem.adjacency)
     currentState.supports = h_optimal
@@ -47,7 +60,7 @@ def compressibleSPH_Monaghan(
         adjacency = adjacency,
     )
 
-    enforceDirichlet(currentSystem, dt, config, schemeConfig)
+    enforceDirichlet(currentSystem, t, dt, config, schemeConfig)
     currentState.entropies, _, currentState.pressures, currentState.soundspeeds = idealGasEOS(
         A = None,
         u = currentState.internalEnergies,
@@ -95,7 +108,7 @@ def compressibleSPH_Monaghan(
     drhodt = computeMomentumConsistent(
         currentState,
         config,
-        supportScheme = SupportScheme.Gather,
+        schemeConfig = schemeConfig,
         adjacency = adjacency,
         gradH = gradHState
     )
@@ -142,7 +155,7 @@ def compressibleSPH_Monaghan(
 
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt + dvdt_diss)) + currentState.masses * (dudt + dudt_diss)
 
-    forcing = computeForcing(currentSystem, dt, config, schemeConfig)
+    forcing = computeForcing(currentSystem, dt, t, config, schemeConfig)
     dvdt += forcing / currentState.masses.view(-1,1)
 
 
@@ -153,6 +166,6 @@ def compressibleSPH_Monaghan(
         drhodt = drhodt,
         dEdt = dEdt,
     )
-    enforceUpdates(update, currentSystem, dt, config, schemeConfig)
+    enforceUpdates(update, currentSystem, dt, t, config, schemeConfig)
 
     return update, adjacency, currentState

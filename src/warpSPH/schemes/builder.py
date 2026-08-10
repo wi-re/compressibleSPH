@@ -1,8 +1,18 @@
 from dataclasses import dataclass
 from typing import Callable, Union
 
-from ..systems import *
-from ..configurations import *
+from ..systems import (
+    CompSPHState, CompSPHSystem, CompressibleState,
+    CompressibleSystem, CompressibleSystemUpdate, WeaklyCompressibleState,
+    WeaklyCompressibleSystem,
+)
+from ..configurations import (
+    CRKSPHConfig, CompSPHConfig, CompressibleSPHConfig,
+    IncompressibleSPHConfig, WeaklyCompressibleSPHConfig, compSPHConfigToDict,
+    compressibleConfigToDict, crkSPHConfigToDict, dictToCRKSPHConfig,
+    dictToCompSPHConfig, dictToCompressibleConfig, dictToIncompressibleSPHConfig,
+    dictToWeaklyCompressibleConfig, incompressibleConfigToDict, weaklyCompressibleConfigToDict,
+)
 from .compSPH import compSPH_step
 from .deltaSPH import deltaSPH_step
 from .crkSPH import crkSPH_step
@@ -106,12 +116,14 @@ def _deltaSPH() -> SchemeBundle:
 
 def _divergenceFree() -> SchemeBundle:
     # Deferred, as the original branch was: it keeps `builder` from importing
-    # `dfsph` at its own import time. (`schemes/__init__` does star-import
-    # `dfsph` first in practice, so this is about the dependency edge, not about
-    # saving the load.)
-    from .dfsph import (dfsph_step, incompressibleConfigToDict,
-                        dictToIncompressibleSPHConfig, IncompressibleSystem,
-                        IncompressibleState, IncompressibleSystemUpdate)
+    # `dfsph` at its own import time. (`schemes/__init__` imports `dfsph` first
+    # in practice, so this is about the dependency edge, not about saving the
+    # load.) The config codecs come from `..configurations`, which is where they
+    # are defined -- `dfsph` used to relay them only as a side effect of star
+    # importing that package.
+    from .dfsph import dfsph_step
+    from ..systems.incompressible import (IncompressibleSystem, IncompressibleState,
+                                          IncompressibleSystemUpdate)
     return SchemeBundle(
         SimulationSystem=IncompressibleSystem,
         SimulationState=IncompressibleState,

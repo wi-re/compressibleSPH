@@ -8,7 +8,9 @@ Core and Integrators have already been overhauled; this repo (the former fronten
 converting the examples to runnable scripts, is now **done in full** (2026-08-10)
 — see "Phase 2b" below. Phase 3 is **partly done**: `SchemeBundle` and the
 `compParams`/`schemeConfig` unification landed together with the notebook sweep
-they gated; **namespace hygiene and `__all__` remain open**. Repo weight remains
+they gated, and the namespace work is now **measured and done for `schemes/`**
+(see Phase 3) — what remains there is `__all__` coverage across the other 180
+modules, reclassified as legibility rather than correctness. Repo weight remains
 **deliberately deferred** — see "Deferred: repo weight" — though its separable
 piece, the `nbstripout` filter, is now installed.
 
@@ -572,15 +574,121 @@ in `cases/tgvWeaklyCompressible.py`.
       than depending on star-import order. This also fixes the annotations in
       `systems/baseState.py`, `systems/waveSystem.py`, and four `modules/` files, which
       now name the class they actually receive.
-- [ ] **Namespace hygiene.** 342 `import *` statements. `__init__.py` re-exports
-      everything from 10 subpackages into one flat namespace, and several `caseUtils`
-      modules do `from warpSPH import *` — an absolute self-import of a
-      partially-initialized package. It works *only* because `legacy_utils` is loaded
-      at the very end of `__init__.py`. Deleting that shim in Phase 0.3 removes the
-      fuse but also the thing currently holding the ordering together — **re-verify
-      imports after that deletion.**
-- [ ] Only ~30% of modules define `__all__`, so star imports drag in every
-      transitively-imported name. Add `__all__` as modules get touched.
+- [~] **Namespace hygiene — measured, re-scoped, and `schemes/` done (2026-08-10).**
+      The original framing here was **wrong in its risk assessment**, and measuring it
+      is what showed that:
+
+      - **The `legacy_utils` fuse never blew.** All 274 modules import cleanly after the
+        Phase 0.3 deletion, including the `caseUtils` modules that do `from warpSPH
+        import *`. The re-verification this item demanded is done; nothing was holding
+        the ordering together but itself.
+      - **The top-level namespace is already clean.** `warpSPH` exposes 233 public
+        names, `__all__` covers **all** of them (zero leakage), zero shadow builtins,
+        and of the 9 names exported by more than one subpackage
+        (`DomainDescription`, `DiffusionParameters`, `getPeriodicPositions`, …)
+        **all resolve to the same object**. There is no collision left to fix — the
+        `SimulationConfig` shadowing the notebook sweep removed was the only real one.
+      - **So this is a legibility job, not a correctness one**, and the "cheaper before
+        AD" argument is weaker than it looked. What remains is *interior*: modules that
+        star-import and define no `__all__`, so they re-export everything they imported.
+
+      **`schemes/` converted to explicit imports (2026-08-10)** — the subtree AD
+      actually lands on. All 7 files (`compSPH`, `crkSPH`, `deltaSPH`, `dfsph`,
+      `monaghan`, `waveEquation`, `builder`) plus `schemes/__init__.py`: every
+      `import *` replaced by explicit per-subpackage imports, and each file given an
+      `__all__`. Each scheme turned out to use only **10–17** of the 68 names
+      `warpSPH.modules` exports, so the blocks are 8–14 lines.
+
+      Names were bound **by object identity against the live module**, not by guessing
+      an owner, so star-import resolution order is preserved exactly. Verified: the
+      `warpSPH` public API is **byte-identical** before and after (0 names added, 0
+      removed), 32/32 tests pass, and all 25 cases still run.
+
+      Effect: `warpSPH.schemes` went from **334 public names to 14**. The
+      `modules/` interior flattening was deliberately **left alone** — its leaf
+      `__init__.py`s all declare real `__all__`s, it exports only 68 names for 21
+      physics subpackages, and its names already carry their subpackage
+      (`computeMdbcDensity`, `computeCompSPHAccelWarp`, …), so hierarchical *call
+      sites* would stutter without adding information. The hierarchy belongs in the
+      import block, not at the call site.
+
+### Latent breakages surfaced by the `schemes/` conversion
+
+Same pattern as Phases 2 and 2b: making the implicit explicit is what exposes them.
+
+- [x] **`buildScheme(divergenceFree)` was one star import away from breaking.**
+      `builder._divergenceFree` imported `incompressibleConfigToDict` and
+      `dictToIncompressibleSPHConfig` **from `.dfsph`** — but those are defined in
+      `..configurations`, and `dfsph` only relayed them as a side effect of
+      `from warpSPH.configurations import *`. Removing that star import would have
+      broken every DFSPH run. Now imported from `..configurations`, where they live.
+      **Fixed**, since the conversion required it.
+
+- [x] **The Monaghan scheme was broken and could not run — FIXED 2026-08-10.**
+      **Two separate rots, not one**, both from signature changes that never reached
+      `monaghan.py`:
+
+      1. All three boundary-condition helpers grew a `t` parameter —
+         `enforceDirichlet(system, t, dt, …)`, `computeForcing(system, dt, t, …)`,
+         `enforceUpdates(updates, system, dt, t, …)` — and `monaghan.py` still called
+         all three with the pre-`t` argument list. Hard `TypeError` on the first step.
+         It now binds `t = currentSystem.t`, exactly as `compSPH.py` does.
+      2. Behind that, `computeMomentumConsistent` was called with
+         `supportScheme=SupportScheme.Gather`, a keyword the function **no longer
+         takes** — its `supportMode` is now hardcoded to `SuperSymmetric` internally,
+         so the argument was not renamed, it was removed. The surviving slot is
+         `schemeConfig` (unused in the body, so this is arity-only).
+
+      **The same dead `supportScheme=` keyword was fixed at two more sites**:
+      `compSPH.py:75` and `crkSPH.py:86`. Both sit behind `if currentState.divergence
+      is None:` — the "computing for the first time" branch — so they were latent
+      rather than firing, but they would have raised the identical `TypeError` the
+      moment that branch was taken.
+
+- [x] **`crkSPH.py:338` passed `t` and `dt` to `computeForcing` in the wrong order —
+      FIXED 2026-08-10.** The signature is `computeForcing(system, dt, t, config,
+      compParams)`; `compSPH`, `deltaSPH` and `dfsph` all passed `dt` then `t`,
+      `crkSPH` passed `t` then `dt`. Both are floats, so it never crashed — the
+      swapped values reached every user forcing function as `(…, t, dt)`. Silently
+      wrong, and only when a boundary condition defines `forcingFunctions`, which is
+      why the CRKSPH cases always smoke-tested clean. All five schemes now agree.
+
+### Scheme comparison from the command line — DONE (2026-08-10)
+
+The point of fixing Monaghan was to be able to compare the three compressible
+solvers on the same case.
+
+- [x] **All three compressible solvers run every compressible case.** Verified as a
+      13-case × 3-solver matrix (`sod`, `linearWave`, `noh`, `sedov`, `gresho`, `yee`,
+      `kidder`, `woodwardColella`, `triplePoint`, `kelvinHelmholtz`, `rayleighTaylor`,
+      `shearingNoh`, `hydrostatic` × `CompSPH`, `CRKSPH`, `Monaghan`). `--scheme`
+      already reached `buildScheme`; what was missing was a working Monaghan.
+- [x] **The banner names the solver, not just the scheme enum.** It printed
+      `scheme  Monaghan (CompressibleSPHScheme)`; a comparison run is judged on which
+      *step function* ran, so it now reads
+      `scheme  Monaghan (CompressibleSPHScheme) | solver compressibleSPH_Monaghan`.
+      Suppressed by `--quiet` along with the rest of the banner, as before.
+- [x] **`--help` stopped lying about defaults.** `buildArgumentParser` reported the
+      generic `CaseSpec` value for every flag — it told you Sod ran a `Wendland2`
+      kernel when the case sets `B7`, and that `--scheme` defaulted to `None`. It now
+      takes the case's resolved defaults for the help text (the flags still default to
+      `None`, which is what keeps the override precedence working), and `--scheme`
+      lists the valid solver names.
+- [x] **Tests: 42, was 32.** Sod now runs under all three solvers, asserting
+      non-divergence, thermal→kinetic conversion, and a per-solver energy-drift bound
+      (CompSPH measures **exactly 0**, CRKSPH 4.5e-6, Monaghan 9.4e-4 — Monaghan is
+      not an energy-conserving discretisation, so its bound is loose on purpose). One
+      more test pins that `--scheme` actually reaches `buildScheme`, so a comparison
+      run cannot silently compare a scheme against itself. **This is the coverage gap
+      that let Monaghan rot unnoticed.**
+
+- [ ] **Remaining `__all__` coverage.** 94/274 files (34%, was 88/274); **180 modules**
+      still define none and star-export everything they imported. Worst offenders are
+      all in `caseUtils/compressible/`: `linearWave.wave` (447 public names),
+      `rayleighTaylor.sample` (383), `kidder.sample` (375), `yeeVortex.sample` (374),
+      both `triplePoint` modules (374). 300 `import *` remain in `src/` (was 336; the
+      plan's original "342" counted the whole tree). Add `__all__` as modules get
+      touched — the `schemes/` conversion above is the worked pattern.
 
 ### Notebook sweep — DONE 2026-08-10
 
@@ -642,7 +750,8 @@ tangent. Dropping it there is a **silent correctness bug, not a crash.**
 ## Suggested order
 
 Phase 0 ✅ → 1 ✅ → 2 ✅ → 2b ✅ → **3 (in progress — `SchemeBundle` ✅, notebook
-sweep ✅, namespace hygiene + `__all__` remain)** → 4 → repo weight (deferred; its
+sweep ✅, `schemes/` explicit imports ✅, `__all__` coverage elsewhere remains)** →
+4 → repo weight (deferred; its
 Phase 2 precondition is now fully met — the examples are runnable `.py`, so the
 polished renders that a history rewrite should operate on can now be
 regenerated unattended).
@@ -652,12 +761,16 @@ The original "load-bearing" shortlist is now **fully done**: editable plotting i
 and — as of 2026-08-10 — `SchemeBundle` together with the `compParams`/`schemeConfig`
 unification.
 
-What is left in Phase 3 is the namespace work (342 `import *`, `__all__` coverage). It
-is the one remaining item that is *cheaper before* AD than after, but unlike
-`SchemeBundle` it has no forcing function, so it can be sequenced against Phase 4 on
-its merits. The notebook sweep removed one concrete instance of it — the
-`SimulationConfig` shadowing — which is a reasonable model for the rest: fix the
-shadowing at the binding site, leave the star imports alone until a module is touched.
+What is left in Phase 3 is `__all__` coverage on the 180 modules that still define
+none. **Measuring it changed the recommendation:** the flat namespace has no
+collisions and no leakage left, so this is legibility, not correctness, and the
+"cheaper before AD" argument no longer holds for the tree at large. `schemes/` was
+converted anyway because that is where AD lands and the explicit import block doubles
+as a per-scheme dependency manifest — to audit which `.item()`/`.cpu()` sites a scheme
+can reach you now read 8 lines instead of resolving a star import by hand. Do the rest
+opportunistically, as AD touches each module.
+
+**Go to Phase 4 next.** It is now the only remaining item with real correctness stakes.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

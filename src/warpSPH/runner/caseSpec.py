@@ -14,9 +14,9 @@ import argparse
 import json
 import os
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-__all__ = ['CaseSpec', 'buildArgumentParser', 'specFromArgs']
+__all__ = ['CaseSpec', 'buildArgumentParser', 'schemeNames', 'specFromArgs']
 
 
 def _readMapping(path: str) -> Dict[str, Any]:
@@ -193,12 +193,29 @@ def _addField(parser: argparse.ArgumentParser, name: str, default: Any, annotati
     parser.add_argument(f'--{name}', dest=name, type=kind, default=None, help=help)
 
 
+def schemeNames() -> List[str]:
+    """Every solver name `--scheme` accepts, across the three scheme families."""
+    from ..enumTypes import (CompressibleSPHScheme, IncompressibleSPHScheme,
+                             WeaklyCompressibleSPHScheme)
+    return [member.name
+            for enumClass in (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
+                              IncompressibleSPHScheme)
+            for member in enumClass]
+
+
 def buildArgumentParser(description: str = 'Run a warpSPH case.',
-                        caseParams: Optional[Dict[str, Any]] = None) -> argparse.ArgumentParser:
+                        caseParams: Optional[Dict[str, Any]] = None,
+                        defaults: Optional[Dict[str, Any]] = None) -> argparse.ArgumentParser:
     """An argparse parser covering every :class:`CaseSpec` field.
 
     `caseParams` are the case's own knobs and their defaults; each becomes a
     flag that lands in ``CaseSpec.params`` instead of a top-level field.
+
+    `defaults` are the *case's* resolved defaults, used for the help text only.
+    Without them ``--help`` reports the generic :class:`CaseSpec` value -- it
+    would tell you Sod runs a Wendland2 kernel when the case actually sets B7.
+    The flags themselves still default to ``None``, which is what keeps
+    "not passed" distinguishable from "passed the default".
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--config', type=str, default=None,
@@ -209,7 +226,15 @@ def buildArgumentParser(description: str = 'Run a warpSPH case.',
     for f in fields(CaseSpec):
         if f.name == 'params':
             continue
-        _addField(parser, f.name, f.default, f.type, f'CaseSpec.{f.name} (default: {f.default!r})')
+        shown = (defaults or {}).get(f.name, f.default)
+        if f.name == 'scheme':
+            helpText = (f'solver to run (default: {shown!r}). '
+                        f'One of: {", ".join(schemeNames())}')
+        else:
+            helpText = f'CaseSpec.{f.name} (default: {shown!r})'
+        # Type inference stays on the dataclass default/annotation: a case
+        # default of a different type must not change the flag's type.
+        _addField(parser, f.name, f.default, f.type, helpText)
 
     for name, value in (caseParams or {}).items():
         # A list/dict-valued parameter (Woodward-Colella's shock regions, the

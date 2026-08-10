@@ -64,6 +64,73 @@ def test_sodDoesNotDiverge(sodResult):
     assert len(sodResult.trajectory) == STEPS + 1
 
 
+# --- the three compressible solvers, as comparison runs ----------------------
+
+#: Total-energy drift each solver is allowed over 20 steps. CompSPH is
+#: energy-conserving by construction and measures exactly 0; CRKSPH is
+#: conservative to round-off. Monaghan is *not* an energy-conserving
+#: discretisation -- its artificial viscosity and conductivity are dissipative
+#: by design -- so it gets a loose bound that still catches a solver that has
+#: stopped integrating anything.
+_ENERGY_DRIFT = {'CompSPH': 1e-5, 'CRKSPH': 1e-4, 'Monaghan': 5e-3}
+
+
+@pytest.fixture(scope='module', params=sorted(_ENERGY_DRIFT))
+def compressibleSchemeResult(request):
+    """The Sod tube under each solver `--scheme` can select.
+
+    These exist because **Monaghan was broken and nothing noticed**: it called
+    all three boundary-condition helpers with their pre-`t` argument list, and
+    `computeMomentumConsistent` with a `supportScheme=` keyword the function no
+    longer takes. Every compressible case defaults to CRKSPH or CompSPH, so the
+    only way to reach it was `--scheme Monaghan`, which no test did. Any solver
+    reachable from the command line is now exercised here.
+    """
+    from warpSPH.cases.sod import sodCase
+    return request.param, _run(sodCase, nx=200, scheme=request.param)
+
+
+def test_everyCompressibleSolverRuns(compressibleSchemeResult):
+    scheme, result = compressibleSchemeResult
+    assert not result.diverged, f'{scheme} diverged'
+    assert len(result.trajectory) == STEPS + 1
+
+
+def test_everyCompressibleSolverConvertsThermalEnergyIntoMotion(compressibleSchemeResult):
+    """The shared physics: the tube starts at rest and the pressure jump moves
+    it, whichever discretisation is doing the integrating."""
+    scheme, result = compressibleSchemeResult
+    kinetic = result.series('kineticEnergy')
+    thermal = result.series('thermalEnergy')
+    assert kinetic[0] == pytest.approx(0.0, abs=1e-12)
+    assert kinetic[-1] > 0.0, f'{scheme} never started moving'
+    assert thermal[-1] < thermal[0], f'{scheme} did not convert thermal energy'
+
+
+def test_everyCompressibleSolverKeepsEnergyDriftInBounds(compressibleSchemeResult):
+    scheme, result = compressibleSchemeResult
+    energy = result.series('totalEnergy')
+    drift = abs(energy[-1] - energy[0]) / abs(energy[0])
+    assert drift < _ENERGY_DRIFT[scheme], (
+        f'{scheme} total energy drifted by {drift:.3e}')
+
+
+def test_theSolverIsSelectedByTheSchemeFlag():
+    """`--scheme` has to reach `buildScheme`, or a comparison run would
+    silently compare a scheme against itself."""
+    from warpSPH.cases.sod import sodCase
+    from warpSPH.runner import buildContext
+    from warpSPH.runner.caseSpec import CaseSpec
+
+    expected = {'CompSPH': 'compSPH_step', 'CRKSPH': 'crkSPH_step',
+                'Monaghan': 'compressibleSPH_Monaghan'}
+    for scheme, stepFunction in expected.items():
+        spec = CaseSpec(caseName=sodCase.name, scheme=scheme,
+                        params=dict(sodCase.params)).merged(**sodCase.defaults)
+        ctx = buildContext(sodCase, spec)
+        assert ctx.stepFunction.__name__ == stepFunction, scheme
+
+
 # --- TGV: incompressible, viscously decaying --------------------------------
 
 def test_tgvKineticEnergyDecaysAtRoughlyTheAnalyticRate(tgvResult):

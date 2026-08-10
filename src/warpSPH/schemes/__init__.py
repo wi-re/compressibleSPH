@@ -1,7 +1,7 @@
-from .monaghan import *
-from .compSPH import *
-from .crkSPH import *
-from .dfsph import *
+from .monaghan import compressibleSPH_Monaghan
+from .compSPH import compSPH_step
+from .crkSPH import crkSPH_step
+from .dfsph import dfsph_step
 from .waveEquation import f_wave_equation
 
 from .builder import buildScheme, CompressibleSPHScheme

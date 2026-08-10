@@ -87,7 +87,7 @@ Both print what they are about to do, then what they did:
   warpSPH | kelvinHelmholtz
   Kelvin-Helmholtz instability (2D), compressible SPH.
 ------------------------------------------------------------------------------
-  scheme      CRKSPH (CompressibleSPHScheme)
+  scheme      CRKSPH (CompressibleSPHScheme) | solver crkSPH_step
   device      cuda:0 (NVIDIA GeForce RTX 3090) | float32
   particles   65,536 | dim 2 | nx 256
   domain      [0, 0] to [1, 1]  periodic
@@ -122,6 +122,27 @@ python examples/compressible/01-sod-shock-tube-1d.py [flags]
 *before* `warpSPH` is imported. The other two entry points import `warpSPH`
 first and are stuck with whatever is already active — see
 [Precision](#precision-and-other-things-that-bite).
+
+### Comparing solvers
+
+`--scheme` picks the solver, so the same case can be run against every scheme in
+its family and the results compared directly:
+
+```bash
+for solver in Monaghan CompSPH CRKSPH; do
+  warpsph-run sod --scheme $solver --store --caseName sod-$solver
+done
+```
+
+`warpsph-run <case> --help` lists the valid names and the case's own default.
+The banner names the step function that was actually selected
+(`solver compressibleSPH_Monaghan`), so a comparison cannot quietly run the same
+solver twice.
+
+The three compressible solvers differ in what they conserve — over a 20-step Sod
+run, CompSPH holds total energy to **exactly** zero drift by construction, CRKSPH
+to ~5e-6, and Monaghan to ~1e-3, the last because its artificial viscosity and
+conductivity are dissipative by design. `tests/test_physics.py` pins all three.
 
 ### Config files and sweeps
 

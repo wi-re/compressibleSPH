@@ -1,11 +1,19 @@
-from ..modules.adaptiveSupport import computeOmega
+from ..modules.adaptiveSupport import computeOmega, evaluateOptimalSupport
+from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates
 from ..modules.compSPH.accel import computeCompSPHAccelWarp
 from ..modules.compSPH.dudt import computeCompSPHdudtWarp
 from ..modules.compSPH.balance import computeCompSPHBalanceTermWarp
+from ..modules.crk import computeCrkSPHdudtWarp
+from ..modules.eos import idealGasEOS
+from ..modules.momentum import computeMomentumConsistent
+from ..modules.shockCapturing import computeViscositySwitchTerms
 from ..enumTypes import EnergyScheme
-from ..modules import *
 
-from warpSPHCore import *
+from warpSPHCore import (
+    GradientScheme, OperationProperties, SupportScheme,
+    WarpOperation, buildVerletList, computeCRKFactors,
+    warpOperation,
+)
 from ..systems.compSPH import CompSPHSystem, CompSPHState
 from ..configurations.compSPHConfig import CompSPHConfig
 from ..configurations.simulationConfig import SimulationConfig
@@ -15,6 +23,9 @@ from ..systems.compressibleMonaghan import CompressibleSystemUpdate
 from ..modules.shockCapturing.CullenHopkins import computeHopkinsTerms, computeHopkinsUpdate
 
 from ..modules.crk.accel import computeCrkSPHAccelWarp
+
+__all__ = ['crkSPH_step']
+
 
 def crkSPH_step(
     system: CompSPHSystem,
@@ -75,7 +86,7 @@ def crkSPH_step(
         drhodt = computeMomentumConsistent(
             currentState,
             config,
-            supportScheme = SupportScheme.Gather, 
+            schemeConfig = schemeConfig,
             adjacency = adjacency,
             gradH = gradHState
         )
@@ -324,7 +335,7 @@ def crkSPH_step(
     currentState.divergence = -drhodt / currentState.densities
     dEdt = currentState.masses * torch.einsum('ij,ij->i', currentState.velocities, (dvdt)) + currentState.masses * (dudt)
 
-    forcing = computeForcing(currentSystem, t, dt, config, schemeConfig)
+    forcing = computeForcing(currentSystem, dt, t, config, schemeConfig)
     dvdt += forcing / currentState.masses.view(-1,1)
 
     update = CompressibleSystemUpdate(
