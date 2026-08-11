@@ -30,7 +30,7 @@ class DiffusionParameters:
     K: scalar_t = field(default=scalar_t(1.0)) # Overall viscosity scaling factor
     thermalConductivity: scalar_t = field(default=scalar_t(0.5)) # Overall thermal conductivity scaling factor
     viscosityTerm: wp.int32 = field(default=ViscosityTerms.Price2012_98.value) # Viscosity formulation to use, e.g. Monaghan1992, Monaghan1997, Cleary1998 etc.
-    thermalConducitiyTerm: wp.int32 = field(default=ViscosityTerms.Price2012_98.value) # Thermal conductivity formulation to use, e.g. Monaghan1997 thermal conductivity term, Cleary1998 thermal conductivity term etc.
+    thermalConductivityTerm: wp.int32 = field(default=ViscosityTerms.Price2012_98.value) # Thermal conductivity formulation to use, e.g. Monaghan1997 thermal conductivity term, Cleary1998 thermal conductivity term etc.
     scaleBeta: wp.bool = field(default=False) # If true then the quadratic viscosity term is scaled by the linear viscosity term, as suggested in some papers to reduce excessive viscosity in certain scenarios. This is only relevant for formulations that use a quadratic term, such as Monaghan1992 and Monaghan1997.
     monaghanSwitch: wp.bool = field(default=True) # Whether to apply the Monaghan switch that turns off viscosity for diverging particles, i.e. particles that are moving away from each other. This is a common technique to reduce excessive viscosity in expanding flows and is used in many formulations such as Monaghan1992 and Monaghan1997.
     correctXi: wp.bool = field(default=True) # Whether to apply the xi correction factor to the viscosity term. This is a correction factor that can be applied to account for errors in the estimation of the velocity divergence and is discussed in some papers such as "Correcting SPH for accurate viscous forces" by Adami et al. 2013.
@@ -46,7 +46,7 @@ def buildDefaultDiffusionParamsCompressibleSPH():
     diffusionParams.K = 1.0
     diffusionParams.thermalConductivity = 0.5
     diffusionParams.viscosityTerm = ViscosityTerms.Price2012_98.value
-    diffusionParams.thermalConducitiyTerm = ViscosityTerms.Price2008.value
+    diffusionParams.thermalConductivityTerm = ViscosityTerms.Price2008.value
     diffusionParams.scaleBeta = False
     diffusionParams.monaghanSwitch = True
     diffusionParams.correctXi = True
@@ -65,7 +65,7 @@ def diffusionParamsToDict(diffusionParams: DiffusionParameters) -> Dict[str, Any
         'K': diffusionParams.K,
         'thermalConductivity': diffusionParams.thermalConductivity,
         'viscosityTerm': diffusionParams.viscosityTerm.name if isinstance(diffusionParams.viscosityTerm, ViscosityTerms) else diffusionParams.viscosityTerm,
-        'thermalConducitiyTerm': diffusionParams.thermalConducitiyTerm.name if isinstance(diffusionParams.thermalConducitiyTerm, ViscosityTerms) else diffusionParams.thermalConducitiyTerm,
+        'thermalConductivityTerm': diffusionParams.thermalConductivityTerm.name if isinstance(diffusionParams.thermalConductivityTerm, ViscosityTerms) else diffusionParams.thermalConductivityTerm,
         'scaleBeta': diffusionParams.scaleBeta,
         'monaghanSwitch': diffusionParams.monaghanSwitch,
         'correctXi': diffusionParams.correctXi
@@ -81,7 +81,7 @@ def dictToDiffusionParams(diffusionParamsDict: Dict[str, Any]) -> DiffusionParam
     diffusionParams.K = diffusionParamsDict['K']
     diffusionParams.thermalConductivity = diffusionParamsDict['thermalConductivity']
     diffusionParams.viscosityTerm = ViscosityTerms[diffusionParamsDict['viscosityTerm']] if isinstance(diffusionParamsDict['viscosityTerm'], str) else diffusionParamsDict['viscosityTerm']
-    diffusionParams.thermalConducitiyTerm = ViscosityTerms[diffusionParamsDict['thermalConducitiyTerm']] if isinstance(diffusionParamsDict['thermalConducitiyTerm'], str) else diffusionParamsDict['thermalConducitiyTerm']
+    diffusionParams.thermalConductivityTerm = ViscosityTerms[diffusionParamsDict['thermalConductivityTerm']] if isinstance(diffusionParamsDict['thermalConductivityTerm'], str) else diffusionParamsDict['thermalConductivityTerm']
     diffusionParams.scaleBeta = diffusionParamsDict['scaleBeta']
     diffusionParams.monaghanSwitch = diffusionParamsDict['monaghanSwitch']
     diffusionParams.correctXi = diffusionParamsDict['correctXi']

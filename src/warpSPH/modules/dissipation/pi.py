@@ -43,11 +43,16 @@ def computePi_actual(
 
     h_bar = scalar_t(1.0)/scalar_t(2.0) * (h_i + h_j)
 
-    # xi = sphKernelScale(kernel_int, domainState.dim) if viscosityParams.correctXi else scalar_t(1.0)
-    xi = sphKernel_xi(kernel_int, domainState.dim) if viscosityParams.correctXi else scalar_t(1.0)
 
-    C_l_ = viscosityParams.C_l if not thermalConductivity else viscosityParams.Cu_l
-    C_q_ = viscosityParams.C_q if not thermalConductivity else viscosityParams.Cu_q
+    xi = sphKernel_xi(kernel_int, domainState.dim) 
+    if not viscosityParams.correctXi:
+        xi = scalar_t(1.0)
+
+    C_l_ = viscosityParams.C_l
+    C_q_ = viscosityParams.C_q
+    if thermalConductivity:
+        C_l_ = viscosityParams.Cu_l
+        C_q_ = viscosityParams.Cu_q
 
     C_l = scalar_t(1.0)/scalar_t(2.0) * (alpha_i + alpha_j) * C_l_
     C_q = scalar_t(1.0)/scalar_t(2.0) * (alpha_i + alpha_j) * C_q_
@@ -60,7 +65,9 @@ def computePi_actual(
     u_ij = v_i - v_j
     ux_ij = wp.dot(u_ij, x_ij)
 
-    viscosityTerm = viscosityParams.viscosityTerm if not thermalConductivity else viscosityParams.thermalConducitiyTerm
+    viscosityTerm = viscosityParams.viscosityTerm 
+    if thermalConductivity:
+        viscosityTerm = viscosityParams.thermalConductivityTerm
 
     mu_ij, scalingFactor = compute_mu_ij(ux_ij, r_ij, h_bar, viscosityTerm, xi)
 
@@ -138,8 +145,11 @@ def computePi_actual(
         # v_sig = C_l * safe_sqrt(wp.abs(P_i - P_j) / (rho_bar + scalar_t(1e-14) * h))
         # K = scalar_t(1.0)
         # Since we don't have access to the pressures here, we can use an approximation based on the ideal gas law, P = rho * c^2
-        P_i_ = rho_i * c_i * c_i if not explicitPressure else P_i
-        P_j_ = rho_j * c_j * c_j if not explicitPressure else P_j
+        P_i_ = rho_i * c_i * c_i
+        P_j_ = rho_j * c_j * c_j
+        if explicitPressure:
+            P_i_ = P_i
+            P_j_ = P_j
         rho_bar = (rho_i + rho_j) / scalar_t(2.0)
         v_sig = C_l * safe_sqrt(wp.abs(P_i_ - P_j_) / (rho_bar + scalar_t(1e-14) * h))
         K = scalar_t(1.0)
@@ -150,7 +160,6 @@ def computePi_actual(
         v_sig = C_l * c - C_q * mu_ij
         K = scalar_t(1.0)
 
-    # rhoTerm = rho_j if not useJ else rho_i
 
     val = rho_j * K / rho * v_sig * scalingFactor #* mu_ij
 

@@ -74,19 +74,19 @@ def computeThermalDissipation_Func_i(
         vel_j = referenceVelocities[j]
         u_j = referenceEnergies[j]
 
-        apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
+        apparentVolume = access_optional(referenceVolumes, j, useVolume, mj / rhoj)
 
         pi = computePi_actual(
             xi, xj, 
             hi, hj,
             mi, mj,
             rhoi, rhoj,
-            explicitPressure, P_i, referencePressures[j] if explicitPressure else scalar_t(0.0),
+            explicitPressure, P_i, access_optional(referencePressures, j, explicitPressure, scalar_t(0.0)),
             vel_i, vel_j,
             domainState,
             kernelProperties.kernelFunction,
-            cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
-            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
+            cs_i, access_optional(referenceCs, j, individual_cs, viscosityParams.c_s),
+            alpha_i, access_optional(referenceAlphas, j, viscositySwitch, scalar_t(1.0)),
             viscosityParams, 
             False, False)
         
@@ -154,10 +154,10 @@ def computeThermalDissipation_Func_Adjacency(
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     vel_i = queryVelocities[i]
 
-    cs_i = queryCs[i] if individual_cs else viscosityParams.c_s
-    alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
-    u_i = queryEnergies[i]
-    P_i = queryPressures[i] if explicitPressure else scalar_t(0.0)
+    cs_i = access_optional(queryCs, i, individual_cs, viscosityParams.c_s)
+    alpha_i = access_optional(queryAlphas, i, viscositySwitch, scalar_t(1.0))
+    u_i = access_optional(queryEnergies, i, True, scalar_t(0.0))
+    P_i = access_optional(queryPressures, i, explicitPressure, scalar_t(0.0))
 
     out = zero_like_warp(outputValue)
     for o in range(numOffsets):

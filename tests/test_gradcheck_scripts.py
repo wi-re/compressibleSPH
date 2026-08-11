@@ -40,6 +40,10 @@ GRADCHECK_SCRIPTS = [
     "gradcheck_compSPH.py",
     "gradcheck_dissipation.py",
     "gradcheck_crk.py",
+    "gradcheck_adaptiveSupport.py",
+    "gradcheck_deltaSPH.py",
+    "gradcheck_shockCapturing.py",
+    "gradcheck_mdbc.py",
 ]
 
 

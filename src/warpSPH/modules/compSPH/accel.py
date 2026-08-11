@@ -76,7 +76,7 @@ def computeCompSPHAccel_Func_i(
         vel_j = referenceVelocities[j]
         u_j = referenceEnergies[j]
 
-        apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
+        apparentVolume = access_optional(referenceVolumes, j, useVolume, mj / rhoj)
 
 
         rho_bar = scalar_t(0.5) * (rhoi + rhoj)
@@ -88,12 +88,12 @@ def computeCompSPHAccel_Func_i(
             hi, hj,
             mi, mj,
             rhoi, rhoj,
-            explicitPressure, P_i, referencePressures[j] if explicitPressure else scalar_t(0.0),
+            explicitPressure, P_i, access_optional(referencePressures, j, explicitPressure, scalar_t(0.0)),
             vel_i, vel_j,
             domainState,
             kernelProperties.kernelFunction,
-            cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
-            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
+            cs_i, access_optional(referenceCs, j, individual_cs, viscosityParams.c_s),
+            alpha_i, access_optional(referenceAlphas, j, viscositySwitch, scalar_t(1.0)),
             viscosityParams, 
             False, False) * rho_corr_i
         pi_j = computePi_actual(
@@ -101,12 +101,12 @@ def computeCompSPHAccel_Func_i(
             hi, hj,
             mi, mj,
             rhoi, rhoj,
-            explicitPressure, P_i, referencePressures[j] if explicitPressure else scalar_t(0.0),
+            explicitPressure, P_i, access_optional(referencePressures, j, explicitPressure, scalar_t(0.0)),
             vel_i, vel_j,
             domainState,
             kernelProperties.kernelFunction,
-            cs_i, referenceCs[j] if individual_cs else viscosityParams.c_s,
-            alpha_i, referenceAlphas[j] if viscositySwitch else scalar_t(1.0),
+            cs_i, access_optional(referenceCs, j, individual_cs, viscosityParams.c_s),
+            alpha_i, access_optional(referenceAlphas, j, viscositySwitch, scalar_t(1.0)),
             viscosityParams, 
             True, False) * rho_corr_j
         
@@ -131,8 +131,8 @@ def computeCompSPHAccel_Func_i(
         gradw_j = gradw_i # E.2 in crksph suggests using the super symmetric form
 
 
-        Pj = referencePressures[j]
-        omegaj = referenceOmegas[j] if useGradHTerms else scalar_t(1.0)
+        Pj = access_optional(referencePressures, j, explicitPressure, scalar_t(0.0))
+        omegaj = access_optional(referenceOmegas, j, useGradHTerms, scalar_t(1.0))
         pressureTerm_j = Pj / (rhoj*rhoj) / omegaj
         
         x_ij = computeDistanceVec(xi, xj, domainState)
@@ -192,10 +192,10 @@ def computeCompSPHAccel_Func_Adjacency(
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     vel_i = queryVelocities[i]
 
-    cs_i = queryCs[i] if individual_cs else viscosityParams.c_s
-    alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
+    cs_i = access_optional(queryCs, i, individual_cs, viscosityParams.c_s)
+    alpha_i = access_optional(queryAlphas, i, viscositySwitch, scalar_t(1.0))
     u_i = queryEnergies[i]
-    P_i = queryPressures[i] if explicitPressure else scalar_t(0.0)
+    P_i = access_optional(queryPressures, i, explicitPressure, scalar_t(0.0))
 
     out = zero_like_warp(accel[i])
     for o in range(numOffsets):

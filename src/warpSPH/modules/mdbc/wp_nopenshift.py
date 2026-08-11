@@ -264,7 +264,7 @@ def computeMdbcNoPenShift_Func_i(
         
         # The ghost offset points in the opposite direction of the normal, so we negate it to get the outward normal direction
         offset_j = referenceGhostOffsets[j]
-        norm_j = (safe_sqrt(wp.dot(offset_j, offset_j)) + 1e-12)
+        norm_j = (safe_sqrt(wp.dot(offset_j, offset_j)) + scalar_t(1e-12))
         normal_j = -offset_j / norm_j
         normDist = wp.dot(x_ij, normal_j)
 

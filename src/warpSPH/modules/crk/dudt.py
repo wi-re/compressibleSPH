@@ -51,9 +51,9 @@ def computeCrkSPHdudt_Func_i(
     vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     u_i: scalar_t, referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
 
-    cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    individual_cs: wp.bool, cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
     viscositySwitch: wp.bool, alpha_i: scalar_t, referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, P_i: scalar_t, referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
     crkViscosityParams: CRKViscosity,
 
@@ -82,8 +82,8 @@ def computeCrkSPHdudt_Func_i(
         u_j = referenceEnergies[j]
 
         _, Vj = getVolume_j(correctionData, j)
-        P_j = referencePressures[j]
-        cs_j = referenceCs[j]
+        P_j = access_optional(referencePressures, j, explicitPressure, scalar_t(0.0))
+        cs_j = access_optional(referenceCs, j, individual_cs, viscosityParams.c_s)
 
         gradV_j = referenceVelocityTensor[j]
         x_ij = computeDistanceVec(xi, xj, domainState)
@@ -194,7 +194,6 @@ def computeCrkSPHdudt_Func_i(
         # same deltagrad as the force — required for energy-momentum consistency
         gradw_ij = scalar_t(0.5) * (gradw_i - gradw_j)
 
-        Pj = referencePressures[j]
         # omegaj = referenceOmegas[j] if useGradHTerms else scalar_t(1.0)
         # pressureTerm_j = Pj / (rhoj*rhoj) / omegaj
         
@@ -248,9 +247,9 @@ def computeCrkSPHdudt_Func_Adjacency(
     
     queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
-    queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
     crkViscosityParams: CRKViscosity,
 
@@ -261,17 +260,17 @@ def computeCrkSPHdudt_Func_Adjacency(
     if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
         if not checkDirectionality_i(ki, kernelProperties.operationMode):
             return zero_like_warp(dudt[i])
-        
+
     useGradientRenormalization, Li = getL_i(correctionData, i)
     useGradHTerms, omega_i = getGradH_i(correctionData, i)
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     vel_i = queryVelocities[i]
 
-    cs_i = queryCs[i]
+    cs_i = access_optional(queryCs, i, individual_cs, viscosityParams.c_s)
     alpha_i = queryAlphas[i] if viscositySwitch else scalar_t(1.0)
     u_i = queryEnergies[i]
-    P_i = queryPressures[i]
+    P_i = access_optional(queryPressures, i, explicitPressure, scalar_t(0.0))
     gradV_i = queryVelocityTensor[i]
 
     out = zero_like_warp(dudt)
@@ -305,9 +304,9 @@ def computeCrkSPHdudt_Func_Adjacency(
             useCRK, Ai, Bi, gradA_i, gradB_i,
             vel_i, referenceVelocities,
             u_i, referenceEnergies,
-            cs_i, referenceCs,
+            individual_cs, cs_i, referenceCs,
             viscositySwitch, alpha_i, referenceAlphas,
-            P_i, referencePressures,
+            explicitPressure, P_i, referencePressures,
             viscosityParams,
             crkViscosityParams,
             gradV_i, referenceVelocityTensor,
@@ -329,32 +328,32 @@ def computeCrkSPHdudt_Kernel(
     # Do not change the parameters above
     queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     queryEnergies: wp.array(dtype = scalar_t), referenceEnergies: wp.array(dtype = scalar_t), # type: ignore
-    queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
+    individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
     viscositySwitch: wp.bool, queryAlphas: wp.array(dtype = scalar_t), referenceAlphas: wp.array(dtype = scalar_t), # type: ignore
-    queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
+    explicitPressure: wp.bool, queryPressures: wp.array(dtype = scalar_t), referencePressures: wp.array(dtype = scalar_t), # type: ignore
     viscosityParams: DiffusionParameters,
     crkViscosityParams: CRKViscosity,
 
     queryVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)), referenceVelocityTensor: wp.array(dtype = matrix(shape=(Any, Any), dtype=scalar_t)),# type: ignore
     # The last parameter is always the output array and should not be changed
     out_dudt : wp.array(dtype = Any), # type: ignore
-):                                                                                    
+):
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
     if i >= numParticles:
         return
 
     out_dudt[i] = computeCrkSPHdudt_Func_Adjacency(
-        i, domainState.dim, 
+        i, domainState.dim,
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
         kernelProperties,  #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
         queryVelocities, referenceVelocities,
         queryEnergies, referenceEnergies,
-        queryCs, referenceCs,
+        individual_cs, queryCs, referenceCs,
         viscositySwitch, queryAlphas, referenceAlphas,
-        queryPressures, referencePressures,
+        explicitPressure, queryPressures, referencePressures,
         viscosityParams,
         crkViscosityParams,
         queryVelocityTensor, referenceVelocityTensor,
@@ -433,10 +432,14 @@ def computeCrkSPHdudtWarp(
             else:
                 viscositySwitch = False
 
-            if queryCs_ is None:
-                raise ValueError("Sound speeds must be provided either through queryCs or as a property of queryParticles.")
-            if queryPressures_ is None:
-                raise ValueError("Pressures must be provided either through queryPressures or as a property of queryParticles.")
+            if queryCs is not None or (hasattr(queryParticles, 'soundspeeds') and queryParticles.soundspeeds is not None):
+                individual_cs = True
+            else:
+                individual_cs = False
+            if queryPressures is not None or (hasattr(queryParticles, 'pressures') and queryParticles.pressures is not None):
+                explicitPressure = True
+            else:
+                explicitPressure = False
             if queryVolumes is None:
                 raise ValueError("Volumes must be provided either through queryVolumes or as a property of queryParticles.")
             if crkState is None:
@@ -466,9 +469,9 @@ def computeCrkSPHdudtWarp(
                 additionalArguments=(
                     queryVelocities_, referenceVelocities_,
                     queryEnergies_, referenceEnergies_,
-                    queryCs_, referenceCs_,
+                    individual_cs, queryCs_, referenceCs_,
                     viscositySwitch, queryAlphas_, referenceAlphas_,
-                    queryPressures_, referencePressures_,
+                    explicitPressure, queryPressures_, referencePressures_,
                     conductivityParams,
                     crkViscosityParams,
                     queryVelocityTensor, referenceVelocityTensor,

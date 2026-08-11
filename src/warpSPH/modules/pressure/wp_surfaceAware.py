@@ -67,8 +67,8 @@ def computePressureSurfaceAware_Func_i(
         ##########################################################
         
         xj, hj, mj, rhoj, kj = getParticle(referenceState, j)
-        P_j = referencePressures[j] if referencePressures.shape[0] > 1 else referencePressures[0]
-        mask_j = referenceSurfaceMask[j] if referenceSurfaceMask.shape[0] > 1 else 0
+        P_j = access_optional(referencePressures, j, referencePressures.shape[0] > 1, referencePressures[0])
+        mask_j = access_optional(referenceSurfaceMask, j, referenceSurfaceMask.shape[0] > 1, 0)
 
         apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
         
@@ -136,8 +136,8 @@ def computePressureSurfaceAware_Func_Adjacency(
     useVolume, Vi = getVolume_i(correctionData, i)
     useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
     
-    P_i = queryPressures[i] if queryPressures.shape[0] > 1 else queryPressures[0]
-    mask_i = querySurfaceMask[i] if querySurfaceMask.shape[0] > 1 else 0
+    P_i = access_optional(queryPressures, i, queryPressures.shape[0] > 1, queryPressures[0])
+    mask_i = access_optional(querySurfaceMask, i, querySurfaceMask.shape[0] > 1,0)
 
     out = zero_like_warp(outputValue)
     for o in range(numOffsets):

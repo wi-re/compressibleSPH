@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/veldora/dev/warpSPH
+configfile: pyproject.toml
+plugins: cov-7.1.0
+collected 10 items / 9 deselected / 1 selected
+
+tests/test_gradcheck_scripts.py .                                        [100%]
+
+=============================== warnings summary ===============================
+../../miniconda3/envs/warp/lib/python3.14/site-packages/torch/jit/_script.py:359: 14 warnings
+  /home/veldora/miniconda3/envs/warp/lib/python3.14/site-packages/torch/jit/_script.py:359: DeprecationWarning: `torch.jit.script_method` is not supported in Python 3.14+ and may break. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+../../miniconda3/envs/warp/lib/python3.14/site-packages/warp/_src/apic/types.py:45
+  /home/veldora/miniconda3/envs/warp/lib/python3.14/site-packages/warp/_src/apic/types.py:45: DeprecationWarning: Due to '_pack_', the 'APICLaunchParamRecord' Structure will use memory layout compatible with MSVC (Windows). If this is intended, set _layout_ to 'ms'. The implicit default is deprecated and slated to become an error in Python 3.19.
+    class APICLaunchParamRecord(ctypes.Structure):
+
+../../miniconda3/envs/warp/lib/python3.14/site-packages/warp/_src/apic/types.py:65
+  /home/veldora/miniconda3/envs/warp/lib/python3.14/site-packages/warp/_src/apic/types.py:65: DeprecationWarning: Due to '_pack_', the 'APICLaunchPtrLocation' Structure will use memory layout compatible with MSVC (Windows). If this is intended, set _layout_ to 'ms'. The implicit default is deprecated and slated to become an error in Python 3.19.
+    class APICLaunchPtrLocation(ctypes.Structure):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================ 1 passed, 9 deselected, 16 warnings in 14.54s =================

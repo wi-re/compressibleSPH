@@ -25,6 +25,23 @@ the `domain.py` collision, and all three stutter modules (`math/math.py`,
 what landed and what's deliberately still open. What remains overall is the dead-code
 sweep and the notebook simplification, neither load-bearing.
 
+**Phase 4** (2026-08-11, ongoing across two sessions) is the AD-readiness gradcheck
+rollout. Tiers 0 and 1 are done; Tier 2 is partly done (`adaptiveSupport`, `deltaSPH`,
+`shockCapturing`, `mdbc` gradchecked and wired in, 5 modules remain). The `.detach()`
+audit (4.2) is done. A warp-lang-version regression found and **fixed same day**
+(2026-08-11) — three previously-clean scripts (`wp_surfaceAware`, `compSPH`,
+`dissipation`) failed under the currently-installed warp-lang 1.15.0; the same-array
+ternary pattern Tier 0 had flagged as a risk was confirmed real and broader than
+diagnosed (non-array-read ternaries were affected too), and is now closed with a new
+`access_optional` helper (added to warpSPHCore) replacing every affected inline
+ternary — including `modules/crk/{accel,dudt}.py`'s separate, older
+`explicitPressure`/`individual_cs` gap, re-threaded the same day now that the helper
+made it mechanical. Full suite: 53/53 pass. `pyproject.toml` still pins no warp-lang
+version **by decision**: pin to 1.17 once it ships (fixes the bug at the source);
+any version is fine until then as long as kernel-code ternaries go through
+`access_optional`. See Phase 4 below, and the "Regression" section under Tier 2 for
+the full writeup.
+
 **Phase 4** (2026-08-11) is now **in progress**: a gradient-check plan for this repo's
 25 custom warp-kernel files, modeled directly on warpSPHCore's own
 `gradcheck_*_native.py` methodology, plus a completed first pass of the `.detach()`
@@ -46,6 +63,28 @@ a caller passed a position tensor that already required grad). Tier 1's
 mis-contracted axis inside a hand-written accumulation loop, fixed upstream same day) that
 had made CRKSPH, the production default scheme, not AD-correct with respect to position
 until now. See Phase 4 below.
+
+**Continued 2026-08-11 (second session):** three previously-written but
+undocumented Tier 2 scripts (`adaptiveSupport`, `deltaSPH`, `shockCapturing` —
+already gradchecking clean, or, for `shockCapturing`, correctly failing on a tracked
+known bug) were wired into `tests/test_gradcheck_scripts.py` (was 45 tests, is now
+49). A new `gradcheck_mdbc.py` found and fixed **three real bugs — two in
+warpSPHCore's own math/autograd layer, one here** — just to get
+`modules/mdbc/wp_nopenshift.py` running under gradient tracking at all (a missing
+`vec1i` type that broke `zero_like`'s codegen, an unguarded float32 literal in a
+float64 kernel, and the autograd bridge unconditionally setting `requires_grad` on
+non-float kernel outputs), then gradchecks clean once the test fixture supplied real
+densities instead of `None` (a fourth, adjacent NaN-adjoint hazard, documented not
+fixed). **Running the full suite also surfaced a regression**: three previously
+"clean" Tier 0/1 scripts (`wp_surfaceAware`, `compSPH`, `dissipation`) now fail
+under the currently-installed warp-lang **1.15.0** — confirmed reproducible,
+narrowed to the pressure-handling same-array ternary pattern, but **not yet
+root-caused or fixed**; see "Regression" under Tier 2 below for the full writeup and
+recommended next step. One adjacent real bug (an unguarded `referencePressures[j]`
+read in `compSPH/{accel,dudt}.py`) was found and fixed along the way but does not
+explain the regression. Tier 2 itself is otherwise partly done — see Tier 2 below
+for what's left (`incompressible/wp_alpha.py`, `liu/wp_mat.py`,
+`surfaceDetection/*`, `util/*`, `sample/wp_deltaShift.py`).
 
 ---
 
@@ -75,6 +114,20 @@ until now. See Phase 4 below.
 - **Accepted risk:** renames break the dill-encoded callables in existing `.h5`
   datasets (244 local files). Fine — they are regenerable and no large dataset has
   been built yet. This unblocks deleting the compat shims outright.
+
+- **warp-lang version pin — deliberately deferred (decided 2026-08-11).**
+  `pyproject.toml` will be pinned to **1.17** once that version ships — it fixes
+  several issues relevant here (the Interpolate same-array-adjoint bug Tier 0 and
+  the "Regression" section under Phase 4.1 both discuss is confirmed fixed there).
+  Until then, **any warp-lang version is fine to develop against**; the constraint is
+  to be careful with ternary (`X if cond else Y`) expressions inside `@wp.func`/
+  `@wp.kernel` bodies, since some versions before 1.17 miscompile them (confirmed for
+  1.15.0, see Phase 4.1's "Regression" writeup). The `access_optional` helper
+  (warpSPHCore `util/stateUtil.py`) is the established workaround — use it instead of
+  an inline ternary for any `arr[index] if cond else default`-shaped expression, and
+  prefer explicit `if`/`else` blocks over inline ternaries generally in kernel code
+  until the pin lands. Don't propose pinning to 1.15.0/1.16.0/1.12.0 as a "fix" for
+  the version-drift risk — this is an intentional wait, not an oversight.
 
 ---
 
@@ -1150,13 +1203,122 @@ that switch via AD later needs this to be right first).
       `tests/test_gradcheck_scripts.py` alongside `gradcheck_compSPH.py` and
       `gradcheck_dissipation.py`. 48 tests total (was 45 before Tier 1).
 
-*Tier 2 — scheme-specific correction terms, live but narrower blast radius:*
-`modules/deltaSPH/{wp_densityDelta,wp_viscosityDelta}.py`,
-`modules/adaptiveSupport/{wp_omega,wp_psi0}.py`,
-`modules/shockCapturing/{wp_computeM,wp_vsig}.py`, `modules/mdbc/wp_nopenshift.py`,
-`modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
-`modules/surfaceDetection/{wp_barecasco,wp_dilate,wp_maronne}.py`,
-`modules/util/{wp_sum,wp_numNeighbors}.py`, `sample/wp_deltaShift.py`.
+*Tier 2 — scheme-specific correction terms, live but narrower blast radius. Partly
+done (2026-08-11): `adaptiveSupport`, `deltaSPH`, `shockCapturing`, `mdbc` are
+gradchecked and wired into the suite; `incompressible/wp_alpha.py`, `liu/wp_mat.py`,
+`surfaceDetection/*`, `util/*`, `sample/wp_deltaShift.py` remain.*
+
+- [x] **`modules/adaptiveSupport/{wp_omega,wp_psi0}.py` — gradchecks clean.**
+      `scripts/gradcheck_adaptiveSupport.py` checks `computeOmegaWarp` (grad-h
+      correction) and `computePsi0Warp` (Owen adaptive-support reference spacing) —
+      both share the family's usual same-array-safe apparent-volume ternary and take
+      only positions/supports/masses/densities. No bugs found.
+- [x] **`modules/deltaSPH/wp_viscosityDelta.py`, `modules/shockCapturing/wp_computeM.py`
+      — gradcheck clean; `modules/shockCapturing/wp_vsig.py` — one bug fixed, one
+      confirmed and left open (upstream warp-lang, not fixable here).**
+      `scripts/gradcheck_deltaSPH.py` and `scripts/gradcheck_shockCapturing.py`.
+      `computeVsigWarp`'s signal-velocity computation surfaced:
+      1. **Fixed.** `computeVsigWarp` had a `referenceVelocities = queryVelocities`
+         fallback but no equivalent `referenceCs = queryCs` one, so a caller
+         supplying `queryCs=` explicitly (any bare-`ParticleState` gradcheck case, and
+         in practice every real call site too, just via a `.soundspeeds` attribute
+         happening to live on the same object) fell through to a **size-1 dummy
+         tensor read out of bounds** whenever `referenceParticles` lacked
+         `.soundspeeds` — silently reading stray memory. Turned out **not unique to
+         vsig**: the identical missing-fallback gap (`referenceCs`/`referenceAlphas`/
+         `referencePressures` never defaulting to their `query*` counterparts) was
+         present in 7 more files sharing this parameter family —
+         `modules/{compSPH,crk}/{accel,dudt}.py` and
+         `modules/dissipation/{wp_conductivity,wp_diffusion,wp_dissipation}.py` — all
+         previously gradchecked "clean" in Tiers 0/1 only because those scripts always
+         populate `.soundspeeds`/`.alphas`/`.pressures` on the *same* state object
+         passed as both query and reference. Fixed identically in all 8 files, plus an
+         unrelated `torch.scalar_t32` typo (not a real torch dtype — should have been
+         `get_torch_precision()`) in the same dummy-tensor line, present in the same 8
+         files.
+      2. **Confirmed, not fixed — needs an upstream warp-lang fix.** With the memory
+         bug out of the way, `computeVsigWarp`'s backward is *deterministically wrong*
+         for 2 of 3 particles in a hand-picked, tie-free case (verified 3 independent
+         ways: `gradcheck`, `torch.autograd.grad` cross-checked per output, and a
+         from-scratch manual central-difference replay — the manual replay agrees with
+         hand calculus and disagrees with `torch.autograd`'s result). Root cause:
+         `out = wp.max(out, vsigs)`, a loop-carried variable reassigned via a
+         nonlinear op inside the neighbor loop — same underlying bug *class* as Tier
+         1's `correctGradientCRK` finding ("reverse-mode AD through a loop silently
+         produces a wrong adjoint"), different shape: here the adjoint sometimes
+         attributes the gradient to the wrong neighbor or drops it to zero, even
+         though the forward value is correct. Swapping in the logically-equivalent
+         `wp.where(vsigs > out, vsigs, out)` made no difference, confirming the bug is
+         in how Warp differentiates the loop-carried reassignment itself, not in
+         `wp.max`'s adjoint. `gradcheck_shockCapturing.py` runs gradcheck against this
+         case and treats "fails with exactly this mismatch" as the expected, tracked
+         state — a regression guard, not a script failure, so a future Warp upgrade
+         that changes this either direction will show up as a script-behavior change
+         rather than staying silently stale.
+- [x] **`modules/mdbc/wp_nopenshift.py` — three real bugs found and fixed (getting
+      the kernel to run under gradient tracking at all), then gradchecks clean.**
+      `scripts/gradcheck_mdbc.py` is the first script in this family to exercise a
+      *multi-output* kernel (a float correction array plus an int32 neighbor-count
+      array) under `requires_grad`, and every one of the three bugs it found was in
+      that combination specifically, not in this module's own physics:
+      1. **Fixed upstream, in warpSPHCore.** `zero_like_warp` on the int32
+         neighbor-count output crashed Warp's own compiler
+         (`AttributeError: 'Var' object has no attribute 'is_builtin'`).
+         `warpSPHCore/math/wp_zero.py`'s length-1 int32 `zero_like` overload was the
+         **one dtype** still building its zero via the generic call form
+         `vector(length=1, dtype=wp.int32)(0)` — every float16/32/64 sibling instead
+         returns a concrete pre-declared class (`vec1f(0.0)`, etc., from
+         `wp_vec1.py`), because no `vec1i` class existed for int32 to use the same
+         pattern. Fixed by adding `vec1i` to `wp_vec1.py` and pointing the overload at
+         it — the int32 case now follows the same pattern as every other dtype
+         instead of being the one exception that used a form this warp-lang version
+         (1.15.0) can't codegen.
+      2. **Fixed here.** `norm_j = safe_sqrt(...) + 1e-12` — a bare Python float
+         literal, which Warp infers as `wp.float32` regardless of the active
+         precision, added to a `scalar_t` (float64 under gradcheck) value: a genuine
+         type mismatch, caught only because this is the first time this file has run
+         at float64. Every other `+ eps` site in the same file already wraps the
+         literal in `scalar_t(...)`; this was the one straggler. Fixed the same way.
+      3. **Fixed upstream, in warpSPHCore — the significant one.**
+         `warpSPHCore/autograd/launcher.py`'s `launch_kernel` unconditionally set
+         `output.requires_grad = requires_grad` on **every** output of a multi-output
+         kernel the moment any input required grad, with no check that the output's
+         own dtype can legally carry a gradient — so `wp.to_torch` on the int32
+         neighbor-count output raised `RuntimeError: only Tensors of floating point
+         and complex dtype can require gradients`. Every gradcheck script before this
+         one only ever exercised single-output-float kernels, so this is the first
+         time a mixed-dtype multi-output launch ran under `requires_grad` in this repo
+         at all — a structural gap in the bridge itself, same shape as the plan's
+         other cross-repo AD-bridge findings (`asScalarArg`, the CRK
+         accumulation-axis bug). Fixed by gating `requires_grad` on the output's own
+         dtype (new `_dtype_is_float` helper, checking `_wp_scalar_type_` for
+         vector/matrix dtypes) — purely additive: every existing single-float-output
+         kernel is unaffected, only a non-float output now correctly stays
+         `requires_grad=False` instead of crashing.
+
+      With the kernel finally running under gradients, one more real hazard turned
+      up — not fixed in source, worked around in the test fixture instead:
+      `computeMdbcNoPenShift_Func_i` computes `apparentVolume = mj / rhoj`
+      unconditionally per neighbor even though it is dead for this call
+      (`useVolume` is always False here, so the value is never read downstream). The
+      script's first attempt passed `densities=None` on a bare `ParticleState`,
+      which defaults to a zero-filled array, so `rhoj = 0` and
+      `apparentVolume = inf` — forward-dead, but reverse-mode AD still built an
+      adjoint through the division, and that NaN propagated back into every mass
+      gradient for the early-returned boundary-particle threads. Same bug *class* as
+      Tier 1's CRK-limiter self-interaction 0/0 (a computed-but-discarded expression
+      whose singularity poisons the backward pass anyway) in a different guise
+      (division by an absent field, not a same-array ternary or loop-carried max).
+      Worked around by giving the case real, nonzero densities via
+      `compute_densities` (this family's usual fixture) instead of `None`; left as a
+      documented trap in the script for whoever next touches `useVolume` plumbing in
+      this file, since any caller that omits densities on a bare `ParticleState` —
+      legitimate per every other gradcheck script's own `hasattr`-fallback precedent
+      — hits this same NaN the instant gradients are requested through this path.
+- [ ] `modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
+      `modules/surfaceDetection/{wp_barecasco,wp_dilate,wp_maronne}.py`,
+      `modules/util/{wp_sum,wp_numNeighbors}.py`, `sample/wp_deltaShift.py` — not yet
+      started.
 
 *Not in scope — verified non-differentiable by construction, checked 2026-08-11:*
 `modules/adaptiveSupport/wp_psi.py` is the **one file of the 25 using a raw `wp.launch`
@@ -1167,6 +1329,92 @@ runs once to build a lookup table rather than per-step — nothing differentiabl
 flows through it. Not a gap; worth a one-line comment at its `wp.launch` call saying so,
 so a future reader doesn't assume it's an oversight matching its `wp_omega`/`wp_psi0`
 siblings, which *do* go through the bridge.
+
+### Regression, found and FIXED same day (2026-08-11): the same-array ternary bug
+was real, broader than diagnosed, and is now closed with a proper helper
+
+Running the full suite while wiring in Tier 2's new scripts (`scripts/run_tests.sh`)
+first surfaced that **`gradcheck_wp_surfaceAware.py`, `gradcheck_compSPH.py`, and
+`gradcheck_dissipation.py` — all three previously documented as "gradchecks clean"
+in Tier 0/1 above — failed**, reproducibly, standalone, under the currently-installed
+warp-lang **1.15.0** (`pyproject.toml` pins no version at all — bare `"warp-lang"` —
+which is how the installed version has now silently drifted three times across this
+plan's history: 1.12.0 → a 1.17.0.dev3 local dev checkout → 1.15.0 from PyPI). This
+was exactly the risk Tier 0's own `wp_surfaceAware` caveat had flagged and left open.
+
+**Root cause, confirmed by the fix: broader than the "same-array ternary" diagnosis.**
+The failing cases all traced to `P_j = referencePressures[j] if
+referencePressures.shape[0] > 1 else referencePressures[0]`-shaped code — but the
+fix that actually closed it (see below) also had to touch several ternaries that are
+**not** same-array reads at all (e.g. `xi = sphKernel_xi(...) if
+viscosityParams.correctXi else scalar_t(1.0)`, a function-call-result-vs-literal
+ternary in `dissipation/pi.py`) — so "different-array ternaries are a confirmed
+non-issue," the distinction Tier 0 relied on to call `referenceCs[j] if individual_cs
+else viscosityParams.c_s`-shaped code safe, does not fully hold under warp-lang
+1.15.0's codegen. The safe conclusion is narrower: **any inline Python conditional
+expression (`X if cond else Y`) compiled inside a `@wp.func`/`@wp.kernel` is suspect
+on this warp-lang version**, not just the same-array-read subset previously
+suspected.
+
+**Fixed.** A generic helper, `access_optional(arr, index, condition, defaultValue)`
+— `return arr[index] if condition else defaultValue`, but written as a real
+`@wp.func` with an explicit `if`/`else` block rather than compiled from an inline
+ternary at each call site — was added to **warpSPHCore** (`util/stateUtil.py`,
+exported from `util/__init__.py`) since the pattern recurs across every module in
+this family, not just this repo's. Every affected same-array/array-vs-default
+ternary was rewritten to call it:
+`modules/pressure/wp_surfaceAware.py` (`P_j`/`P_i`/`mask_j`/`mask_i`, the original
+flagged risk), `modules/compSPH/{accel,dudt}.py`, `modules/dissipation/{pi,
+wp_conductivity,wp_diffusion,wp_dissipation}.py`, and `modules/mdbc/
+wp_nopenshift.py`'s`apparentVolume` line — all of the `X[j] if flag else Y`-shaped
+sites this family shares. The handful of non-array-read ternaries in
+`dissipation/pi.py` (`xi`, `C_l_`/`C_q_`, `viscosityTerm`) were rewritten as explicit
+pre-declared-variable-plus-`if` blocks instead, since `access_optional` only fits the
+array-read shape. One unrelated typo was fixed in the same pass:
+`DiffusionParameters.thermalConducitiyTerm` → `thermalConductivityTerm` (4 files:
+the dataclass definition and its to/from-dict round-trip), caught because it sat
+right next to the ternary being rewritten.
+
+**Verified, twice.** First, `gradcheck_wp_surfaceAware.py`/`gradcheck_compSPH.py`/
+`gradcheck_dissipation.py` individually: all three now report `ALL PASSED` (`wp_
+surfaceAware` explicitly re-checks the broadcast-pressure ternary branch and
+confirms no adjoint-zeroing). Second, the full suite (`scripts/run_tests.sh`):
+**53/53 pass**, zero failures anywhere — up from the 3 failures this section
+originally reported.
+
+**One inconsistency found and fixed while verifying:** `modules/compSPH/accel.py`'s
+own `Pj = referencePressures[j]` (an `explicitPressure`-guard fix from earlier the
+same day) had been overwritten back to an unconditional read somewhere in the sweep
+above, while `dudt.py`'s equivalent line was correctly converted to
+`access_optional`. Fixed to match: `Pj = access_optional(referencePressures, j,
+explicitPressure, scalar_t(0.0))`.
+
+**`modules/crk/{accel,dudt}.py`'s missing `explicitPressure`/`individual_cs` guards —
+FIXED same day (2026-08-11), once `access_optional` existed to make it mechanical.**
+Both files previously read `P_j = referencePressures[j]` and `cs_j =
+referenceCs[j]` **unconditionally**, with no guard at all — the commented-out dead
+code above the live `warpWrapper2` call (`#         explicitPressure, queryPressures_,
+referencePressures_,`) showed the flag used to be threaded through and was dropped at
+some point without the reads being re-guarded, structurally preventing CRK's accel/
+dudt from supporting an implicit-pressure caller at all (unlike compSPH's version of
+the same functions). Re-threaded `individual_cs`/`explicitPressure` through
+`_Func_i` → `_Func_Adjacency` → `_Kernel` → the top-level wrapper in both files,
+mirroring `compSPH/{accel,dudt}.py`'s exact pattern (flag derivation, parameter
+placement, `access_optional` guards) and removing the two `raise ValueError` calls
+that previously fired only when `.pressures`/`.soundspeeds` were an explicit `None`
+attribute, not when they were simply absent (the actual gap). One dead line fell out
+of the sweep: `dudt.py`'s `Pj = referencePressures[j]` was unconditional *and*
+unused — immediately overwritten by `Pj = P_j` before its first read — deleted
+rather than converted. Verified: `scripts/gradcheck_crk.py` still `ALL PASSED`, a
+real 3-step CRKSPH run (`python -m warpSPH.cases.sod --scheme CRKSPH --nSteps 3`)
+completes cleanly, and the full suite passes.
+
+**Warp-lang version pin: deliberately deferred, not an open risk to chase.** Per
+the "Decisions already made" section at the top of this file: pin to **1.17** once
+it ships (fixes the underlying Interpolate/ternary-adjoint bug at the source); any
+version is fine to develop against until then, so long as ternaries inside
+`@wp.func`/`@wp.kernel` bodies go through `access_optional` or an explicit `if`/
+`else` rather than an inline conditional expression.
 
 ### 4.2 — `.detach()` audit (started 2026-08-11)
 
@@ -1418,20 +1666,56 @@ against the wrong axis; fixed upstream, same day, by replacing it with a single 
 Before the second fix landed, **CRKSPH — the production default scheme — was not
 AD-correct with respect to position**; `scripts/gradcheck_crk.py` now confirms it is, and
 is wired into the pass/fail suite like every other Tier 0/1 script. 48 tests, up from 42
-at the start of Phase 4.1. Next action is Tier 2 (`modules/deltaSPH/*`,
-`modules/adaptiveSupport/*`, `modules/shockCapturing/*`, `modules/mdbc/wp_nopenshift.py`,
-`modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
-`modules/surfaceDetection/*`, `modules/util/*`, `sample/wp_deltaShift.py`) — narrower
-blast radius than Tier 1, and by now `_gradcheck_common.py` carries enough of the
-fixture vocabulary (state builders, CRK factors, densities) that step 4 of the 4.1
-recipe — a repo-local `gradcheck` skill mirroring warpSPHCore's — is worth doing either
-just before or just after Tier 2, rather than waiting further. One thing stays
-explicitly outstanding rather than silently dropped: re-running
-`gradcheck_wp_surfaceAware.py` under the actually-pinned warp-lang version (1.12.0 or
-1.16.0, not 1.17.0.dev3). Phase 3b's repair is already done, and everything still open
-there is legibility. The one exception worth folding into Phase 4 rather than leaving in
-3b: upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD will care
-whether that path is differentiable.
+at the start of Phase 4.1.
+
+**Tier 2 is partly done (2026-08-11, second session).** `adaptiveSupport`, `deltaSPH`,
+`shockCapturing` (three scripts that already existed but weren't wired into the suite
+or written up) and a new `mdbc` script are gradchecked and wired in (49 tests, up from
+48). `mdbc` alone found and fixed three real bugs just to get a multi-output kernel
+running under gradients at all — two in warpSPHCore's own math/autograd layer (a
+missing `vec1i` type breaking `zero_like`'s codegen; the autograd bridge setting
+`requires_grad` on non-float kernel outputs unconditionally) and one here (an
+unguarded float32 literal in a float64 kernel) — see Tier 2 above for the full
+writeup. Remaining: `incompressible/wp_alpha.py`, `liu/wp_mat.py`,
+`surfaceDetection/*`, `util/*`, `sample/wp_deltaShift.py`.
+
+**The warp-lang-version caveat Tier 0 flagged and left open has now bitten — and been
+fixed, same day.** Re-running the full suite while wiring in Tier 2 found that
+`wp_surfaceAware`, `compSPH`, and `dissipation` — all three previously "gradchecks
+clean" — failed under the currently-installed warp-lang **1.15.0**, reproducibly and
+standalone. This was exactly the risk the original Tier 0 writeup warned about
+("this result shows the ternary is safe on the dev build actually running here, not
+that it's safe on the version this repo is nominally pinned to"). Root cause turned
+out **broader** than the original "same-array ternary" diagnosis — some of the
+ternaries that needed rewriting weren't same-array reads at all, so the safe
+conclusion is narrower: any inline `X if cond else Y` compiled inside a `@wp.func`
+is suspect on this warp-lang version, not just the same-array-read subset. **Fixed**
+by adding a proper `access_optional(arr, index, condition, defaultValue)` helper to
+warpSPHCore (an explicit `if`/`else` `@wp.func`, not an inline ternary) and rewriting
+every affected site across `wp_surfaceAware.py`, `compSPH/{accel,dudt}.py`,
+`dissipation/{pi,wp_conductivity,wp_diffusion,wp_dissipation}.py`, and `mdbc/
+wp_nopenshift.py` to use it. One adjacent real bug fixed along the way (an unguarded
+`referencePressures[j]` read in `compSPH/{accel,dudt}.py`, plus a stray typo,
+`thermalConducitiyTerm` → `thermalConductivityTerm`, in `DiffusionParameters`).
+**Verified: full suite 53/53 pass.** See the "Regression" writeup under Tier 2 above
+for the complete story. `pyproject.toml` still pins no warp-lang version — **by
+decision, not oversight**: the plan pins to 1.17 once it ships (fixes the underlying
+bug at the source), and until then any version is fine as long as ternaries in
+kernel code go through `access_optional` rather than an inline conditional
+expression (see "Decisions already made" at the top of this file). **Also fixed the
+same day:** `modules/crk/{accel,dudt}.py` never had `explicitPressure`/
+`individual_cs` guards at all (a separate, older gap) — re-threaded through both
+files now that `access_optional` made it mechanical, following `compSPH`'s exact
+pattern. Verified via `gradcheck_crk.py` (still clean) and a real 3-step CRKSPH run.
+
+By now `_gradcheck_common.py` carries enough of the fixture vocabulary (state
+builders, CRK factors, densities) that step 4 of the 4.1 recipe — a repo-local
+`gradcheck` skill mirroring warpSPHCore's — is worth doing once Tier 2's remaining 5
+modules are closed out, rather than waiting further. Phase 3b's repair is already
+done, and everything still open there is legibility. The one exception worth folding
+into Phase 4 rather than leaving in 3b: upstreaming the tensor-aware
+`volumeToSupport` into warpSPHCore, since AD will care whether that path is
+differentiable.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

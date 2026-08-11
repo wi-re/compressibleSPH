@@ -60,7 +60,7 @@ def buildDefaultDiffusionParamsCRKSPH():
     diffusionParams.K = 1.0
     diffusionParams.thermalConductivity = 0.5
     diffusionParams.viscosityTerm = ViscosityTerms.Monaghan1992.value
-    diffusionParams.thermalConducitiyTerm = ViscosityTerms.Price2012_98.value
+    diffusionParams.thermalConductivityTerm = ViscosityTerms.Price2012_98.value
     diffusionParams.scaleBeta = False
     diffusionParams.monaghanSwitch = True
     diffusionParams.correctXi = True
