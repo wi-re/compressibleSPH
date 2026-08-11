@@ -3,7 +3,7 @@ from warpSPH.utils.support import volumeToSupport
 from ...systems.compressibleMonaghan import CompressibleState, CompressibleSystem
 from ...configurations.compressibleConfig import CompressibleSPHConfig
 from ...configurations.simulationConfig import SimulationConfig
-from typing import Optional
+from typing import Optional, Union
 from warpSPHCore import *
 from ...modules.eos import idealGasEOS
 import torch
@@ -13,7 +13,7 @@ def computeTimestep(
     system: CompressibleSystem,
     config: SimulationConfig,
     compParams: CompressibleSPHConfig,
-    dt: Optional[float] = None,
+    dt: Optional[Union[float, torch.Tensor]] = None,
 ):
     if config.adaptiveDt:
         # 
@@ -54,11 +54,16 @@ def computeTimestep(
         # dt_cfl_right = targetCFL * h / (c_s + h * xi)
         initial_dt = torch.min(dt_cfl_left)
         if initial_dt < config.minDt:
-            print(f"Warning: initial dt {initial_dt} is less than minDt {config.minDt}. Clamping to minDt.")
+            print(f"Warning: initial dt {initial_dt.item()} is less than minDt {config.minDt}. Clamping to minDt.")
         initial_dt = torch.clamp(initial_dt, min=config.minDt, max=config.maxDt)
         if dt is not None and initial_dt > config.dt:
             initial_dt = torch.clamp(initial_dt, max=config.dtGrowthFactor * config.dt)
-        return initial_dt.cpu().item()
+        # Kept as a tensor (not .item()'d) so a genuinely adaptive dt -- itself a
+        # function of state via c_s above -- carries a gradient back to state for
+        # anyone differentiating through a rollout. Plain-float call sites must
+        # convert explicitly at their own reporting/bookkeeping boundary (see
+        # runner.py's `_scalar`), not have that decision made for them here.
+        return initial_dt
     else:
         if dt is not None:
             return dt

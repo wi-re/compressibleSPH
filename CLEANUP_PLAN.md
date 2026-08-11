@@ -25,6 +25,18 @@ the `domain.py` collision, and all three stutter modules (`math/math.py`,
 what landed and what's deliberately still open. What remains overall is the dead-code
 sweep and the notebook simplification, neither load-bearing.
 
+**Phase 4** (2026-08-11) is now **in progress**: a gradient-check plan for this repo's
+25 custom warp-kernel files, modeled directly on warpSPHCore's own
+`gradcheck_*_native.py` methodology, plus a completed first pass of the `.detach()`
+audit. Its headline finding — adaptive `dt` losing its tangent in
+`modules/timestep/compressible.py` — is now **fully fixed and verified**, including the
+kernel-level half that needed a new warpSPHCore capability (`asScalarArg`) and, en route,
+uncovered and fixed a real, unrelated, scheme-independent segfault in
+`computeCompSPHBalanceTermWarp` (a missing query→reference fallback for energies/
+pressures). Also still standing: a live instance of the exact ternary shape that already
+broke Interpolate upstream (`modules/pressure/wp_surfaceAware.py`), not yet gradchecked.
+See Phase 4 below.
+
 ---
 
 ## Decisions already made
@@ -893,20 +905,348 @@ duplicate notebooks → media, with the repo-weight rewrite.
 
 ## Phase 4 — AD readiness audit
 
-First-pass scan, not yet verified case by case:
+First-pass scan (2026-08-10), not yet verified case by case at the time:
 
 - **97** `.item()` / `.cpu()` / `.numpy()` calls inside `schemes/`, `modules/`, `systems/`
-- **106** `no_grad` / `detach` sites across `src/`
+- **106** `no_grad` / `detach` sites across `src/` (2026-08-11 recount: 89 literal
+  `.detach(` sites, 0 `no_grad` — the original 106 likely double-counted chained
+  `.detach().cpu().item()` calls or was scoped slightly differently; not worth
+  reconciling exactly, see 4.2 below for the actual per-site count that matters)
 
 Each is a break in the tangent chain for forward-mode AD. Concentrated in:
 `modules/timestep/compressible.py`, `modules/shifting/`, `modules/mdbc/`.
 
 The timestep one matters most: adaptive `dt` depends on state, so `dt` itself carries a
-tangent. Dropping it there is a **silent correctness bug, not a crash.**
+tangent. Dropping it there is a **silent correctness bug, not a crash.** — **confirmed
+and refined in 4.2 below**, with one important nuance: the naive fix (just stop
+detaching) is not sufficient on its own.
 
-- [ ] Dedicated audit of all 97 + 106 sites, classified as
-      (a) genuinely non-differentiable / fine, (b) needs a differentiable path,
-      (c) needs an explicit `stop_gradient` with a comment saying why
+### 4.1 — Gradient-check plan for this repo's custom warp kernels (2026-08-11)
+
+warpSPHCore (`~/dev/warpSPH`) already has a mature answer to "how do we know a custom
+warp kernel's backward pass is right," built the hard way — three real, silent bugs
+(reentrancy in the AD bridge, a ternary that zeroed an adjoint, a multi-output
+`isinstance` check that missed tuples) were each invisible to forward-only checks and
+only surfaced once `torch.autograd.gradcheck` was run directly against the kernel. None
+of that machinery exists in this repo yet, and this repo has its own 25 files of custom
+`@wp.kernel`/`@wp.func` code — the scheme-specific physics (compSPH, CRKSPH, deltaSPH,
+dissipation, pressure, mdbc, shifting, surface detection, ...) built *on top of*
+warpSPHCore's already-gradchecked operators (Density, Gradient, ...) via the same
+structured-kernel ABI. That layer is exactly as capable of hiding the same bug classes,
+and currently has zero coverage of its own.
+
+**What warpSPHCore's methodology actually is** (`tests/operations/test_gradcheck_scripts.py`,
+`scripts/gradcheck_*_native.py`, `scripts/_gradcheck_common.py`,
+`.claude/skills/gradcheck/SKILL.md`):
+
+- One standalone script per operator (`scripts/gradcheck_<op>_native.py`), each calling
+  `torch.autograd.gradcheck` **directly against the real entry point** (no manual
+  Jacobian, no per-call cloning workaround) under forced `warpSPHCore_PRECISION=float64`
+  — gradcheck's numerical Jacobian needs the precision, and float32 isn't enough headroom.
+- Scripts run as **subprocesses**, not in-process pytest functions, because precision is
+  baked into every `@wp.kernel`/`@wp.func` at first `warpSPHCore` import and cannot
+  change mid-process — importing two scripts into one pytest process would have the
+  second one silently reuse the first's precision. `tests/operations/test_gradcheck_scripts.py`
+  just shells out to each script and asserts exit code 0.
+- Shared fixtures live in one `_gradcheck_common.py`: `make_domain`, `single_particle_case`
+  (isolates the self-interaction term — a symmetric kernel's gradient at `r=0` must be
+  exactly zero, so any nonzero value here is unambiguously a bug), `line_case` (small,
+  regular, so self- vs. non-self gradient contributions are easy to separate by hand),
+  `grid_case_2d`, `build_adjacency` / `build_grid_adjacency` (adjacency is treated as
+  frozen/non-differentiable and built once from **detached** positions — this is the one
+  place `.detach()` inside a gradcheck script is *correct by design*: rebuilding the
+  neighbor list under finite-difference perturbation would introduce a genuine
+  discontinuity right at the support-radius boundary, which is a modeling choice, not a
+  bug being hidden).
+- New scripts get registered in one `GRADCHECK_SCRIPTS` list; that's the only wiring
+  needed for CI to pick them up.
+- The one gotcha worth carrying over verbatim: **a ternary assigned to a local variable,
+  where both branches index the same Warp array, can compile fine, run the correct
+  branch at runtime, and still produce a silently-zero adjoint for that array read** —
+  confirmed the exact cause of Interpolate's bug, confirmed fixed upstream in
+  `warp-lang` 1.17.0.dev3, **not yet fixed in the 1.12.0 this repo (and warpSPHCore) is
+  pinned to**. A ternary is only dangerous when both branches read the *same* array
+  (different-array ternaries, e.g. `mj/rhoj if ... else referenceVolumes[j]`, are a
+  confirmed non-issue per warpSPHCore's own lessons-learned).
+
+**Recipe for this repo**, following that pattern rather than reinventing it:
+
+1. Add `scripts/_gradcheck_common.py` here. Don't duplicate warpSPHCore's helpers —
+   import `make_domain`/`line_case`/`grid_case_2d`/`build_adjacency`/`build_grid_adjacency`
+   from `warpSPHCore` (or vendor the handful of lines if they're not exported publicly;
+   check first) since this repo's `ParticleState`/`DomainDescription` *are* warpSPHCore's.
+   Add repo-local helpers only for what core's fixtures don't cover: this repo's
+   per-scheme state objects (`CompSPHState`, `CRKState`, ...) with density/pressure/
+   internal-energy/support populated, and minimal `SimulationConfig`/`SchemeConfig`
+   construction. **This is not optional** — confirmed the hard way while chasing the
+   `computeCompSPHBalanceTermWarp` segfault below: a bare `ParticleState` (core's own
+   fixture shape) passes through this repo's scheme-level kernels with no error and a
+   silent memory-safety failure, because those kernels need `internalEnergies`/
+   `pressures`/velocity-derived fields the bare struct doesn't carry and nothing
+   validates are present. Force `warpSPHCore_PRECISION=float64` via `os.environ.setdefault` the
+   same way, before any `warpSPH`/`warpSPHCore` import — and note this repo has its own
+   precision-locking entry point, `warpSPHBootstrap.bootstrap()`; a gradcheck script
+   should set the env var directly rather than going through `bootstrap()`, matching
+   how warpSPHCore's own scripts bypass any higher-level config helper for the same
+   "must happen before the first heavy import" reason.
+2. One `scripts/gradcheck_<module>.py` per kernel-bearing module, or per group that
+   always fires together in a real step (e.g. compSPH's accel+dudt+balance, since
+   `compSPH_step` always calls all three) — call `torch.autograd.gradcheck` straight
+   against the module's public `compute*Warp` entry point, `eps=1e-6, atol=1e-5`, float64,
+   single-particle + line-of-N cases, every differentiable-flag combination the module
+   exposes (grad-h on/off, CRK on/off, renormalization on/off — exactly the surface that
+   already hid the `t`/`dt` argument-swap and `supportScheme=` keyword bugs Phase 3
+   found by hand).
+3. New file `tests/test_gradcheck_scripts.py`, subprocess-per-script against
+   `GRADCHECK_SCRIPTS`, same rationale and same shape as warpSPHCore's — this repo's
+   `check_imports.py`/`run_tests.sh` pattern already established `scripts/` as the
+   right home for standalone verification tooling.
+4. Once 2-3 scripts exist, write a repo-local `gradcheck` skill (or extend an existing
+   one) mirroring warpSPHCore's `.claude/skills/gradcheck/SKILL.md`, so adding the next
+   one follows a documented recipe instead of re-deriving it.
+
+**Rollout order** — inventory of all 25 files, by priority:
+
+*Tier 0 — start here, already-flagged risk (see 4.2's findings):*
+- `modules/pressure/wp_surfaceAware.py` — contains the exact same-array ternary shape
+  that broke Interpolate upstream, confirmed live via `deltaSPH` and `monaghan`
+  (`computePressureForceSurfaceAware`). Needs a gradcheck before anything else in this
+  plan; if it fails, the fix is the explicit-`if/else` rewrite warpSPHCore already used
+  four times for the same reason.
+- `geometry/sdf.py` / `regions/domainSDF.py` — hand-rolled `torch.autograd.grad(...,
+  create_graph=True)` for SDF normals, not routed through the warp bridge at all, with a
+  `requires_grad`-conditional `.detach()`. Different code shape than the other 24, so it
+  needs its own gradcheck rather than fitting the `warpOperation`-shaped recipe above.
+
+*Tier 1 — core scheme physics, exercised by every compressible/CRK run:*
+`modules/compSPH/{accel,dudt,balance}.py`, `modules/crk/{accel,dudt}.py` (largest and
+most-corrected kernels — CRK, grad-h, renormalization, volume all compose here, and this
+exact family already had two silent-wrong-argument bugs found by hand in Phase 3),
+`modules/dissipation/{wp_diffusion,wp_conductivity,wp_dissipation}.py` (the viscosity/
+conduction terms — also where the TGV effective-viscosity finding lives, so calibrating
+that switch via AD later needs this to be right first).
+
+*Tier 2 — scheme-specific correction terms, live but narrower blast radius:*
+`modules/deltaSPH/{wp_densityDelta,wp_viscosityDelta}.py`,
+`modules/adaptiveSupport/{wp_omega,wp_psi0}.py`,
+`modules/shockCapturing/{wp_computeM,wp_vsig}.py`, `modules/mdbc/wp_nopenshift.py`,
+`modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
+`modules/surfaceDetection/{wp_barecasco,wp_dilate,wp_maronne}.py`,
+`modules/util/{wp_sum,wp_numNeighbors}.py`, `sample/wp_deltaShift.py`.
+
+*Not in scope — verified non-differentiable by construction, checked 2026-08-11:*
+`modules/adaptiveSupport/wp_psi.py` is the **one file of the 25 using a raw `wp.launch`
+instead of `warpWrapper2`** — i.e., it has no backward pass at all, the same shape as
+the pre-fix `pinv2x2` gap warpSPHCore closed. But its only inputs are Python
+`int`/`float` LUT parameters and a kernel enum, not simulation-state tensors, and it
+runs once to build a lookup table rather than per-step — nothing differentiable ever
+flows through it. Not a gap; worth a one-line comment at its `wp.launch` call saying so,
+so a future reader doesn't assume it's an oversight matching its `wp_omega`/`wp_psi0`
+siblings, which *do* go through the bridge.
+
+### 4.2 — `.detach()` audit (started 2026-08-11)
+
+Went through all 89 literal `.detach(` call sites in `src/warpSPH`, grouped by file,
+classified against the (a)/(b)/(c) scheme this phase set out with. Result: the large
+majority — `io/export.py` (26), `configurations/rigidBody.py` (13),
+`configurations/{region,weaklyCompressible,simulationConfig,incompressible}.py`,
+every `cases/*.py` diagnostics function (`kineticEnergy`/`maxVelocity`/... dicts),
+`cases/plotting.py`, `regions/plot.py`, `runner/{runner,report}.py` — are **(a),
+genuinely fine**: HDF5/JSON export, `matplotlib` plotting, and human-readable reporting
+are real non-differentiable boundaries, and `.detach().cpu().item()`/`.numpy()` is the
+correct way to cross them. No action needed on any of these.
+
+Three sites are not:
+
+- **`modules/timestep/compressible.py:61`, `return initial_dt.cpu().item()` — (b),
+  needs a differentiable path, and the fix is not just "stop detaching."**
+  `initial_dt = torch.clamp(torch.min(targetCFL * h / (c_s * xi)), ...)` is a real
+  function of `system.state.densities` (through `idealGasEOS`'s sound speed) when
+  `config.adaptiveDt` is set, so the CFL-derived timestep genuinely carries a tangent
+  back to density and hence to position. `.cpu().item()` collapses it to a plain Python
+  float, and every step function's signature (`compSPH_step(system, dt: float, ...)`)
+  declares `dt` as a plain float throughout — so `d(dt)/d(density)` is dropped before
+  `dt` is even passed in, not just at some later detach.
+
+  Traced where that tensor would need to survive to matter: it flows into pure-PyTorch
+  arithmetic inside the step functions (`v_halfstep = velocities + 0.5 * dt * dvdt`) and
+  into the integrator's own position/velocity update (`warpSPHIntegrators`) — both would
+  correctly backprop through a tensor `dt` with zero further changes, if one reached
+  them. But `dt` *also* reaches warp kernels directly as a scalar argument — e.g.
+  `computeCompSPHBalanceTermWarp` — and there a second, independent limitation applies:
+  **verified against `warpSPHCore`'s autograd bridge (`autograd/wrapper.py`,
+  `autograd/stateAwareWarpFunction.py`) that scalar (non-array) kernel arguments cannot
+  carry a gradient through it at all**, regardless of whether the caller detaches them.
+  `warpWrapper2` casts every scalar `additionalArguments` entry through `scalar_t(...)`
+  before its tensor/non-tensor split ever runs, and the kernel signatures involved
+  declare `dt: scalar_t` by value, not `wp.array(dtype=scalar_t)` — so the existing
+  `dt.detach().cpu().item()` calls in `schemes/{compSPH,crkSPH}.py` (feeding that
+  specific call) are **currently no-ops**, not the actual severing point.
+
+  So a real fix is two independent pieces, only the first of which is in this repo's
+  reach:
+  1. Let `dt` survive as a 0-dim tensor through `computeTimestep` and every plain-PyTorch
+     use of it in the step/integrator arithmetic (drop the `float` type annotations,
+     stop coercing to `.item()` except at genuine reporting boundaries).
+  2. Give warpSPHCore's autograd bridge a differentiable-scalar path (a `wp.array`-typed
+     `dt` kernel parameter plus bridge support) for the kernels that consume `dt`
+     internally — a warpSPHCore-side change, out of this repo's reach alone, and the
+     same shape of gap as `pinv2x2`'s missing backward was before it got wired in.
+  Not fixed as part of this pass — recorded here so the next AD work doesn't rediscover
+  the "detaching dt does nothing" trap and stop looking, when the actual gap is one
+  layer up and one repo over.
+
+  **Update, same day — piece 2 landed and is now verified working end-to-end.**
+  warpSPHCore grew `asScalarArg` (`autograd/scalar_arg.py`) plus a `wp.array(dtype=
+  scalar_t)` / `param[0]` convention for opting a kernel parameter into differentiability,
+  proven upstream by `scripts/gradcheck_scalar_arg_native.py` on a demo kernel. Applying
+  it to `computeCompSPHBalanceTermWarp` (the one kernel `dt` currently reaches directly)
+  went through three rounds:
+
+  1. **First attempt looked like it crashed the interpreter** — a native segfault inside
+     `wp.launch`, confirmed with `python -X faulthandler`, the moment a gradient through
+     `dt` was requested. Reverted rather than shipped, since `dt` never reaches this
+     kernel as a `requires_grad` tensor in any currently-exercised path anyway (piece 1,
+     below, was and is still open) — full test suite passed either way, but the signature
+     would have looked differentiable and silently crashed the moment someone actually
+     exercised it as such.
+  2. **The crash turned out to be a red herring — a real, unrelated, pre-existing bug**,
+     found by systematically ruling out the `dt`-integration itself as the cause (isolated
+     the `monotonic`/`hybrid` arithmetic, the full six-branch dispatch, the `ap_ij`/`av_ij`
+     edge-count shape, domain size, `dim`, adjacency construction method, and — decisively
+     — the warp-lang version: it crashed identically under both the pinned 1.12.0 release
+     and the (accidentally-installed, since-restored) 1.17.0.dev3 dev build). The actual
+     cause: `computeCompSPHBalanceTermWarp`'s `referenceEnergies`/`referencePressures`
+     were missing the query→reference fallback that `referenceVelocities` already had
+     (`if referenceVelocities is None: referenceVelocities = queryVelocities`, with no
+     equivalent two lines for the other two) — so a caller passing a bare `ParticleState`
+     plus explicit `queryEnergies=`/`queryPressures=` (exactly what every gradcheck-style
+     standalone call does, and what every real step-function call does *not* do, since
+     real call sites always pass a full state object the `hasattr` fallback quietly
+     covers for) reached the kernel launch with `referenceEnergies=None`, which the
+     compiled kernel then unconditionally read as `referenceEnergies[j]`. **Fixed**
+     with the missing two-line fallback, next to the existing velocities guard.
+     Full writeup, the exact fallback-chain trace, and the reusable repro harness are in
+     `scripts/troubleshoot_balanceTerm_segfault.py`. Confirmed scheme-independent before
+     the fix (`PdV`/`diminishing`/`monotonic`/`hybrid`/**`CRK`, the production default**,
+     all crashed the same way; only the data-independent `equalWork` survived) and fixed
+     for all six after.
+  3. **Re-applied the `dt` integration on top of the fix** — same shape as attempt 1
+     (`wp.array(dtype=scalar_t)` on the top-level `@wp.kernel`, `dt[0]` read once there
+     and forwarded as a plain `scalar_t` into the nested `@wp.func` layers, `asScalarArg`
+     at the Python call site) — and it now works cleanly. Verified three ways:
+     `scripts/troubleshoot_balanceTerm_segfault.py --mode backward` for both `CRK`
+     (`dt.grad == 0`, analytically correct — CRK's output depends only on the *sign* of
+     the dt-carrying term, never its magnitude) and `monotonic` (`dt.grad` nonzero); a
+     direct `torch.autograd.gradcheck` against `computeCompSPHBalanceTermWarp` under
+     `monotonic` (the one scheme with a genuinely smooth, non-zero-a.e. dt-dependence —
+     `term_2`'s division), passing for both 0-dim and 1-element `dt`; and the plain-float
+     regression case still resolving to `requires_grad=False`. Full test suite: 42/42.
+
+  The `EnergyScheme.monotonic`/`.hybrid` ternary → explicit-`if/else` rewrite from the
+  first (mis-)diagnosis is kept — harmless, matches this codebase's established
+  convention, full suite passes with it, even though it turned out not to be what fixed
+  anything. `schemes/{compSPH,crkSPH}.py` no longer call the (always-was-a-no-op)
+  `dt.detach().cpu().item()` before passing `dt` into `computeCompSPHBalanceTermWarp`;
+  they now pass `dt` through directly, and it is a real gradient path as of this fix.
+
+  **Piece 1 — also done, same day.** `computeTimestep` (`modules/timestep/compressible.py`)
+  no longer collapses the CFL-derived `initial_dt` to a Python float; `return
+  initial_dt.cpu().item()` is now `return initial_dt`, keeping it a tensor on
+  whichever device the state already lives on. `compSPH_step`/`crkSPH_step`'s `dt`
+  parameter and `compressibleTimestep`'s return type are annotated `float | torch.Tensor`
+  to match (Python doesn't enforce it, but the old `dt: float` was actively wrong the
+  moment this landed). Nothing else needed to change:
+
+  - `runner.py`'s step loop already separated "plain float for bookkeeping" (`_scalar()`,
+    used locally for `nSteps`/`storeSteps`/progress-bar math) from what's actually passed
+    to the step function (`ctx.config.dt`, unconverted) — so a tensor `dt` flows straight
+    through to `compSPH_step`/`crkSPH_step` without the runner needing any change.
+  - Config serialization (`configurations/simulationConfig.py`'s `_encodeValue`) already
+    dispatches on runtime type, not the static annotation, and already had a
+    `torch.Tensor` branch — a tensor-valued `dt` round-trips through export/JSON exactly
+    like the scalar it structurally is.
+  - `adaptiveDt=True` is the shared default for every compressible case (`cases/
+    compressible.py`'s `COMPRESSIBLE_DEFAULTS`), so `tests/test_physics.py`'s Sod/TGV/
+    dam-break runs already exercise this path on every run, not just a targeted new test.
+    Full suite: 42/42, unchanged.
+
+  Verified directly, not just by absence of regressions: with `internalEnergies.
+  requires_grad_(True)`, `computeTimestep` now returns a tensor with
+  `grad_fn=<ClampBackward1>`, and `dt.backward()` reaches `internalEnergies.grad` with
+  exactly one nonzero entry — correct, since `dt = torch.min(dt_cfl_left)` only has a
+  subgradient through the argmin particle. (First attempt at this check used
+  `densities.requires_grad_(True)` instead and found nothing — not a bug: `idealGasEOS`
+  computes sound speed from `u` when `u` is provided, which is how `computeTimestep`
+  always calls it, so `c_s` genuinely never touches `rho` in this configuration. Correct
+  physics, not a gap — the test was wrong, not the fix.)
+
+  **Phase 4.2's `dt` finding is now fully closed**, both pieces: the CFL-derived adaptive
+  timestep is a real, verified tensor with a gradient back to the state that determines
+  it, all the way through `computeCompSPHBalanceTermWarp`'s kernel-level consumption of
+  it.
+
+- **`caseUtils/weaklyCompressible.py:526-530` (`forcing()`, random-flow case) and
+  `modules/noise/sampleDivergenceFree.py` — (c), needs an explicit comment, currently
+  silent.** The turbulent forcing term is built by calling a `scipy`
+  `RegularGridInterpolator` on `pos.detach().cpu()` — numpy has no autograd, so
+  `d(forcing)/d(position)` is unconditionally zero, and this forcing term feeds directly
+  into a state update in a case that's otherwise part of the differentiable rollout.
+  Likely fine in intent (it's a fixed pre-baked turbulence field, not something anyone
+  is meant to optimize through) but currently undocumented as a deliberate choice —
+  needs the one-line comment Phase 4's own (c) bucket calls for, not a rewrite.
+
+- **`geometry/sdf.py:69-78`, `regions/domainSDF.py:12-15` — (a), correct as designed,
+  but worth calling out because the shape is more subtle than a plain detach.** Both
+  compute SDF normals via `torch.autograd.grad(..., create_graph=True, retain_graph=True)`
+  and then conditionally detach the result based on `x.requires_grad`, so a caller that
+  doesn't need gradients doesn't pay for a retained graph, and a caller that does gets
+  one. This is deliberate dual-mode design, not a bug — but it's exactly the kind of
+  hand-rolled AD code that a plain forward-value check can't validate, which is why it's
+  also listed in 4.1's Tier 0 rollout rather than assumed fine and left alone.
+
+**Not yet done:** the `.item()`/`.cpu()`/`.numpy()` sites beyond `.detach()` (the
+original 97-count scope) haven't been individually re-audited the same way — the three
+findings above came from tracing `.detach()` specifically, per this session's ask.
+`modules/shifting/` and `modules/mdbc/` (flagged in the original first-pass scan) turned
+out on inspection to be either commented-out debug prints (`mdbc/wp_nopenshift.py`,
+`velocity.py`) or scalar CFL/spacing bookkeeping (`shifting/delta.py`,
+`shifting/wrapper.py`) that looks like genuine (a) — non-differentiable by nature,
+reporting/scalar-config values — but wasn't traced as deeply as the timestep finding
+above; worth a second pass once the gradcheck scripts from 4.1 exist to actually test
+the claim rather than eyeball it.
+
+- [x] **Root-caused and fixed the `computeCompSPHBalanceTermWarp` standalone-call
+      segfault** — a real bug: `referenceEnergies`/`referencePressures` were missing the
+      query→reference fallback that `referenceVelocities` already had, so a caller
+      relying on that fallback (as every real call site's `hasattr` path effectively did,
+      by luck) could reach the kernel launch with `referenceEnergies=None`. Two-line fix
+      in `modules/compSPH/balance.py`, next to the existing velocities guard. Verified
+      against the original bare-`ParticleState` repro (not just the `CompressibleState`
+      workaround): all six `EnergyScheme` values now run clean, no crash. Full suite:
+      42/42 still pass.
+- [x] Re-verify `forward-grad` and `backward` modes in
+      `scripts/troubleshoot_balanceTerm_segfault.py` — both confirmed: `backward` gives
+      `dt.grad==0` for `CRK` (analytically correct) and nonzero for `monotonic`, and
+      `torch.autograd.gradcheck` against `computeCompSPHBalanceTermWarp`/`monotonic`
+      passes for both 0-dim and 1-element `dt`
+- [x] Re-applied the `dt: wp.array(dtype=scalar_t)`/`asScalarArg` integration to
+      `computeCompSPHBalanceTermWarp` now that the real bug is fixed — works cleanly,
+      full suite still 42/42
+- [x] Finished the `computeTimestep` fix (4.2) — piece 1: `computeTimestep` no longer
+      coerces to `.item()`, step-function signatures updated, `runner.py`/config
+      serialization needed no changes (already tensor-safe by design). Verified directly:
+      `internalEnergies.requires_grad_(True)` → `computeTimestep` returns a tensor with
+      `grad_fn`, backprop reaches `internalEnergies.grad` correctly (nonzero only at the
+      argmin particle, matching `dt = torch.min(...)`). Full suite: 42/42. **Phase 4.2's
+      `dt` finding is fully closed, both pieces.**
+- [ ] Build 4.1's gradcheck infrastructure, starting with Tier 0: `wp_surfaceAware.py`,
+      `geometry/sdf.py`/`regions/domainSDF.py`
+- [x] Add the one-line non-differentiability comment to the noise-forcing sites (4.2) —
+      done in `caseUtils/weaklyCompressible.py`'s `forcing()` (Kolmogorov/random-flow
+      case); `modules/noise/sampleDivergenceFree.py` still open, same reasoning applies
+- [ ] Second-pass audit of the remaining `.item()`/`.cpu()`/`.numpy()` sites once
+      gradcheck coverage exists to verify claims rather than assume them
 
 ---
 
@@ -934,11 +1274,18 @@ as a per-scheme dependency manifest — to audit which `.item()`/`.cpu()` sites 
 can reach you now read 8 lines instead of resolving a star import by hand. Do the rest
 opportunistically, as AD touches each module.
 
-**Go to Phase 4 next.** It is now the only remaining item with real correctness
-stakes — Phase 3b's repair is already done, and everything still open there is
-legibility. The one exception worth folding into Phase 4 rather than leaving in 3b:
-upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD will care
-whether that path is differentiable.
+**Phase 4 is now in progress (2026-08-11), not just scoped.** The `.detach()` half of
+the audit is done (4.2) and found one real, non-obvious bug-shaped gap
+(`computeTimestep`'s adaptive `dt` losing its tangent, compounded by warpSPHCore's
+autograd bridge not supporting differentiable scalar kernel arguments at all) plus one
+confirmed-live instance of the exact ternary shape that already broke Interpolate
+upstream (`modules/pressure/wp_surfaceAware.py`). Next action is building 4.1's
+gradcheck scripts, Tier 0 first (`wp_surfaceAware.py`, then `geometry/sdf.py`/
+`regions/domainSDF.py`) — that's what turns "this pattern looks dangerous" into a
+pass/fail signal instead of a hunch. Phase 3b's repair is already done, and everything
+still open there is legibility. The one exception worth folding into Phase 4 rather than
+leaving in 3b: upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD
+will care whether that path is differentiable.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

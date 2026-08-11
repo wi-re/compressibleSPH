@@ -97,26 +97,38 @@ def computeCompSPHBalanceTerm_Func_i(
         elif energyScheme_int == wp.static(EnergyScheme.monotonic.value):
             A = deltaE_thermal / (u_ji + scalar_t(1.0e-14))
             # B = torch.where(A >= 0, A / m_i, A / m_j)
-            B = A / mi if A >= scalar_t(0.0) else A / mj
-            
+            if A >= scalar_t(0.0):
+                B = A / mi
+            else:
+                B = A / mj
+
             # term_1 = torch.maximum(torch.zeros_like(B), sgn(B))
             term_1 = wp.max(scalar_t(0.0), sgn(B))
             term_2 = mi / (deltaE_thermal + scalar_t(1.0e-14)) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
-            
+
             # f_ij = torch.where(torch.abs(B) <= 1, term_1, term_2)
-            f = term_1 if wp.abs(B) <= scalar_t(1.0) else term_2
+            if wp.abs(B) <= scalar_t(1.0):
+                f = term_1
+            else:
+                f = term_2
         elif energyScheme_int == wp.static(EnergyScheme.hybrid.value):
             u_ji_norm = wp.abs(u_ji)
             A = deltaE_thermal / (u_ji + scalar_t(1.0e-14))
             # B = torch.where(A >= 0, A / m_i, A / m_j)
-            B = A / mi if A >= scalar_t(0.0) else A / mj
-            
+            if A >= scalar_t(0.0):
+                B = A / mi
+            else:
+                B = A / mj
+
             # term_1 = torch.maximum(torch.zeros_like(B), sgn(B))
             term_1 = wp.max(scalar_t(0.0), sgn(B))
             term_2 = mi / (deltaE_thermal + scalar_t(1.0e-14)) * ( (deltaE_thermal + mi * u_i + mj * u_j) / (mi + mj) - u_i)
-            
+
             # f_ij_mono = torch.where(torch.abs(B) <= 1, term_1, term_2)
-            f_ij_mono = term_1 if wp.abs(B) <= scalar_t(1.0) else term_2
+            if wp.abs(B) <= scalar_t(1.0):
+                f_ij_mono = term_1
+            else:
+                f_ij_mono = term_2
             f_ij_sm = scalar_t(0.5) * (scalar_t(1.0) + (u_ji * sgn(deltaE_thermal)) / (u_ji_norm + scalar_t(1.0) / (scalar_t(1.0) + u_ji_norm)))
             
             chi = wp.abs(u_ji) / (wp.abs(u_i) + wp.abs(u_j) + scalar_t(1.0e-14))
@@ -252,18 +264,18 @@ def computeCompSPHBalanceTerm_Kernel(
 
     pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    energyScheme_int: wp.int32, dt: scalar_t, gamma: scalar_t, # type: ignore
+    energyScheme_int: wp.int32, dt: wp.array(dtype = scalar_t), gamma: scalar_t, # type: ignore
 
     # The last parameter is always the output array and should not be changed
     f_ij : wp.array(dtype = Any), # type: ignore
-):                                                                                    
+):
     i = wp.tid()
     numParticles = queryState.positions.shape[0]
     if i >= numParticles:
         return
 
     computeCompSPHBalanceTerm_Func_Adjacency(
-        i, domainState.dim, 
+        i, domainState.dim,
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
         kernelProperties,  #queryKinds, referenceKinds,
@@ -272,7 +284,7 @@ def computeCompSPHBalanceTerm_Kernel(
         queryEnergies, referenceEnergies,
         queryPressures, referencePressures,
         pressureAccel_ij, viscosityAccel_ij,
-        energyScheme_int, dt, gamma,
+        energyScheme_int, dt[0], gamma,
         f_ij
     )
 
@@ -284,7 +296,7 @@ def computeCompSPHBalanceTermWarp(
     domain: DomainDescription,
     
     energyScheme: EnergyScheme,
-    dt: scalar_t,
+    dt: Union[float, torch.Tensor],
     gamma: scalar_t,
 
     pairWise_pressureAccel: torch.Tensor, #ap_ij
@@ -305,6 +317,10 @@ def computeCompSPHBalanceTermWarp(
         raise ValueError("This module requires an adjacency structure.")
     if referenceVelocities is None:
         referenceVelocities = queryVelocities
+    if referenceEnergies is None:
+        referenceEnergies = queryEnergies
+    if referencePressures is None:
+        referencePressures = queryPressures
     with record_function("warpSPH[computeCompSPHBalanceTerm]"):
         with record_function("warpSPH[computeCompSPHBalanceTerm] - Preprocessing"):
             # Preprocessing and input validation
@@ -369,7 +385,7 @@ def computeCompSPHBalanceTermWarp(
                     queryEnergies_, referenceEnergies_,
                     queryPressures_, referencePressures_,
                     pairWise_pressureAccel, pairWise_viscosityAccel,
-                    wp.int32(energyScheme.value), scalar_t(dt), scalar_t(gamma)
+                    wp.int32(energyScheme.value), asScalarArg(dt, device=device), scalar_t(gamma)
                 ),
             )
 

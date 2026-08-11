@@ -526,6 +526,10 @@ def setupKolmogorov(compressibleSystem, config, schemeConfig, simSetup, args):
     def forcing(state, cfg, compParams, x, d, n, t, dt):
         pos = getPeriodicPositions(x, domain)
         u_x = xi * torch.sin(k * np.pi * pos[:, 1])
+        # The noise is generated on a numpy backend
+        # This means that we cannot really have gradients here, but we can still use the noise to perturb the forcing field
+        # Note that this is not a problem for the simulation, since the forcing is not part of the optimization process
+        # and using no_grad around noise generators is a common practice in machine learning to avoid unnecessary gradient computations
         u_y = noiseGen(pos.detach().cpu()).to(dtype=x.dtype, device=x.device) * noiseLevel
         return torch.stack([u_x, u_y], dim=1) * state.masses.unsqueeze(1)
 

@@ -81,7 +81,7 @@ def compressibleDiagnostics(ctx: RunContext, state) -> Dict[str, float]:
     }
 
 
-def compressibleTimestep(ctx: RunContext, state) -> float:
+def compressibleTimestep(ctx: RunContext, state) -> "float | torch.Tensor":
     """The acoustic-CFL `dt`, recomputed from the current state.
 
     Attach this as a case's `timestep` hook to get the notebooks'

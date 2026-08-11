@@ -27,7 +27,7 @@ __all__ = ['compSPH_step']
 
 def compSPH_step(
     system: CompSPHSystem,
-    dt: float,
+    dt: "float | torch.Tensor",
     config: SimulationConfig,
     schemeConfig: CompSPHConfig,
     verbose = False,
@@ -211,7 +211,7 @@ def compSPH_step(
         pairWise_pressureAccel= currentState.ap_ij,
         pairWise_viscosityAccel = currentState.av_ij,
         energyScheme = schemeConfig.energyScheme,
-        dt= dt.detach().cpu().item() if isinstance(dt, torch.Tensor) else dt,
+        dt= dt,
         gamma = schemeConfig.gamma,
 
         adjacency = adjacency,
