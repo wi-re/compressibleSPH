@@ -1,5 +1,5 @@
 from .contour import find_contour
-from .domain import domainSDF, sampleDomainSDF
+from .domainSDF import domainSDF, sampleDomainSDF
 from .filter import filterRegion
 from .plot import plotRegions
 from .region import buildRegion

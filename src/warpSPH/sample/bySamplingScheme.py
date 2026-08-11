@@ -1,6 +1,6 @@
 
 from ..configurations import SimulationConfig
-from ..sampling import *
+from ..geometry import *
 import h5py
 
 def sampleParticles(nx: int,config : SimulationConfig):

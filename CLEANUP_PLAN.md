@@ -18,8 +18,12 @@ piece, the `nbstripout` filter, is now installed.
 (`io/`, `math/`, `sampling/`) and the backlog it left behind. The repair itself is
 done and verified — including one *silent* tensor/scalar bug the move introduced —
 and the repo now carries `scripts/check_imports.py`, `run_tests.sh` and
-`run_sweep.py` to make that verification one command each. What remains there is
-naming/structure tidying and the notebook simplification, neither load-bearing.
+`run_sweep.py` to make that verification one command each. Its naming/structure
+backlog is now **mostly cleared** (2026-08-11): the `sample`/`sampling` hazard,
+the `domain.py` collision, and all three stutter modules (`math/math.py`,
+`utils/util.py`, `io/io.py`) are fixed — see "Open: naming and structure" below for
+what landed and what's deliberately still open. What remains overall is the dead-code
+sweep and the notebook simplification, neither load-bearing.
 
 ---
 
@@ -805,22 +809,59 @@ documented in the README.
 None of these are correctness issues — they are the legibility cost of the reshuffle,
 and worth clearing before AD makes tracebacks harder to read.
 
-- [ ] **`sample/` vs `sampling/` is the main hazard.** Two packages with near-identical
-      names, and `sample/sampling.py` sits inside the wrong one. The real distinction is
-      *samplers* vs *what samplers are defined in terms of* (SDF, NACA, `ParticleSet`).
-      Renaming the latter to `geometry/` or `primitives/` would make it self-evident.
-- [ ] **20 duplicate basenames across packages** — `sod.py`, `noh.py`, `domain.py`,
-      `region.py`, `sdf.py`, `enumTypes.py` each appear 2–3×. Ambiguous in tracebacks
-      and editor tabs. Notably `warpSPH/enumTypes.py` (9 solver enums) vs
-      `warpSPH/sampling/enumTypes.py` (NamedTuples + one enum) — different content,
-      same name; the latter reads more like `sampling/types.py`.
-- [ ] **Stutter modules**: `io/io.py` (667 lines), `math/math.py` (9), `utils/util.py`
-      (15). Inline the two tiny ones into their `__init__.py`; split `io/io.py` along
-      export / import / HDF5 plumbing.
+- [x] **`sample/` vs `sampling/` hazard — FIXED 2026-08-11.** `sampling/` (what a
+      sampler is defined in terms of: SDF, NACA, `ParticleSet`/`PointCloud`,
+      `SamplingScheme`) is renamed to **`geometry/`**, so it no longer reads as a
+      near-duplicate of `sample/` (the samplers themselves). `sampling/enumTypes.py`
+      is renamed to **`geometry/types.py`** as part of the same move — it holds
+      NamedTuples plus one enum, not the 9 solver enums that live in the unrelated
+      top-level `warpSPH/enumTypes.py`, and `types.py` says that. `sample/sampling.py`
+      — the file whose own name collided with the package it now no longer sits next
+      to — is renamed to **`sample/bySamplingScheme.py`**, which is what it actually
+      does: dispatch `sampleParticles` over `config.samplingScheme`
+      (regular/jittered/random/optimal/glass). 18 importers across `src/`, 3 notebooks
+      and the README's package-layout table were updated to match; `git mv` preserved
+      history on all three renames.
+- [x] **`regions/domain.py` vs `utils/domain.py` — FIXED 2026-08-11**, as the one
+      instance of the 20-duplicate-basenames item with an unambiguous fix: the two
+      files don't share a purpose (one builds a `DomainDescription`, the other treats
+      the domain as an SDF for region carving), so `regions/domain.py` is renamed to
+      **`regions/domainSDF.py`**, matching the two functions it actually defines
+      (`domainSDF`, `sampleDomainSDF`). The remaining basename collisions
+      (`sod.py`, `noh.py`, `region.py`, `sdf.py`, the `caseUtils/compressible/*/sample.py`
+      family) are each case- or package-namespaced on purpose — same pattern as
+      `caseUtils/compressible/<case>/<case>.py` — and reads fine in context, so they're
+      **not** being churned; only the two pairs above were actually ambiguous.
+- [x] **Stutter modules — FIXED 2026-08-11.** `math/math.py` (9 lines) and
+      `utils/util.py` (15 lines) are inlined into their package `__init__.py` and
+      deleted; 6 external importers of `math.math` repointed to `math` directly. One
+      latent bug fell out of the `math/math.py` inlining: `math/noiseFunctions/generator.py`
+      imported `from ..math import getPeriodicPositions`, which — from two packages
+      down — resolved to the *old* `math/math.py` submodule, not the `math` package;
+      once that submodule was gone this became a `ModuleNotFoundError`, fixed to
+      `from .. import getPeriodicPositions`. `io/io.py` (667 lines, was the largest
+      stutter module and the one with the least self-evident split) is broken into
+      **`io/hdf5.py`** (the dump/load primitives, dtype conversion, dict↔h5
+      serialization — everything `.export` and `.importIO` share), **`io/export.py`**
+      (`schemeAttribute`, `exportSimulationSystem`, `writeInitialData`, `writeFrame`,
+      `prepExport`, the run-folder helpers), **`io/importIO.py`** (the inverse:
+      `schemeNameToSimulationScheme`, `importSimulationSystem`, `importConfigs` — named
+      `importIO` rather than `import.py` since the latter is a reserved word), and
+      **`io/parsers.py`** (the seven CLI string→enum parsers, unrelated to HDF5 at all).
+      `io/__init__.py`'s public surface — the actual contract other modules rely on —
+      is unchanged: same names, same `__all__`, just re-pointed to the new submodules.
+      6 external importers (`warpSPH/__init__.py`, `runner/runner.py`, `io/dataset.py`,
+      2 `datagen/weaklyCompressible/*.py` files, 1 notebook) updated to the new paths.
+      Verified beyond `check_imports.py`/`run_tests.sh`: a live `sod --store` run
+      round-tripped through `exportSimulationSystem`/`writeInitialData`/`writeFrame`
+      on the way out and `importSimulationSystem`/`importConfigs` on the way back in.
 - [ ] **`math/` shadows a stdlib name.** Harmless under absolute imports, but it costs
-      a beat of thought at every reading.
-- [ ] **Dead code left by the move**: `utils/__init__.py` has 7 commented-out import
-      lines. Wider sweep: `schemes/crkSPH.py` (119 commented code lines),
+      a beat of thought at every reading. Not renamed — no concrete replacement name
+      was ever proposed, and inventing one now is scope the naming pass didn't ask for.
+- [ ] **Dead code left by the move.** The `utils/__init__.py` commented-out imports
+      *of the old `sampling`/`math.math` paths* were removed as part of the two fixes
+      above (they'd have been actively misleading otherwise). The wider sweep is still
+      open: `schemes/crkSPH.py` (119 commented code lines),
       `modules/mdbc/wp_nopenshift.py` (69), `shockCapturing/CullenDehnen2010.py` (63),
       `schemes/dfsph.py` (58), `caseUtils/compressible/sod/sod.py` (57),
       `schemes/deltaSPH.py` (55).

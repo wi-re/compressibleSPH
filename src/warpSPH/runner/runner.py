@@ -24,8 +24,8 @@ import torch
 from ..configurations import buildConfig
 from ..enumTypes import (CompressibleSPHScheme, IncompressibleSPHScheme,
                          WeaklyCompressibleSPHScheme)
-from ..io.io import (createOutFile, exportSimulationSystem, prepExport, writeFrame,
-                  writeInitialData)
+from ..io.hdf5 import createOutFile
+from ..io.export import exportSimulationSystem, prepExport, writeFrame, writeInitialData
 from ..schemes import buildScheme
 from ..utils import buildDomainDescription
 from .case import Case, RunContext
@@ -90,7 +90,7 @@ def buildContext(case: Case, spec: CaseSpec) -> RunContext:
     from warpSPHIntegrators import IntegrationSchemeType
     from warpSPHCore import (GradientScheme, KernelFunctions, LaplacianScheme,
                              SupportScheme)
-    from ..sampling import SamplingScheme
+    from ..geometry import SamplingScheme
 
     device = torch.device(spec.device) if spec.device else (
         torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu'))

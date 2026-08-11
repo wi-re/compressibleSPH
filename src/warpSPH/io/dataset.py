@@ -10,7 +10,8 @@ import numpy as np
 import torch
 
 from ..configurations import dictToConfig
-from .io import schemeNameToSimulationScheme, restore_config_from_h5
+from .importIO import schemeNameToSimulationScheme
+from .hdf5 import restore_config_from_h5
 from ..schemes import buildScheme
 from ..systems.weaklyCompressible import WeaklyCompressibleState
 

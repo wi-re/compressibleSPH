@@ -100,7 +100,7 @@ def generateOctaveNoise(n, dim = 2, octaves = 4, lacunarity = 2, persistence = 0
 
 
 from scipy.interpolate import RegularGridInterpolator
-from ..math import getPeriodicPositions
+from .. import getPeriodicPositions
 
 def sampleVoronoi(positions, nGrid, octaves = 2, baseFrequency = 1, kind = 'perlin', tileable=True, seed = 12365, vmin = 0.0, vmax = 1.0, config=None):
     positions = getPeriodicPositions(positions, config['domain'])

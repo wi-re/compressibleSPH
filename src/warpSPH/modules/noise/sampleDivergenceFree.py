@@ -25,7 +25,7 @@ def generateNoiseInterpolator(fluidResolution, noiseResolution, domain: DomainDe
     return lambda x: torch.tensor(interpolator(x.cpu().numpy()).reshape(x.shape[0])).to(x.device)
 
 
-from ...sampling.sdf import operatorDict
+from ...geometry.sdf import operatorDict
 
 def rampDivergenceFree(positions, noise, sdf_func, offset, d0 = 0.25):
     sdf = sdf_func(positions)

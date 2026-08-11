@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from .moduleConfigurations.boundaryConditions import BoundaryConditionType, BoundaryCondition, BCType
-from ..sampling import ParticleSet
+from ..geometry import ParticleSet
 import torch
 
 from typing import Callable, List, Tuple, Dict, Any

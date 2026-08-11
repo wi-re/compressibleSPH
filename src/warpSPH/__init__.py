@@ -26,13 +26,13 @@ __all__.extend(utils.__all__)
 # __all__.extend(enumTypes.__all__)
 __all__.extend(sample.__all__)
 
-from .sampling import *
-__all__.extend(sampling.__all__)
+from .geometry import *
+__all__.extend(geometry.__all__)
 
 __all__.extend(['EnergyScheme', 'AdaptiveSupportScheme', 'ViscositySwitch', 'CompressibleSPHScheme', 'WeaklyCompressibleSPHScheme', 'DensityDiffusionScheme', 'PressureForceScheme', 'IncompressibleSPHScheme'])
 
 
-from .io.io import parseKernelFunctions, parseIntegrationScheme, parseViscositySwitch, parseCompressibleSPHScheme, parseAdaptiveSupportScheme
+from .io.parsers import parseKernelFunctions, parseIntegrationScheme, parseViscositySwitch, parseCompressibleSPHScheme, parseAdaptiveSupportScheme
 __all__.extend(['parseKernelFunctions', 'parseIntegrationScheme', 'parseViscositySwitch', 'parseCompressibleSPHScheme', 'parseAdaptiveSupportScheme'])
 
 

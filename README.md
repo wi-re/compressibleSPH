@@ -463,7 +463,7 @@ src/
     systems/               state and system containers
     modules/               timestep, viscosity, shifting, boundary conditions, …
     sample/                particle samplers (regular, shell, per-family)
-    sampling/              what a sampler is defined in terms of: SDFs, NACA,
+    geometry/              what a sampler is defined in terms of: SDFs, NACA,
                            ParticleSet/PointCloud, SamplingScheme
     regions/               SDF regions and filtering
     math/                  periodic positions, noise, scatter

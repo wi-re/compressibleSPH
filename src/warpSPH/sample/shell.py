@@ -1,5 +1,5 @@
 import random
-from ..sampling import ParticleSet
+from ..geometry import ParticleSet
 from ..utils.support import volumeToSupport
 import torch
 

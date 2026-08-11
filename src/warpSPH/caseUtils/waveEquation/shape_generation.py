@@ -2,8 +2,8 @@ import torch
 from typing import Dict, List, Tuple
 
 from ...configurations import WaveCaseConfig, WaveShapeSpec
-from ...math.math import getPeriodicPositions
-from ...sampling.sdf import getSDF
+from ...math import getPeriodicPositions
+from ...geometry.sdf import getSDF
 
 
 def translate(points, offset):

@@ -7,7 +7,7 @@ import torch
 
 from ...configurations import WaveCaseConfig, WaveShapeSpec, SimulationConfig, WaveBoundary, WaveSource
 from ...utils import buildDomainDescription, n_h_to_nH
-from ...sampling import SamplingScheme
+from ...geometry import SamplingScheme
 from warpSPHIntegrators import IntegrationSchemeType
 from warpSPHCore import GradientScheme, KernelFunctions, LaplacianScheme, SupportScheme
 

@@ -12,12 +12,12 @@ from ..modules.noise.sampleDivergenceFree import (
     generateNoiseInterpolator,
     sampleDivergenceFreeNoise,
 )
-from ..regions.domain import domainSDF, sampleDomainSDF
+from ..regions.domainSDF import domainSDF, sampleDomainSDF
 from ..regions.filter import filterRegion
 from ..regions.region import buildRegion
 from ..utils import buildDomainDescription
 from ..math import getPeriodicPositions
-from ..sampling.sdf import getSDF, operatorDict, sampleSDF
+from ..geometry.sdf import getSDF, operatorDict, sampleSDF
 
 
 @dataclass

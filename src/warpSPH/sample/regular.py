@@ -1,5 +1,5 @@
 from ..utils.domain import DomainDescription
-from ..sampling import PointCloud, ParticleSet
+from ..geometry import PointCloud, ParticleSet
 from ..utils.support import volumeToSupport
 
 import torch

@@ -3,6 +3,7 @@
 The source-of-truth implementation now lives in warpSPH.io.
 """
 
-from warpSPH.io.io import createOutFile, writeInitialData, writeFrame
+from warpSPH.io.hdf5 import createOutFile
+from warpSPH.io.export import writeInitialData, writeFrame
 
 __all__ = ["createOutFile", "writeInitialData", "writeFrame"]

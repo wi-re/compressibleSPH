@@ -1,7 +1,7 @@
 from .naca import generate_naca_airfoil, eval_distance, eval_naca
 
 from .sdf import *
-from .enumTypes import ParticleState, ParticleSet, PointCloud, SamplingScheme
+from .types import ParticleState, ParticleSet, PointCloud, SamplingScheme
 
 __all__ = []
 __all__.extend(['generate_naca_airfoil', 'eval_distance', 'eval_naca'])

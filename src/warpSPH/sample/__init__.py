@@ -1,7 +1,7 @@
-from ..sampling import PointCloud, ParticleSet
+from ..geometry import PointCloud, ParticleSet
 from ..utils.domain import DomainDescription
 from ..utils.support import volumeToSupport
-from ..math.math import getPeriodicPositions
+from ..math import getPeriodicPositions
 
 from .regular import sampleRegularParticles
 from .optimal import sampleOptimal

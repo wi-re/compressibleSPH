@@ -3,7 +3,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from ..configurations import SimulationConfig
-from ..sample.sampling import sampleParticles
+from ..sample.bySamplingScheme import sampleParticles
 
 from ..utils import *
 from warpSPHIntegrators import *

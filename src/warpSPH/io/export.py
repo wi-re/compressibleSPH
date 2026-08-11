@@ -1,64 +1,17 @@
-import h5py as h5
+"""Writing a run to disk: per-frame HDF5 export, ``config.json``, and run-folder layout."""
 
-from warpSPHCore import *
-import torch
-from typing import Optional, Any
-import numpy as np
-
-def dumpAdjacency(adjacency, adjacencyGroup):
-    adjacencyGroup.create_dataset('i', data=adjacency.i.cpu().numpy())
-    adjacencyGroup.create_dataset('j', data=adjacency.j.cpu().numpy())
-    adjacencyGroup.create_dataset('numNeighbors', data=adjacency.numNeighbors.cpu().numpy())
-    adjacencyGroup.create_dataset('edgeOffsets', data=adjacency.edgeOffsets.cpu().numpy())
-
-    adjacencyGroup.create_dataset('queryPositions', data=adjacency.queryPositions.cpu().numpy())
-    adjacencyGroup.create_dataset('querySupports', data=adjacency.querySupports.cpu().numpy())
-    adjacencyGroup.create_dataset('referencePositions', data=adjacency.referencePositions.cpu().numpy())
-    adjacencyGroup.create_dataset('referenceSupports', data=adjacency.referenceSupports.cpu().numpy())
-
-    adjacencyGroup.attrs['numRows'] = adjacency.numRows
-    adjacencyGroup.attrs['numCols'] = adjacency.numCols
-
-def dumpState(state, stateGroup):
-    for fieldName in state.__dict__.keys():
-        if fieldName.startswith('_'):
-            continue
-        fieldValue = getattr(state, fieldName)
-        # print(f'Dumping field {fieldName}... -> {type(fieldValue)}')
-        if isinstance(fieldValue, torch.Tensor):
-            stateGroup.create_dataset(fieldName, data=fieldValue.cpu().numpy())
-        elif fieldValue is None:
-            stateGroup.attrs[fieldName] = 'None'
-        else:
-            stateGroup.attrs[fieldName] = fieldValue
-
-def dumpStage(stage, stageGroups, index, SimulationState, exportStagesAdjacency):
-    stageGroups[index].attrs['index'] = index
-
-    auxGroup = stageGroups[index].create_group('aux')
-    for auxIndex, aux in enumerate(stage.aux):
-        if isinstance(aux, AdjacencyList):
-            if exportStagesAdjacency:
-                auxAdjacencyGroup = auxGroup.create_group(f'{auxIndex}_adjacency')
-                dumpAdjacency(aux, auxAdjacencyGroup)
-        elif isinstance(aux, SimulationState):
-            auxStateGroup = auxGroup.create_group(f'{auxIndex}_state')
-            dumpState(aux, auxStateGroup)
-        else: 
-            print(f'Unsupported aux type: {type(aux)}')
-
-    for updateKey, updateValue in stage.update.__dict__.items():
-        if isinstance(updateValue, torch.Tensor):
-            stageGroups[index].create_dataset(updateKey, data=updateValue.cpu().numpy())
-        else:
-            continue
-
-
-from typing import Any
-from ..enumTypes import CompressibleSPHScheme
+import json
 import os
+from typing import Any
+
 import h5py
+import numpy as np
 import torch
+
+from ..configurations import *
+from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
+from ..utils import getCurrentTimestamp
+from .hdf5 import dumpAdjacency, dumpState, dumpStage, copy_dict_to_h5, _encode_callable
 
 
 def schemeAttribute(scheme) -> str:
@@ -142,168 +95,6 @@ def exportSimulationSystem(
 
     outFile.close()
 
-def hdfDtypeToTorchDtype(hdfDtype):
-    if hdfDtype == "<i4":
-        return torch.int32
-    elif hdfDtype == "<i8":
-        return torch.int64
-    elif hdfDtype == "<f4":
-        return torch.float32
-    elif hdfDtype == "<f8":
-        return torch.float64
-    elif hdfDtype == 'bool':
-        return torch.bool
-    else:
-        raise ValueError(f'Unsupported HDF dtype: {hdfDtype}')
-
-
-
-def loadAdjacency(adjacencyGroup, device):
-
-    i = torch.from_numpy(adjacencyGroup['i'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['i'].dtype))
-    j = torch.from_numpy(adjacencyGroup['j'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['j'].dtype))
-    numNeighbors = torch.from_numpy(adjacencyGroup['numNeighbors'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['numNeighbors'].dtype))
-    edgeOffsets = torch.from_numpy(adjacencyGroup['edgeOffsets'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['edgeOffsets'].dtype))
-
-    queryPositions = torch.from_numpy(adjacencyGroup['queryPositions'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['queryPositions'].dtype))
-    querySupports = torch.from_numpy(adjacencyGroup['querySupports'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['querySupports'].dtype))
-    referencePositions = torch.from_numpy(adjacencyGroup['referencePositions'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['referencePositions'].dtype))
-    referenceSupports = torch.from_numpy(adjacencyGroup['referenceSupports'][:]).to(device).to(hdfDtypeToTorchDtype(adjacencyGroup['referenceSupports'].dtype))
-
-    numRows = adjacencyGroup.attrs['numRows']
-    numCols = adjacencyGroup.attrs['numCols']
-
-    return AdjacencyList(i, j, numNeighbors, edgeOffsets, numRows, numCols, queryPositions, referencePositions, querySupports, referenceSupports)
-
-def loadState(stateGroup, device, SimulationState):
-    stateDict = {}
-    for fieldName, fieldValue in stateGroup.items():
-        # print(f'Loading field {fieldName}... -> {type(fieldValue)}', fieldValue)
-        if isinstance(fieldValue, h5py.Dataset):
-            stateDict[fieldName] = torch.from_numpy(fieldValue[:]).to(device).to(hdfDtypeToTorchDtype(fieldValue.dtype)) if fieldValue.shape else torch.tensor(fieldValue[()], device=device, dtype=hdfDtypeToTorchDtype(fieldValue.dtype))
-        else:
-            stateDict[fieldName] = fieldValue
-    return SimulationState(**stateDict)
-
-from warpSPHIntegrators.specs import StageResult
-def loadStage(stageGroup, device, SimulationState, SimulationUpdate):
-    index = stageGroup.attrs['index']
-
-    aux = []
-    for auxKey, auxValue in stageGroup['aux'].items():
-        if '_adjacency' in auxKey:
-            aux.append(loadAdjacency(auxValue, device))
-        elif '_state' in auxKey:
-            aux.append(loadState(auxValue, device, SimulationState))
-        else:
-            print(f'Unsupported aux type for key {auxKey}')
-
-    updateDict = {}
-    for updateKey, updateValue in stageGroup.items():
-        if updateKey == 'aux':
-            continue
-        updateDict[updateKey] = torch.from_numpy(updateValue[:]).to(device).to(hdfDtypeToTorchDtype(updateValue.dtype)) if updateValue.shape else torch.tensor(updateValue[()], device=device, dtype=hdfDtypeToTorchDtype(updateValue.dtype))
-
-    return StageResult(aux=aux, update=SimulationUpdate(**updateDict))
-
-
-def schemeNameToSimulationScheme(name: str) -> CompressibleSPHScheme:
-    for scheme in CompressibleSPHScheme:
-        # print(f'Comparing {scheme.name.lower()} to {name.lower()}')
-        if scheme.name.lower() == name.lower():
-            return scheme
-    for scheme in WeaklyCompressibleSPHScheme:
-        if scheme.name.lower() == name.lower():
-            return scheme
-    # Mirrors `schemeAttribute`: whatever can be written must be readable back.
-    for scheme in IncompressibleSPHScheme:
-        if scheme.name.lower() == name.lower():
-            return scheme
-    raise ValueError(f'Unsupported scheme name: {name}')
-
-
-from ..schemes import buildScheme
-
-def importSimulationSystem(
-    importPath,
-    device,
-    dtype,
-    SimulationSystem : Optional[Any] = None,
-    SimulationState: Optional[Any] = None,
-    SimulationUpdate: Optional[Any] = None,
-):
-    inFile = h5py.File(importPath, 'r')
-
-    t = inFile.attrs['time']   
-    scheme = inFile.attrs['scheme']
-    schemeEnum = schemeNameToSimulationScheme(scheme)
-    if SimulationSystem is None or SimulationState is None or SimulationUpdate is None:
-        bundle = buildScheme(schemeEnum)
-        SimulationSystem = bundle.SimulationSystem
-        SimulationState = bundle.SimulationState
-        SimulationUpdate = bundle.SimulationUpdate
-
-    adjacency = loadAdjacency(inFile['adjacency'], device) if 'adjacency' in inFile else None
-    state = loadState(inFile['state'], device, SimulationState)
-
-    stageGroups = inFile['stages'] if 'stages' in inFile else None
-    stages = []
-    if stageGroups is not None:
-        for stageKey in stageGroups.keys():
-            stages.append(loadStage(stageGroups[stageKey], device, SimulationState, SimulationUpdate))
-
-    extraData = {}
-    for key, value in inFile.items():
-        if key in ['adjacency', 'state', 'stages']:
-            continue
-        if key.startswith('dict_'):
-            continue
-        else:
-            extraData[key] = torch.from_numpy(value[:]).to(device).to(hdfDtypeToTorchDtype(value.dtype)) if value.shape else torch.tensor(value[()], device=device, dtype=hdfDtypeToTorchDtype(value.dtype))
-
-    for key, value in inFile.attrs.items():
-        if key in ['scheme', 'time']:
-            continue
-        if value == 'dict':
-            dictKey = key[len('dict_'):] if key.startswith('dict_') else key
-            extraData[dictKey] = {}
-            dictGroup = inFile[f'dict_{dictKey}'] if f'dict_{dictKey}' in inFile else inFile[dictKey]
-            for subKey, subValue in dictGroup.items():
-                if isinstance(subValue, h5py.Dataset):
-                    extraData[dictKey][subKey] = torch.from_numpy(subValue[:]).to(device).to(hdfDtypeToTorchDtype(subValue.dtype)) if subValue.shape else torch.tensor(subValue[()], device=device, dtype=hdfDtypeToTorchDtype(subValue.dtype))
-                else:
-                    extraData[dictKey][subKey] = subValue
-        elif value == 'list':
-            listKey = key[len('dict_'):] if key.startswith('dict_') else key
-            extraData[listKey] = []
-            listGroup = inFile[f'dict_{listKey}'] if f'dict_{listKey}' in inFile else inFile[listKey]
-            for subIndex, subValue in listGroup.items():
-                if isinstance(subValue, h5py.Dataset):
-                    extraData[listKey].append(torch.from_numpy(subValue[:]).to(device).to(hdfDtypeToTorchDtype(subValue.dtype)) if subValue.shape else torch.tensor(subValue[()], device=device, dtype=hdfDtypeToTorchDtype(subValue.dtype)))
-                elif isinstance(subValue, h5py.Group):
-                    subDict = {}
-                    for subSubKey, subSubValue in subValue.items():
-                        if isinstance(subSubValue, h5py.Dataset):
-                            subDict[subSubKey] = torch.from_numpy(subSubValue[:]).to(device).to(hdfDtypeToTorchDtype(subSubValue.dtype)) if subSubValue.shape else torch.tensor(subSubValue[()], device=device, dtype=hdfDtypeToTorchDtype(subSubValue.dtype))
-                        else:
-                            subDict[subSubKey] = subSubValue
-                    extraData[listKey].append(subDict)
-                else:
-                    extraData[listKey].append(subValue)
-        else:
-            extraData[key] = value
-
-    inFile.close()
-
-    return SimulationSystem(state=state, adjacency=adjacency, t = t), stages, schemeEnum, extraData
-
-import json
-import pickle
-import dill
-import codecs
-
-from ..utils import getCurrentTimestamp
-from ..configurations import *
 
 def exportDirName(caseName, timestamp):
     """Directory name for one run: ``{caseName}_{timestamp}``."""
@@ -407,73 +198,6 @@ def prepExport(caseName, config, schemeConfig, scheme, export_fn, exportRoot=Non
         json.dump(exportDict, f, indent=4)
 
     return exportPath
-
-
-
-def importConfigs(configPath, import_fn):
-    # configPath = f'{path}/config.json'
-    with open(configPath, 'r') as f:
-        configDict = json.load(f)
-        
-    return dictToConfig(configDict['config']), import_fn(configDict['schemeConfig'])
-
-
-def _encode_callable(fn):
-    return codecs.encode(dill.dumps(fn), 'base64').decode()
-
-
-def _decode_callable(encoded_fn):
-    raw = codecs.decode(encoded_fn.encode(), 'base64')
-    try:
-        return dill.loads(raw)
-    except Exception:
-        return pickle.loads(raw)
-
-
-def copy_dict_to_h5(group, d, indent=0):
-    for key, value in d.items():
-        if isinstance(value, dict):
-            subgroup = group.create_group(key)
-            subgroup.attrs['taggedType'] = 'dict'
-            copy_dict_to_h5(subgroup, value, indent + 1)
-        elif isinstance(value, list):
-            subgroup = group.create_group(key)
-            subgroup.attrs['taggedType'] = 'list'
-            copy_dict_to_h5(subgroup, {f'item_{i}': v for i, v in enumerate(value)}, indent + 1)
-        else:
-            if value is None:
-                continue
-            group.attrs[key] = value
-
-
-def restore_config_from_h5(group, indent=0):
-    config = {}
-    for key, value in group.attrs.items():
-        if key != 'taggedType':
-            config[key] = value
-    for key, subgroup in group.items():
-        if subgroup.attrs['taggedType'] == 'dict':
-            config[key] = restore_config_from_h5(subgroup, indent + 1)
-        elif subgroup.attrs['taggedType'] == 'list':
-            config[key] = [restore_config_from_h5(subgroup[f'item_{i}'], indent + 1) for i in range(len(subgroup))]
-            subkeys = [k for k in list(subgroup.attrs.keys()) if k.startswith('item_')]
-            for i in range(len(subkeys)):
-                item_key = f'item_{i}'
-                if item_key in subgroup.attrs:
-                    config[key].append(subgroup.attrs[item_key])
-        else:
-            raise ValueError(f'Unknown type for subgroup {key}: {subgroup.attrs["taggedType"]}')
-    return config
-
-
-# Backward-compatible alias used by existing notebooks/scripts.
-def restoreConfig_from_h5(group, indent=0):
-    return restore_config_from_h5(group, indent=indent)
-
-
-def createOutFile(exportPath: str):
-    os.makedirs(exportPath, exist_ok=True)
-    return h5py.File(f'{exportPath}/trajectory.h5', 'w')
 
 
 def writeInitialData(
@@ -629,40 +353,7 @@ def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=T
         rbg.attrs[f'rigidBody_{r:02d}_inertia'] = rigidBody.inertia.cpu().numpy()
 
 
-from ..enumTypes import *
-from warpSPHIntegrators.integration import IntegrationSchemeType
-def parseKernelFunctions(kernelName):
-    for kernel in KernelFunctions:
-        if kernel.name.lower() == kernelName.lower():
-            return kernel
-    raise ValueError(f"Invalid kernel name: {kernelName}. Valid options are: {[k.name for k in KernelFunctions]}")
-def parseIntegrationScheme(integrationSchemeName):
-    for scheme in IntegrationSchemeType:
-        if scheme.name.lower() == integrationSchemeName.lower():
-            return scheme
-    raise ValueError(f"Invalid integration scheme name: {integrationSchemeName}. Valid options are: {[s.name for s in IntegrationSchemeType]}")
-def parseViscositySwitch(viscositySwitchName):
-    for switch in ViscositySwitch:
-        if switch.name.lower() == viscositySwitchName.lower():
-            return switch
-    raise ValueError(f"Invalid viscosity switch name: {viscositySwitchName}. Valid options are: {[s.name for s in ViscositySwitch]}")
-def parseAdaptiveSupportScheme(adaptiveSupportSchemeName):
-    for scheme in AdaptiveSupportScheme:
-        if scheme.name.lower() == adaptiveSupportSchemeName.lower():
-            return scheme
-    raise ValueError(f"Invalid adaptive support scheme name: {adaptiveSupportSchemeName}. Valid options are: {[s.name for s in AdaptiveSupportScheme]}")
-def parseCompressibleSPHScheme(schemeName):
-    for scheme in CompressibleSPHScheme:
-        if scheme.name.lower() == schemeName.lower():
-            return scheme
-    raise ValueError(f"Invalid compressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in CompressibleSPHScheme]}")
-def parseIncompressibleSPHScheme(schemeName):
-    for scheme in IncompressibleSPHScheme:
-        if scheme.name.lower() == schemeName.lower():
-            return scheme
-    raise ValueError(f"Invalid incompressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in IncompressibleSPHScheme]}")
-def parseWeaklyCompressibleSPHScheme(schemeName):
-    for scheme in WeaklyCompressibleSPHScheme:
-        if scheme.name.lower() == schemeName.lower():
-            return scheme
-    raise ValueError(f"Invalid weakly compressible SPH scheme name: {schemeName}. Valid options are: {[s.name for s in WeaklyCompressibleSPHScheme]}")
+__all__ = [
+    'schemeAttribute', 'exportSimulationSystem', 'writeInitialData', 'writeFrame',
+    'exportDirName', 'resolveExportRoot', 'findExportRuns', 'latestExportPath', 'prepExport',
+]

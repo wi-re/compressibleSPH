@@ -1,6 +1,6 @@
 """Signed-distance-function primitives and combinators.
 
-Re-exported through ``warpSPH.sampling.sdf``; kept a regular package so wheel
+Re-exported through ``warpSPH.geometry.sdf``; kept a regular package so wheel
 packaging does not depend on namespace-package discovery.
 """
 

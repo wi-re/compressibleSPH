@@ -1,16 +1,21 @@
+import datetime
+import inspect
+import re
+
 from .domain import (DomainDescription, buildDomainDescription)
-
-# from ..math.math import getPeriodicPositions
-
-# from ..math.noise import generateNoise
-# from ..math.noiseFunctions.generator import generateOctaveNoise, sampleVoronoi
-
-# from ..sampling import SamplingScheme
-
-# from ..sampling.sdf import getSDF, sampleSDF, sampleSDFNumeric, sdfFunctions, operatorDict, functionDict
-
 from .support import n_h_to_nH, volumeToSupport
-from .util import getCurrentTimestamp, verbosePrint, debugPrint
-# from ..math.scatter import scatter_sum
+
+def getCurrentTimestamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+def verbosePrint(verbose, *args):
+    if verbose:
+        print(*args)
+
+def debugPrint(x):
+    frame = inspect.currentframe().f_back
+    s = inspect.getframeinfo(frame).code_context[0]
+    r = re.search(r"\((.*)\)", s).group(1)
+    print("{} [{}] = {}".format(r,type(x).__name__, x))
 
 __all__ = ['buildDomainDescription', 'DomainDescription', 'getCurrentTimestamp', 'verbosePrint', 'debugPrint', 'n_h_to_nH', 'volumeToSupport']

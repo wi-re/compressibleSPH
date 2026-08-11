@@ -10,7 +10,7 @@ from warpSPHCore import *
 
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from warpSPH.math.math import getPeriodicPositions
+from warpSPH.math import getPeriodicPositions
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.gravity import GravityType, gravityConfiguration
 
