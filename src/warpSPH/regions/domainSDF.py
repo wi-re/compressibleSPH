@@ -8,7 +8,12 @@ def domainSDF(p, domain, invert = False):
 
 def sampleDomainSDF(x, domain, invert = False):
     x_ = x.clone()
-    x_.requires_grad = True
+    if not x_.requires_grad:
+        # x_ is a fresh leaf only when x itself didn't require grad -- clone()
+        # of a tensor that already requires grad inherits requires_grad=True
+        # but is non-leaf, and PyTorch raises on setting the flag on a
+        # non-leaf tensor even when the value wouldn't change.
+        x_.requires_grad = True
     d = domainSDF(x_, domain, invert = invert)
     grad = torch.autograd.grad(outputs = d, inputs = x_, grad_outputs = torch.ones_like(d), create_graph = True, retain_graph = True)
 

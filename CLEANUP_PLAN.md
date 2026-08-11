@@ -33,9 +33,19 @@ audit. Its headline finding — adaptive `dt` losing its tangent in
 kernel-level half that needed a new warpSPHCore capability (`asScalarArg`) and, en route,
 uncovered and fixed a real, unrelated, scheme-independent segfault in
 `computeCompSPHBalanceTermWarp` (a missing query→reference fallback for energies/
-pressures). Also still standing: a live instance of the exact ternary shape that already
-broke Interpolate upstream (`modules/pressure/wp_surfaceAware.py`), not yet gradchecked.
-See Phase 4 below.
+pressures). **Tiers 0 and 1 of the gradcheck infrastructure are now built and checked**
+(2026-08-11): Tier 0's `modules/pressure/wp_surfaceAware.py` gradchecks clean (caveat:
+only verified against the currently-installed warp-lang 1.17.0.dev3, not the
+pyproject-implied 1.12.0/1.16.0 where the analogous Interpolate bug is confirmed present);
+`geometry/sdf.py` / `regions/domainSDF.py` gradchecked into finding and fixing a **real,
+previously-latent crash** (`sampleSDF`/`sampleDomainSDF` raised `RuntimeError` the instant
+a caller passed a position tensor that already required grad). Tier 1's
+`modules/compSPH/*` and `modules/dissipation/*` gradcheck clean; `modules/crk/*` turned up
+**two real bugs, both now fixed** — a self-interaction 0/0 in `modules/crk/limiter.py`'s
+`computeVanLeer` (fixed here) and a deeper bug in warpSPHCore's `correctGradientCRK` (a
+mis-contracted axis inside a hand-written accumulation loop, fixed upstream same day) that
+had made CRKSPH, the production default scheme, not AD-correct with respect to position
+until now. See Phase 4 below.
 
 ---
 
@@ -1007,24 +1017,138 @@ and currently has zero coverage of its own.
 
 **Rollout order** — inventory of all 25 files, by priority:
 
-*Tier 0 — start here, already-flagged risk (see 4.2's findings):*
-- `modules/pressure/wp_surfaceAware.py` — contains the exact same-array ternary shape
-  that broke Interpolate upstream, confirmed live via `deltaSPH` and `monaghan`
-  (`computePressureForceSurfaceAware`). Needs a gradcheck before anything else in this
-  plan; if it fails, the fix is the explicit-`if/else` rewrite warpSPHCore already used
-  four times for the same reason.
-- `geometry/sdf.py` / `regions/domainSDF.py` — hand-rolled `torch.autograd.grad(...,
-  create_graph=True)` for SDF normals, not routed through the warp bridge at all, with a
-  `requires_grad`-conditional `.detach()`. Different code shape than the other 24, so it
-  needs its own gradcheck rather than fitting the `warpOperation`-shaped recipe above.
+*Tier 0 — start here, already-flagged risk (see 4.2's findings). DONE 2026-08-11:*
+- [x] **Infrastructure built.** `scripts/_gradcheck_common.py` (vendored from
+      warpSPHCore's own `scripts/_gradcheck_common.py` — not importable, since that file
+      lives under warpSPHCore's `scripts/`, not its installed package — plus a
+      `compute_densities` repo-local addition), `scripts/gradcheck_wp_surfaceAware.py`,
+      `scripts/gradcheck_sdf.py`, and `tests/test_gradcheck_scripts.py` (subprocess-per-
+      script, same rationale as warpSPHCore's: this repo's own `tests/conftest.py`
+      already locks the main pytest process to `float32` via `bootstrap()` at collection
+      time, before a gradcheck script could ever request `float64`, so in-process was
+      never an option here either). `scripts/gradcheck_scalarArg_dt.py` (Phase 4.2) is
+      now wired into the same test file — it existed since 2026-08-11 but had no
+      automated coverage until now. 45 tests total (was 42).
+- [x] **`modules/pressure/wp_surfaceAware.py` — gradchecks clean, with a caveat worth
+      flagging rather than treating as closed.** The exact same-array ternary shape
+      that broke Interpolate upstream is present (`P_j = referencePressures[j] if
+      referencePressures.shape[0] > 1 else referencePressures[0]`, and its query-side
+      and `mask_j`/`mask_i` twins) and confirmed live via `deltaSPH` and `monaghan`
+      (`computePressureForceSurfaceAware`). `gradcheck_wp_surfaceAware.py` runs
+      `torch.autograd.gradcheck` against `computePressureSurfaceAwareWarp` across all 6
+      `PressureForceScheme` values, each with both a per-particle pressure array (safe
+      branch) and a broadcast one-element array (the suspect branch, since that's what
+      actually exercises `referencePressures[0]` via the ternary) — **all pass**.
+      **But**: this environment's `warp` conda env currently has warp-lang **1.17.0.dev3**
+      installed (from a local checkout, per Phase 4.2's own note that this drifted
+      mid-session), not the pyproject-implied 1.12.0/1.16.0 — and 1.17.0.dev3 is the
+      version the Interpolate bug is confirmed **fixed** in. So this result shows the
+      ternary is safe on the dev build actually running here, not that it's safe on the
+      version this repo is nominally pinned to. Re-running
+      `python scripts/gradcheck_wp_surfaceAware.py` under an actual 1.12.0/1.16.0
+      environment is the outstanding step before calling this file's risk fully closed —
+      deliberately not done here, since swapping the shared conda env's warp-lang version
+      is exactly the kind of cross-cutting environment change that shouldn't happen as a
+      side effect of checking one file.
+- [x] **`geometry/sdf.py` / `regions/domainSDF.py` — gradchecked, found and fixed a real
+      bug, not just a hypothetical risk.** Both `sampleSDF` and `sampleDomainSDF` build a
+      working tensor via `x_ = x.clone()` with no `.detach()`, then unconditionally do
+      `x_.requires_grad = True`. When the caller's `x` already requires grad — exactly
+      the case forward-mode AD needs, since it's how a position tensor carrying a tangent
+      would reach an SDF-based boundary/region term — `x.clone()` is a **non-leaf**
+      tensor (it inherits `requires_grad=True` already), and PyTorch raises
+      `RuntimeError: you can only change requires_grad flags of leaf variables` the
+      instant that flag is touched, even though the value isn't changing. No caller in
+      this repo currently passes a `requires_grad=True` `x` (see
+      `caseUtils/weaklyCompressible.py`'s call sites), so this was latent rather than
+      live — same shape as the `computeCompSPHBalanceTermWarp` segfault Phase 4.2 found:
+      invisible until AD actually threads a tangent through the path. **Fixed** in both
+      files by guarding the assignment (`if not x_.requires_grad: x_.requires_grad =
+      True`) — correct in both branches, since `x_` is only a fresh leaf when `x` itself
+      didn't require grad; verified separately that the guarded version still correctly
+      chains second-order gradients back to the original tensor. `gradcheck_sdf.py`
+      covers both functions, both `invert` values, a hand-rolled circle SDF (isolating
+      `sampleSDF`'s own logic) and the real `getSDF('circle')` `torch.vmap`-wrapped path
+      — a crash-regression check, a detached-output check for the `requires_grad=False`
+      branch, and a full `gradcheck` of the `(d, grad)` output pair against `x` for the
+      `requires_grad=True` branch. All pass, no warp-lang version caveat here (pure
+      PyTorch, no Warp kernel involved).
 
-*Tier 1 — core scheme physics, exercised by every compressible/CRK run:*
+*Tier 1 — core scheme physics, exercised by every compressible/CRK run. DONE 2026-08-11,
+mixed result — two real bugs found, one fixed in this repo, one open upstream:*
 `modules/compSPH/{accel,dudt,balance}.py`, `modules/crk/{accel,dudt}.py` (largest and
 most-corrected kernels — CRK, grad-h, renormalization, volume all compose here, and this
 exact family already had two silent-wrong-argument bugs found by hand in Phase 3),
 `modules/dissipation/{wp_diffusion,wp_conductivity,wp_dissipation}.py` (the viscosity/
 conduction terms — also where the TGV effective-viscosity finding lives, so calibrating
 that switch via AD later needs this to be right first).
+
+- [x] **`_gradcheck_common.py` grew two repo-local fixtures.** `make_compressible_state`
+      builds a real `CompressibleState` (`systems/compressibleMonaghan.py` — same required
+      fields as `CompSPHState`, and already proven to work standalone by
+      `scripts/troubleshoot_balanceTerm_segfault.py`) from independent differentiable
+      leaves, with `pressures`/`soundspeeds`/`alphas` populated (every real compSPH/CRK/
+      Monaghan run populates them). `compute_crk_state` wraps warpSPHCore's
+      `computeCRKFactors` on detached positions, frozen/re-leafed exactly like
+      `compute_densities` — that op's own backward is warpSPHCore's
+      `gradcheck_crk_native.py`'s job, not this repo's.
+- [x] **`modules/compSPH/{accel,dudt,balance}.py` — gradchecks clean.**
+      `scripts/gradcheck_compSPH.py` checks `computeCompSPHAccelWarp` and
+      `computeCompSPHdudtWarp` against positions/supports/masses/densities/velocities/
+      internalEnergies/pressures/soundspeeds/alphas, and `computeCompSPHBalanceTermWarp`
+      against the same plus `ap_ij`/`av_ij` (treated as independent leaves, not chained
+      through accel's own output — operator-level testing, consistent with every other
+      script here) across all 6 `EnergyScheme` values. All pass. `dt` stays a plain float
+      throughout — its differentiability is `gradcheck_scalarArg_dt.py`'s job (Phase 4.2),
+      not duplicated here.
+- [x] **`modules/dissipation/{wp_diffusion,wp_conductivity,wp_dissipation}.py` —
+      gradchecks clean.** `scripts/gradcheck_dissipation.py` checks
+      `computeViscosityWarp`/`computeConductivityWarp`/`computeThermalDissipationWarp` at
+      their own Monaghan-shaped entry points (not just indirectly via compSPH's shared
+      `computePi_actual`). All pass.
+- [x] **`modules/crk/{accel,dudt}.py` — found two real bugs, both now fixed (one here,
+      one upstream in warpSPHCore).** `scripts/gradcheck_crk.py`:
+      1. **Fixed here.** `modules/crk/limiter.py`'s `computeVanLeer` divided by
+         `sgn(grad_j)*abs(grad_j)` (and the symmetric term) unconditionally, patching a
+         resulting NaN *value* afterward (`if ri != ri: ri = 1.0`). Every adjacency list
+         here includes the self-interaction pair (`x_ij == 0` — confirmed by direct
+         inspection: 5 of 19 edges in the 5-particle test line are `i==j`), which drives
+         `grad_i == grad_j == 0`, a genuine 0/0. Forward-safe (the NaN is overwritten) but
+         not backward-safe: reverse-mode AD differentiates the expression that was
+         evaluated, not the value it was replaced with, so the singular local derivative
+         (`1/0` in the division's own backward formula) poisons the adjoint regardless of
+         the later overwrite — the same underlying class of bug as the ternary-adjoint
+         issue Tier 0 chased, in a different guise (a post-hoc NaN patch instead of a
+         same-array ternary). Fixed by guarding the division itself with an `if/else`
+         *before* it happens, preserving the exact "no flow → limiter is 1" intent.
+      2. **Fixed upstream, in warpSPHCore, same day.** With the limiter bug fixed (and
+         separately, with both limiters disabled to rule them out entirely), gradcheck
+         still failed: a finite but *wrong* Jacobian, not a NaN. Isolated by elimination —
+         zeroing viscosity (`C_l=C_q=0`, `alphas=0`, `velocities=0`) still failed,
+         narrowing it to `pressureTerm_ij`'s `gradw_ij`, i.e. `modules/crk/accel.py`'s two
+         `computeKernelGradientCRK` calls. Further isolated by swapping in an identity CRK
+         correction (`A=1, B=0, gradA=0, gradB=0`, which reduces
+         `warpSPHCore.crk.kernel.correctGradientCRK` to the plain kernel gradient): that
+         passed, pointing at `correctGradientCRK`'s handling of a nonzero `B`/`gradB` — the
+         one part of the formula this repo's isolation couldn't get further than without
+         editing warpSPHCore directly. **Root cause, confirmed by the fix itself**:
+         `term4` contracted `gradBi` against `x_ij` via an explicit
+         `for row / for col: product[row] += x_ij[col] * gradBi[row, col]` loop that
+         contracted the wrong axis — using a loop-accumulated value nonlinearly within the
+         same function, a known Warp-AD bug shape (related to but distinct from the
+         "reentrancy in the AD bridge" class already in warpSPHCore's lessons-learned: not
+         reentrancy here, but reverse-mode AD through a hand-written index-accumulation
+         loop silently producing a wrong adjoint). **Fixed upstream** by replacing the loop
+         with a single `matmul(wp.transpose(gradBi), x_ij)` — confirmed
+         `scripts/gradcheck_crk.py` now passes clean, both `computeCrkSPHAccelWarp` and
+         `computeCrkSPHdudtWarp`. Before this landed, **CRKSPH — the production default
+         scheme (`schemeConfig.energyScheme = EnergyScheme.CRK`) — was not AD-correct with
+         respect to position**; it is now. Same cross-repo shape as Phase 3b's
+         `volumeToSupport` and Phase 4.2's `asScalarArg` piece 2, both likewise resolved by
+         a dedicated warpSPHCore-side follow-up rather than worked around here.
+      `gradcheck_crk.py` is wired into `GRADCHECK_SCRIPTS` in
+      `tests/test_gradcheck_scripts.py` alongside `gradcheck_compSPH.py` and
+      `gradcheck_dissipation.py`. 48 tests total (was 45 before Tier 1).
 
 *Tier 2 — scheme-specific correction terms, live but narrower blast radius:*
 `modules/deltaSPH/{wp_densityDelta,wp_viscosityDelta}.py`,
@@ -1277,15 +1401,37 @@ opportunistically, as AD touches each module.
 **Phase 4 is now in progress (2026-08-11), not just scoped.** The `.detach()` half of
 the audit is done (4.2) and found one real, non-obvious bug-shaped gap
 (`computeTimestep`'s adaptive `dt` losing its tangent, compounded by warpSPHCore's
-autograd bridge not supporting differentiable scalar kernel arguments at all) plus one
-confirmed-live instance of the exact ternary shape that already broke Interpolate
-upstream (`modules/pressure/wp_surfaceAware.py`). Next action is building 4.1's
-gradcheck scripts, Tier 0 first (`wp_surfaceAware.py`, then `geometry/sdf.py`/
-`regions/domainSDF.py`) — that's what turns "this pattern looks dangerous" into a
-pass/fail signal instead of a hunch. Phase 3b's repair is already done, and everything
-still open there is legibility. The one exception worth folding into Phase 4 rather than
-leaving in 3b: upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD
-will care whether that path is differentiable.
+autograd bridge not supporting differentiable scalar kernel arguments at all). 4.1's
+Tiers 0 and 1 are also now done. Tier 0: the gradcheck infrastructure
+(`scripts/_gradcheck_common.py`, `tests/test_gradcheck_scripts.py`) is built,
+`modules/pressure/wp_surfaceAware.py`'s flagged same-array ternary gradchecks clean (open
+caveat — only verified under the currently-installed warp-lang 1.17.0.dev3, not the
+pyproject-implied 1.12.0/1.16.0 where the analogous Interpolate bug is confirmed present),
+and `geometry/sdf.py` / `regions/domainSDF.py` turned up and fixed a real latent crash.
+Tier 1: `modules/compSPH/*` and `modules/dissipation/*` gradcheck clean using two new
+repo-local state fixtures (`make_compressible_state`, `compute_crk_state`); `modules/crk/*`
+found two real bugs, **both now fixed** — `modules/crk/limiter.py`'s self-interaction 0/0
+(fixed here, a forward-safe-but-backward-poisoning NaN-patch-after-the-fact, same
+underlying class as Tier 0's ternary risk in a different guise) and a deeper bug in
+warpSPHCore's `correctGradientCRK` (a hand-written accumulation loop contracting `gradBi`
+against the wrong axis; fixed upstream, same day, by replacing it with a single `matmul`).
+Before the second fix landed, **CRKSPH — the production default scheme — was not
+AD-correct with respect to position**; `scripts/gradcheck_crk.py` now confirms it is, and
+is wired into the pass/fail suite like every other Tier 0/1 script. 48 tests, up from 42
+at the start of Phase 4.1. Next action is Tier 2 (`modules/deltaSPH/*`,
+`modules/adaptiveSupport/*`, `modules/shockCapturing/*`, `modules/mdbc/wp_nopenshift.py`,
+`modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
+`modules/surfaceDetection/*`, `modules/util/*`, `sample/wp_deltaShift.py`) — narrower
+blast radius than Tier 1, and by now `_gradcheck_common.py` carries enough of the
+fixture vocabulary (state builders, CRK factors, densities) that step 4 of the 4.1
+recipe — a repo-local `gradcheck` skill mirroring warpSPHCore's — is worth doing either
+just before or just after Tier 2, rather than waiting further. One thing stays
+explicitly outstanding rather than silently dropped: re-running
+`gradcheck_wp_surfaceAware.py` under the actually-pinned warp-lang version (1.12.0 or
+1.16.0, not 1.17.0.dev3). Phase 3b's repair is already done, and everything still open
+there is legibility. The one exception worth folding into Phase 4 rather than leaving in
+3b: upstreaming the tensor-aware `volumeToSupport` into warpSPHCore, since AD will care
+whether that path is differentiable.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

@@ -213,6 +213,8 @@ def computeVsigWarp(
 ):
     if referenceVelocities is None:
         referenceVelocities = queryVelocities
+    if referenceCs is None:
+        referenceCs = queryCs
     with record_function("warpSPH[computeVsig]"):
         with record_function("warpSPH[computeVsig] - Preprocessing"):
             # Preprocessing and input validation
@@ -231,10 +233,10 @@ def computeVsigWarp(
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             queryVelocities_ = queryVelocities if queryVelocities is not None else (queryParticles.velocities if hasattr(queryParticles, 'velocities') else None)
-            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            queryCs_ = queryCs if queryCs is not None else (queryParticles.soundspeeds if hasattr(queryParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
             
             referenceVelocities_ = referenceVelocities if referenceVelocities is not None else (referenceParticles.velocities if hasattr(referenceParticles, 'velocities') else None)
-            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=torch.scalar_t32, device=device))
+            referenceCs_ = referenceCs if referenceCs is not None else (referenceParticles.soundspeeds if hasattr(referenceParticles, 'soundspeeds') else getCachedDummyTensor((1,), dtype=get_torch_precision(), device=device))
             
             if queryCs is not None or (hasattr(queryParticles, 'soundspeeds') and queryParticles.soundspeeds is not None):
                 individual_cs = True

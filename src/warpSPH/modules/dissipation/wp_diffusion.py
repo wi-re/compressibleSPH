@@ -252,6 +252,12 @@ def computeViscosityWarp(
 ):
     if referenceVelocities is None:
         referenceVelocities = queryVelocities
+    if referenceCs is None:
+        referenceCs = queryCs
+    if referenceAlphas is None:
+        referenceAlphas = queryAlphas
+    if referencePressures is None:
+        referencePressures = queryPressures
     with record_function("warpSPH[computeViscosity]"):
         with record_function("warpSPH[computeViscosity] - Preprocessing"):
             # Preprocessing and input validation

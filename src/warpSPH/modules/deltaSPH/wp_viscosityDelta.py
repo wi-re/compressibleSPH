@@ -49,7 +49,7 @@ def computeVelocityDiffusionDeltaSPH_Func_i(
     vel_i: vector(length=Any, dtype=scalar_t), # type: ignore
     referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 
-    inviscid: wp.bool, alpha: wp.float32, c_s: wp.float32, nu: wp.float32, n: wp.int32,
+    inviscid: wp.bool, alpha: scalar_t, c_s: scalar_t, nu: scalar_t, n: wp.int32,
 
     # Dummy value to allow allocation
     outputValue: Any, # type: ignore
@@ -135,7 +135,7 @@ def computeVelocityDiffusionDeltaSPH_Func_Adjacency(
     kernelProperties: kernelState, 
     
     queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    inviscid: wp.bool, alpha: wp.float32, c_s: wp.float32, nu: wp.float32, n: wp.int32,
+    inviscid: wp.bool, alpha: scalar_t, c_s: scalar_t, nu: scalar_t, n: wp.int32,
     
     outputValue : Any, # type: ignore
 ):
@@ -205,7 +205,7 @@ def computeVelocityDiffusionDeltaSPH_Kernel(
     kernelProperties: kernelState,
     # Do not change the parameters above
     queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    inviscid: wp.bool, alpha: wp.float32, c_s: wp.float32, nu: wp.float32, dim: wp.int32,
+    inviscid: wp.bool, alpha: scalar_t, c_s: scalar_t, nu: scalar_t, dim: wp.int32,
 
     # The last parameter is always the output array and should not be changed
     outputValues : wp.array(dtype = vector(length=Any, dtype=scalar_t)) # type: ignore
@@ -287,7 +287,7 @@ def computeVelocityDiffusionDeltaSPH(
                 ),
                 additionalArguments=(
                     queryVelocities, referenceVelocities,
-                    wp.bool(inviscid), wp.float32(alpha), wp.float32(c_s), wp.float32(nu), wp.int32(domain.dim)
+                    wp.bool(inviscid), scalar_t(alpha), scalar_t(c_s), scalar_t(nu), wp.int32(domain.dim)
                 ),
             )
 

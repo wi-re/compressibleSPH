@@ -70,13 +70,29 @@ def computeVanLeer(
     grad_i = wp.dot(corr_i, xij)
     grad_j = wp.dot(corr_j, xij)
 
-    ri = grad_i / (sgn(grad_j) * abs(grad_j))
-    rj = grad_j / (sgn(grad_i) * abs(grad_i))
-    # these terms can be nan or inf. In either case, this would indicate that there is no flow or that the flow is perfectly linear, so we can just set the limiter to 1 in these cases. 
-    
-    if ri != ri:# or ri == scalar_t(float('inf')) or ri == scalar_t(float('-inf')):
+    # A zero denominator here (most commonly the self-interaction pair,
+    # xij == 0, so grad_i == grad_j == 0) means there is no flow or the flow
+    # is perfectly linear, so the limiter should just be 1 in these cases --
+    # same intent as the original NaN-check-after-the-fact version, but the
+    # guard now has to happen *before* the division, not after: computing
+    # the division unconditionally and only patching the resulting NaN value
+    # is forward-safe but not backward-safe. The un-guarded division's local
+    # derivative is itself inf/nan at the singular point, and that poisons
+    # the adjoint even though the forward value gets overwritten -- reverse
+    # AD differentiates the expression that was evaluated, not the value it
+    # was replaced with afterward. Confirmed via
+    # scripts/gradcheck_crk.py (CLEANUP_PLAN.md Phase 4.1 Tier 1): forward
+    # values were finite, but every gradient came back NaN.
+    denom_j = sgn(grad_j) * abs(grad_j)
+    if wp.abs(denom_j) > scalar_t(1.0e-30):
+        ri = grad_i / denom_j
+    else:
         ri = scalar_t(1.0)
-    if rj != rj:# or rj == scalar_t(float('inf')) or rj == scalar_t(float('-inf')):
+
+    denom_i = sgn(grad_i) * abs(grad_i)
+    if wp.abs(denom_i) > scalar_t(1.0e-30):
+        rj = grad_j / denom_i
+    else:
         rj = scalar_t(1.0)
 
 
