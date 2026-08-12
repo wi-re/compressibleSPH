@@ -3,7 +3,7 @@ platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
 rootdir: /home/veldora/dev/warpSPH
 configfile: pyproject.toml
 plugins: cov-7.1.0
-collected 10 items / 9 deselected / 1 selected
+collected 15 items / 14 deselected / 1 selected
 
 tests/test_gradcheck_scripts.py .                                        [100%]
 
@@ -21,4 +21,4 @@ tests/test_gradcheck_scripts.py .                                        [100%]
     class APICLaunchPtrLocation(ctypes.Structure):
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-================ 1 passed, 9 deselected, 16 warnings in 14.54s =================
+================ 1 passed, 14 deselected, 16 warnings in 10.85s ================

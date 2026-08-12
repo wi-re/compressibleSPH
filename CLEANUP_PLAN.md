@@ -25,10 +25,10 @@ the `domain.py` collision, and all three stutter modules (`math/math.py`,
 what landed and what's deliberately still open. What remains overall is the dead-code
 sweep and the notebook simplification, neither load-bearing.
 
-**Phase 4** (2026-08-11, ongoing across two sessions) is the AD-readiness gradcheck
-rollout. Tiers 0 and 1 are done; Tier 2 is partly done (`adaptiveSupport`, `deltaSPH`,
-`shockCapturing`, `mdbc` gradchecked and wired in, 5 modules remain). The `.detach()`
-audit (4.2) is done. A warp-lang-version regression found and **fixed same day**
+**Phase 4** (2026-08-11, ongoing across three sessions) is the AD-readiness gradcheck
+rollout. Tiers 0, 1 and 2 are all **done** (2026-08-12) — 25/25 files in the original
+inventory now have gradcheck coverage or a documented not-in-scope call. The
+`.detach()` audit (4.2) is done. A warp-lang-version regression found and **fixed same day**
 (2026-08-11) — three previously-clean scripts (`wp_surfaceAware`, `compSPH`,
 `dissipation`) failed under the currently-installed warp-lang 1.15.0; the same-array
 ternary pattern Tier 0 had flagged as a risk was confirmed real and broader than
@@ -1066,7 +1066,13 @@ and currently has zero coverage of its own.
    right home for standalone verification tooling.
 4. Once 2-3 scripts exist, write a repo-local `gradcheck` skill (or extend an existing
    one) mirroring warpSPHCore's `.claude/skills/gradcheck/SKILL.md`, so adding the next
-   one follows a documented recipe instead of re-deriving it.
+   one follows a documented recipe instead of re-deriving it. **DONE 2026-08-12** —
+   `.claude/skills/gradcheck/SKILL.md`, written once all 25 files were covered and the
+   full bug-class catalog below was settled, not partway through (see the note at
+   Tier 2's close for why: writing it early would have meant revising it after every
+   later finding, since 6 of the 9 bug classes only surfaced in the second half of the
+   rollout). Catalogs all nine bug classes found across Tiers 0-2 with their fix
+   recipes, not just the ternary one warpSPHCore's own skill covers.
 
 **Rollout order** — inventory of all 25 files, by priority:
 
@@ -1203,19 +1209,22 @@ that switch via AD later needs this to be right first).
       `tests/test_gradcheck_scripts.py` alongside `gradcheck_compSPH.py` and
       `gradcheck_dissipation.py`. 48 tests total (was 45 before Tier 1).
 
-*Tier 2 — scheme-specific correction terms, live but narrower blast radius. Partly
-done (2026-08-11): `adaptiveSupport`, `deltaSPH`, `shockCapturing`, `mdbc` are
-gradchecked and wired into the suite; `incompressible/wp_alpha.py`, `liu/wp_mat.py`,
-`surfaceDetection/*`, `util/*`, `sample/wp_deltaShift.py` remain.*
+*Tier 2 — scheme-specific correction terms, live but narrower blast radius. DONE
+2026-08-12: `adaptiveSupport`, `deltaSPH`, `shockCapturing`, `mdbc` (2026-08-11) and
+`incompressible/wp_alpha.py`, `liu/wp_mat.py`, `surfaceDetection/*`, `util/*`,
+`sample/wp_deltaShift.py` (2026-08-12) are all gradchecked and wired into the suite.
+All 25 files from the original Tier 2 inventory are now covered.*
 
 - [x] **`modules/adaptiveSupport/{wp_omega,wp_psi0}.py` — gradchecks clean.**
       `scripts/gradcheck_adaptiveSupport.py` checks `computeOmegaWarp` (grad-h
       correction) and `computePsi0Warp` (Owen adaptive-support reference spacing) —
       both share the family's usual same-array-safe apparent-volume ternary and take
       only positions/supports/masses/densities. No bugs found.
-- [x] **`modules/deltaSPH/wp_viscosityDelta.py`, `modules/shockCapturing/wp_computeM.py`
-      — gradcheck clean; `modules/shockCapturing/wp_vsig.py` — one bug fixed, one
-      confirmed and left open (upstream warp-lang, not fixable here).**
+- [x] **`modules/deltaSPH/wp_viscosityDelta.py`, `modules/shockCapturing/
+      {wp_computeM,wp_vsig}.py` — all gradcheck clean; `wp_vsig.py` needed four
+      real fixes, all now landed (2026-08-11, wp.max/memory bugs; 2026-08-12,
+      the restructuring that actually fixed the wp.max bug plus a separate
+      grid-traversal correctness bug found while verifying it).**
       `scripts/gradcheck_deltaSPH.py` and `scripts/gradcheck_shockCapturing.py`.
       `computeVsigWarp`'s signal-velocity computation surfaced:
       1. **Fixed.** `computeVsigWarp` had a `referenceVelocities = queryVelocities`
@@ -1236,25 +1245,79 @@ gradchecked and wired into the suite; `incompressible/wp_alpha.py`, `liu/wp_mat.
          unrelated `torch.scalar_t32` typo (not a real torch dtype — should have been
          `get_torch_precision()`) in the same dummy-tensor line, present in the same 8
          files.
-      2. **Confirmed, not fixed — needs an upstream warp-lang fix.** With the memory
-         bug out of the way, `computeVsigWarp`'s backward is *deterministically wrong*
-         for 2 of 3 particles in a hand-picked, tie-free case (verified 3 independent
-         ways: `gradcheck`, `torch.autograd.grad` cross-checked per output, and a
-         from-scratch manual central-difference replay — the manual replay agrees with
-         hand calculus and disagrees with `torch.autograd`'s result). Root cause:
+      2. **Fixed 2026-08-12 — was previously written up as "confirmed, not fixed,
+         needs an upstream warp-lang fix," which turned out wrong.** With the memory
+         bug out of the way, `computeVsigWarp`'s backward was *deterministically
+         wrong* for 2 of 3 particles in a hand-picked, tie-free case. Root cause:
          `out = wp.max(out, vsigs)`, a loop-carried variable reassigned via a
-         nonlinear op inside the neighbor loop — same underlying bug *class* as Tier
-         1's `correctGradientCRK` finding ("reverse-mode AD through a loop silently
-         produces a wrong adjoint"), different shape: here the adjoint sometimes
-         attributes the gradient to the wrong neighbor or drops it to zero, even
-         though the forward value is correct. Swapping in the logically-equivalent
-         `wp.where(vsigs > out, vsigs, out)` made no difference, confirming the bug is
-         in how Warp differentiates the loop-carried reassignment itself, not in
-         `wp.max`'s adjoint. `gradcheck_shockCapturing.py` runs gradcheck against this
-         case and treats "fails with exactly this mismatch" as the expected, tracked
-         state — a regression guard, not a script failure, so a future Warp upgrade
-         that changes this either direction will show up as a script-behavior change
-         rather than staying silently stale.
+         nonlinear op *inside* the neighbor loop, every iteration — the same
+         underlying bug *class* as Tier 1's `correctGradientCRK` finding, a different
+         concrete shape (a repeated in-loop nonlinear reassignment, not a one-time
+         post-loop read of an otherwise-linear accumulator, which is what
+         `computeAlphaWarp`'s Tier 2 finding turned out to be, and what that fix's
+         "different scope" insight doesn't directly cover). Swapping `wp.max` for the
+         logically-equivalent `wp.where` made no difference, which is what led to the
+         original "upstream-only" conclusion. **The real fix**, once `computeAlphaWarp`
+         showed loop-shaped AD bugs are sometimes locally fixable at all: split
+         `computeVsig_Func_i` (the old, single, in-loop-max function) into
+         `computeVsig_Func_i_argmax` — a forward-only pass that finds *which*
+         neighbor achieves the max and its index via the same loop-carried `wp.max`
+         pattern as before, but whose only outputs consumed further are a
+         `wp.bool`/`wp.int32` pair (indices are never differentiated by Warp, so a
+         wrong adjoint on this function's own discarded return value is harmless) —
+         and `computeVsig_valueAt`, which recomputes the actual vsig value for that
+         *one already-known* index with no loop at all, differentiating via Warp's
+         ordinary automatic diff exactly like every other per-neighbor SPH formula in
+         this codebase. **General recipe**: separate "which candidate wins" (forward-
+         only, discrete, never needs a correct gradient) from "what is that
+         candidate's value" (recomputed once, ordinary code) — this is a distinct
+         technique from `computeAlphaWarp`'s "move the reduction to a different
+         function scope" fix, useful when the nonlinearity is *inside* the loop
+         rather than a one-time reduction *after* it. Worth trying on
+         `correctGradientCRK` too if it's ever revisited, though that one is already
+         fixed upstream so there's no pressing need.
+      3. **Found and fixed while chasing (2), 2026-08-12.** `cs_i = queryCs[i] if
+         individual_cs else scalar_t(1.0)` and its `cs_j` counterpart are a
+         same-array-vs-default ternary on a `wp.bool` kernel argument — exactly the
+         shape `access_optional` (added to warpSPHCore during the earlier "Regression"
+         writeup below) was built for, but `wp_vsig.py` was never one of the 8 files
+         that fix's original sweep touched. It silently zeroed `d(vsig)/d(cs)`
+         entirely — invisible until now because finding (2) was already failing
+         gradcheck outright, masking this second, independent bug underneath it.
+         Fixed by routing both through `access_optional`.
+      4. **Found and fixed while verifying (2)'s restructuring against grid
+         traversal, 2026-08-12 — a separate, pre-existing correctness bug, not an AD
+         bug.** `computeVsig_Func_i_argmax`'s neighbor loop had **no compact-support
+         filter at all**, unlike every sibling module in this file family (`wp_dilate.
+         py`, `wp_sum.py`, ...), which all gate on `w_ij > 0` or an equivalent radius
+         check. Invisible for the `AdjacencyList` path (`radiusSearchCompactHashMap`
+         already returns an exact, pre-filtered neighbor list — every real call site's
+         path) but wrong for grid traversal (`checkOffset` returns every particle in a
+         nearby *cell*, coarser than the exact support radius). Confirmed directly:
+         `AdjacencyList` and grid-traversal results disagreed on the same particle set
+         before a `computePairwiseSupport`-based radius check was added, and matched
+         exactly (and matched a from-scratch brute-force reference) after. A second,
+         related bug was found in the same investigation and fixed in the same pass:
+         the *outer* offset loop (`computeVsig_Func_Adjacency`, now
+         `computeVsig_Func_Adjacency_argmax`) had been summing each offset's own
+         per-offset max via `+=` — correct only for `AdjacencyList` mode
+         (`numOffsets=1`, so the sum has one term) but wrong for grid traversal, where
+         up to 27 offsets in 3D would each contribute their own max, inflating the
+         result by summing several maxes instead of taking the max over their union.
+         Fixed by having the traversal function do its own argmax-across-offsets
+         (comparing, not accumulating) and moving the one actual differentiable
+         evaluation up into `computeVsig_Kernel` itself, run once per particle instead
+         of once per offset. `gradcheck_shockCapturing.py`'s `_run_grid_consistency`
+         is the regression guard — a forward-value agreement check between
+         `AdjacencyList` and grid traversal on the same particles, not a gradcheck.
+
+      With all four fixed, `computeVsigWarp` gradchecks clean (`individual_cs` on and
+      off) and agrees exactly between `AdjacencyList` and grid traversal. **This was
+      the last item in the entire Tier 0-2 rollout written up as "needs an upstream
+      fix" — it no longer is.** `correctGradientCRK` (Tier 1) was fixed upstream, in
+      warpSPHCore, at the time it was found; with vsig now also fixed, there is no
+      confirmed AD bug left anywhere in this repo's gradcheck coverage without a
+      landed fix.
 - [x] **`modules/mdbc/wp_nopenshift.py` — three real bugs found and fixed (getting
       the kernel to run under gradient tracking at all), then gradchecks clean.**
       `scripts/gradcheck_mdbc.py` is the first script in this family to exercise a
@@ -1315,10 +1378,149 @@ gradchecked and wired into the suite; `incompressible/wp_alpha.py`, `liu/wp_mat.
       this file, since any caller that omits densities on a bare `ParticleState` —
       legitimate per every other gradcheck script's own `hasattr`-fallback precedent
       — hits this same NaN the instant gradients are requested through this path.
-- [ ] `modules/incompressible/wp_alpha.py`, `modules/liu/wp_mat.py`,
-      `modules/surfaceDetection/{wp_barecasco,wp_dilate,wp_maronne}.py`,
-      `modules/util/{wp_sum,wp_numNeighbors}.py`, `sample/wp_deltaShift.py` — not yet
-      started.
+- [x] **The last 5 Tier 2 areas — DONE 2026-08-12.** `scripts/gradcheck_incompressible.py`,
+      `gradcheck_liu.py`, `gradcheck_surfaceDetection.py`, `gradcheck_util.py`,
+      `gradcheck_deltaShift.py` — 5 new scripts, wired into `GRADCHECK_SCRIPTS`
+      (58 tests, up from 53). Two real bugs found and fixed (one here, one by the
+      user directly), several modules confirmed non-differentiable by construction
+      on purpose, all scripts now genuinely gradcheck clean — no open/expected-failure
+      regression guards remain among the 5.
+
+      **Fixed here.** `modules/surfaceDetection/wp_barecasco.py`'s
+      `computeBarecascoSurfaceDetectionWarp` passed `barecascoThreshold` — a bare
+      Python `float`, the caller's `surfaceConfig.barecascoThreshold` — straight into
+      `additionalArguments` with no `scalar_t(...)` cast, unlike every sibling module in
+      this file family (e.g. `computeVelocityDiffusionDeltaSPH`'s `scalar_t(alpha)`).
+      Warp infers a bare Python float as `wp.float32` regardless of the active
+      precision, so any caller running at `warpSPHCore_PRECISION=float64` — this
+      gradcheck script, and any real run under `warpSPHBootstrap.
+      bootstrap(precision='float64')` — hit a hard kernel-launch `TypeError`
+      (`expected float64, got float32`) the moment barecasco surface detection ran, not
+      a silent wrong-value bug. Invisible at the default float32 precision, which is why
+      it was still there to find. Fixed by wrapping it in `scalar_t(...)`.
+
+      **Found a real, previously-undiagnosed member of the "reverse-mode AD through a
+      loop silently produces a wrong adjoint" bug family, and — unlike the two prior
+      instances in this family (Tier 1's `correctGradientCRK`, already fixed upstream;
+      Tier 2's `computeVsigWarp`'s `wp.max`, at the time of this writing still
+      documented open) — this one has a real, local fix, found and applied by the
+      user directly.** (`computeVsigWarp`'s finding was itself fixed shortly after,
+      once this fix's "scope matters" insight suggested a related-but-different
+      technique for the in-loop-reassignment shape; see the vsig entry above for the
+      full writeup — by the end of this session, nothing in this family is still
+      open.) `modules/incompressible/wp_alpha.py`'s
+      `computeAlpha_Func_i_first` accumulated `sumA`/`sumB` over its own dynamic
+      (runtime, per-particle) neighbor loop and then computed `alpha = areaI/mi *
+      wp.dot(sumA, sumA) + areaI*sumB` — a nonlinear reduction of the loop-accumulated
+      `sumA` — **in the same `@wp.func` scope as the loop itself, right before
+      returning**. Confirmed with a from-scratch minimal Warp kernel with zero SPH
+      machinery: `s = sum(x[j]*x[j] for j in range(n))` then `out = s*s`, both in one
+      kernel body, with `n` a **kernel argument** (dynamic trip count) — an all-zero
+      analytical gradient against a correct nonzero numerical one. The identical
+      computation with the loop's own accumulation isolated inside a *separate*
+      `@wp.func` that returns the raw sum, and the squaring done by the *caller* on
+      that return value, differentiates correctly — confirmed with the same minimal
+      repro, including with an extra level of function nesting matching this module's
+      own inner-loop/outer-loop `Func_i`/`Func_Adjacency` shape (a `middle()` function
+      containing the outer accumulating loop and calling `inner()`, with the squaring
+      done by the *kernel* on `middle()`'s return value, differentiates correctly even
+      though two dynamic loops are crossed in total). **The rule is about scope, not
+      loop-nesting depth**: any number of nested dynamic loops is fine as long as the
+      innermost one whose accumulation directly feeds the nonlinear op finishes and
+      *returns* before that op reads it, in a different function's compiled scope.
+
+      **Fixed, by the user, in `modules/incompressible/wp_alpha.py`**: split
+      `computeAlpha_Func_i_first` so it returns the raw `(sumA, sumB)` tuple instead of
+      computing and returning `alpha`, and moved `alpha = areaI/mi*wp.dot(sumA, sumA) +
+      areaI*sumB` into the caller (`computeAlpha_Func_Adjacency_first`), computed there
+      from the tuple and then accumulated linearly into `out`. This is a pure textual
+      relocation, not a mathematical change — `sumA`/`sumB` are freshly zeroed and
+      fully accumulated inside one call to `computeAlpha_Func_i_first` per outer offset
+      either way, so the per-offset value being squared is identical before and after;
+      only which function's compiled scope contains the squaring changed, and that is
+      what fixes the adjoint. Verified: `scripts/gradcheck_incompressible.py` now
+      gradchecks clean (was an expected-failure regression guard in an earlier version
+      of this writeup, superseded by this fix). **This gives a concrete, reusable
+      recipe** for any future module that hits this shape: if a `@wp.func` accumulates
+      a value over a loop and then reduces it nonlinearly before returning, split it
+      into two functions — one that returns the raw accumulator, one (or the caller)
+      that applies the nonlinear reduction to the returned value.
+
+      **A second suspected instance turned out to be a false alarm, not a second bug —
+      corrected after further investigation, same day.** An earlier version of this
+      script's `outputNormals` gradcheck (`modules/surfaceDetection/wp_barecasco.py`,
+      whose per-particle "cover vector" `sum_j -n_ij` is accumulated across two nested
+      dynamic loops inside a `@wp.func`, then normalized by the *enclosing* `@wp.kernel`
+      on the returned value — already the "different scope" shape confirmed safe above)
+      failed with what looked like the same all-zero-analytical signature, and was
+      initially written up as a second confirmed instance of the bug. It was not: the
+      test case (`line_case`'s 5 *evenly-spaced* particles) put the middle particle's
+      cover vector — the sum of unit vectors to two neighbors on each side — extremely
+      close to zero by construction, and `wp.normalize`'s own derivative genuinely
+      blows up near a zero-norm input, independent of any Warp AD bug. Re-run on an
+      asymmetric case that keeps every particle's cover vector comfortably away from
+      zero: clean. **Don't re-propose treating barecasco's normals as a tracked
+      regression guard** — it never needed one; the earlier framing was a
+      misdiagnosis from a degenerate test fixture, not a confirmed bug, and this is now
+      corrected in both `gradcheck_incompressible.py`'s and `gradcheck_surfaceDetection.
+      py`'s docstrings.
+
+      **Confirmed non-differentiable by construction, not full-gradchecked (same
+      "not in scope" call as `wp_psi.py`):**
+      - `modules/surfaceDetection/wp_barecasco.py`'s second output (`outputValues`) and
+        `modules/surfaceDetection/wp_maronne.py`'s `computeMaronneSurfaceDetection` are
+        both genuine discrete counts of boolean geometric conditions — their true
+        derivative is zero almost everywhere and undefined exactly at a condition
+        boundary. A plain `gradcheck` attempt against barecasco's second output confirms
+        the failure mode is exactly that artifact (a spuriously huge finite-difference
+        value where a probe crosses a threshold, e.g. `-1.5e6`), not a meaningful bug
+        report, so it is not attempted as a real check. `computeMaronneSurfaceDetection`
+        additionally casts to a boolean via `< 0.5` in plain PyTorch before returning,
+        which already breaks the autograd graph by construction — verified its output
+        reports `requires_grad=False`, a regression check rather than a full gradcheck.
+      - `modules/util/wp_numNeighbors.py`'s `countNeighborsWarp` is likewise a discrete
+        count, but structurally different: its output dtype is taken from
+        `queryParticles.kinds` (genuinely `wp.int32`), so the `_dtype_is_float` bridge
+        fix (added for `gradcheck_mdbc.py`'s multi-output finding) applies directly at
+        the kernel-launch boundary — `requires_grad=False` on the raw `warpWrapper2`
+        output itself, not only after a caller-side comparison. Verified as a second,
+        independent regression check on that fix (the first being `gradcheck_liu.py`'s
+        `nnbrs` assertion below).
+
+      **Gradcheck clean, no bugs found:**
+      - `modules/liu/wp_mat.py`'s `computeLiuMatricesWarp` — a **four-output** kernel
+        (`shep_out`, `vector_out`, `matrix_out`, `numNeighbors_out`, mixing three
+        float-family outputs with one `wp.int32` count), the same mixed-dtype
+        multi-output shape that broke `computeMdbcNoPenShiftWarp` before the
+        `_dtype_is_float` fix — verified here as a second regression check (`nnbrs.
+        requires_grad` asserted `False` inside the gradcheck closure itself). Every
+        output is a purely linear per-neighbor accumulation with no nonlinear reduction
+        of any of them, so it does not hit the `computeAlphaWarp` shape above.
+        `gradcheck_liu.py`.
+      - `modules/surfaceDetection/wp_barecasco.py`'s `outputNormals` — see above; clean
+        once tested on a non-degenerate case. `gradcheck_surfaceDetection.py`.
+      - `modules/surfaceDetection/wp_dilate.py`'s `dilateSurfaceMaskWarp` — gradchecked
+        against `freeSurfaceMask` (the only continuously-meaningful input; positions
+        only gate discrete connectivity, the same non-differentiable-by-design adjacency
+        contract `_gradcheck_common.py` already documents). `gradcheck_
+        surfaceDetection.py`.
+      - `modules/util/wp_sum.py`'s `warpSum` — gradchecked against `queryValues`, the
+        same masked-linear-sum shape as `dilateSurfaceMaskWarp`. `gradcheck_util.py`.
+      - `sample/wp_deltaShift.py`'s `computeDeltaShiftWarp` — gradchecked against
+        positions/supports/masses/densities across the full Fourtakas-shifting formula
+        (including a `wp.pow(k, n)` term, which stays away from `k=0` for this script's
+        regular test case since `k`'s own denominator shares the same `w_ij>0` gate).
+        `gradcheck_deltaShift.py`.
+
+      Two dead-code observations, not fixed (harmless, unreachable, same non-decision as
+      leaving `modules/mdbc/wp_nopenshift.py`'s 69 commented lines alone per Phase 3b):
+      `modules/liu/wp_mat.py`'s `computeLiuMatricesWarp` and `modules/util/wp_sum.py`'s
+      `warpSum` (plus `dilateSurfaceMaskWarp`, `computeMaronneSurfaceDetection`) each end
+      with a `return warp_result` statement referencing an undefined name — but every one
+      sits after a `return warpWrapper2(...)` inside the enclosing `with record_function`
+      block, which already returns, so the trailing line never executes. Cosmetic leftover
+      from the same commented-out `warpWrapper`-vs-`warpWrapper2` migration visible
+      throughout this file family; not touched since it is provably unreachable.
 
 *Not in scope — verified non-differentiable by construction, checked 2026-08-11:*
 `modules/adaptiveSupport/wp_psi.py` is the **one file of the 25 using a raw `wp.launch`
@@ -1668,16 +1870,61 @@ AD-correct with respect to position**; `scripts/gradcheck_crk.py` now confirms i
 is wired into the pass/fail suite like every other Tier 0/1 script. 48 tests, up from 42
 at the start of Phase 4.1.
 
-**Tier 2 is partly done (2026-08-11, second session).** `adaptiveSupport`, `deltaSPH`,
-`shockCapturing` (three scripts that already existed but weren't wired into the suite
-or written up) and a new `mdbc` script are gradchecked and wired in (49 tests, up from
-48). `mdbc` alone found and fixed three real bugs just to get a multi-output kernel
-running under gradients at all — two in warpSPHCore's own math/autograd layer (a
-missing `vec1i` type breaking `zero_like`'s codegen; the autograd bridge setting
-`requires_grad` on non-float kernel outputs unconditionally) and one here (an
-unguarded float32 literal in a float64 kernel) — see Tier 2 above for the full
-writeup. Remaining: `incompressible/wp_alpha.py`, `liu/wp_mat.py`,
-`surfaceDetection/*`, `util/*`, `sample/wp_deltaShift.py`.
+**Tier 2 is now fully done (2026-08-11 second session, finished 2026-08-12).**
+`adaptiveSupport`, `deltaSPH`, `shockCapturing` (three scripts that already existed but
+weren't wired into the suite or written up) and a new `mdbc` script were gradchecked
+and wired in first (49 tests, up from 48). `mdbc` alone found and fixed three real bugs
+just to get a multi-output kernel running under gradients at all — two in warpSPHCore's
+own math/autograd layer (a missing `vec1i` type breaking `zero_like`'s codegen; the
+autograd bridge setting `requires_grad` on non-float kernel outputs unconditionally)
+and one here (an unguarded float32 literal in a float64 kernel). The remaining 5 areas
+(`incompressible/wp_alpha.py`, `liu/wp_mat.py`, `surfaceDetection/*`, `util/*`,
+`sample/wp_deltaShift.py`) were finished 2026-08-12 (58 tests, up from 53): one more
+scalar_t-cast bug fixed (`wp_barecasco.py`'s `barecascoThreshold`, crashing any
+float64 caller), and a **new** member of the loop-carried-AD bug family found in
+`computeAlphaWarp` — a dynamic-trip-count neighbor loop followed by a nonlinear
+reduction (`wp.dot(sumA, sumA)`) of the loop-accumulated value **in the same
+`@wp.func` scope as the loop** silently zeroed that contribution's adjoint. **This one
+has a real local fix**: split the accumulating function so it returns the raw
+accumulator, and do the nonlinear reduction in the caller instead. The user applied
+this fix directly to `wp_alpha.py`; `gradcheck_incompressible.py` now gradchecks
+clean. A second suspected instance (barecasco's cover-vector `wp.normalize`) turned
+out on investigation to be a false alarm — a degenerate test case (evenly-spaced
+particles putting one cover vector at the zero-norm singularity `wp.normalize`
+genuinely has), not a second bug; fixed by using an asymmetric test case instead,
+also now clean. Several modules were confirmed non-differentiable by construction
+rather than gradchecked (`wp_maronne.py`, barecasco's surface-count output,
+`countNeighborsWarp` — all genuine discrete counts, the same "not in scope" call as
+`wp_psi.py`).
+
+**Continued the same day: `computeVsigWarp`'s `wp.max` finding — previously the last
+item in the whole rollout written up as "confirmed, needs an upstream fix" — turned
+out to have a real local fix too, once `computeAlphaWarp`'s "scope matters" insight
+suggested where to look.** Unlike `computeAlphaWarp` (a linear accumulation, reduced
+nonlinearly once *after* the loop), vsig's `out = wp.max(out, vsigs)` reassigns
+nonlinearly *inside* the loop, every iteration — a different shape that "move the
+reduction to a different scope" doesn't directly fix. The working technique instead:
+separate "which neighbor wins" (a forward-only search, discrete, never needs a
+correct gradient since indices aren't differentiated) from "what is that neighbor's
+value" (recomputed once, outside any loop, via ordinary auto-diffable code). Chasing
+this down surfaced two more, independent bugs in the same file: a same-array-vs-
+default `cs` ternary that `access_optional`'s original sweep had missed (silently
+zeroing `d(vsig)/d(cs)`), and — found while specifically verifying the fix against
+grid traversal rather than just the `AdjacencyList` path every other script in this
+family uses — a **missing compact-support filter** (this loop had never gated on
+`w_ij > 0` at all, unlike every sibling module) compounded by an **outer-offset
+summing bug** (summing each grid cell-offset's own max instead of taking the max over
+their union, silently correct only because `AdjacencyList` mode's `numOffsets` is
+always 1). All four fixed; see the vsig entry under Tier 2 above for the full
+writeup, including the forward-value-consistency regression guard
+(`_run_grid_consistency`) added because none of the existing scripts exercised grid
+traversal at all. **This closes out the entire Tier 0-2 gradcheck rollout with zero
+remaining "needs an upstream fix" findings** — `correctGradientCRK` was fixed
+upstream in warpSPHCore the same week, and nothing else is still open.
+
+See Tier 2 above for the full writeup of both sessions, including the minimal Warp
+repro that isolates the `computeAlphaWarp` bug and its fix from any SPH-specific
+code.
 
 **The warp-lang-version caveat Tier 0 flagged and left open has now bitten — and been
 fixed, same day.** Re-running the full suite while wiring in Tier 2 found that
@@ -1710,12 +1957,24 @@ pattern. Verified via `gradcheck_crk.py` (still clean) and a real 3-step CRKSPH 
 
 By now `_gradcheck_common.py` carries enough of the fixture vocabulary (state
 builders, CRK factors, densities) that step 4 of the 4.1 recipe — a repo-local
-`gradcheck` skill mirroring warpSPHCore's — is worth doing once Tier 2's remaining 5
-modules are closed out, rather than waiting further. Phase 3b's repair is already
-done, and everything still open there is legibility. The one exception worth folding
-into Phase 4 rather than leaving in 3b: upstreaming the tensor-aware
-`volumeToSupport` into warpSPHCore, since AD will care whether that path is
-differentiable.
+`gradcheck` skill mirroring warpSPHCore's — was worth doing once Tier 2 closed out
+(2026-08-12; see Tier 2 above), and is now **done**:
+`.claude/skills/gradcheck/SKILL.md`. Phase 3b's repair is already done, and
+everything still open there is legibility. The one exception worth folding into
+Phase 4 rather than leaving in 3b: upstreaming the tensor-aware `volumeToSupport`
+into warpSPHCore, since AD will care whether that path is differentiable.
+
+With Tiers 0-2 all closed, what's left in Phase 4 is just the second-pass
+`.item()`/`.cpu()`/`.numpy()` audit 4.2 flagged as not yet re-verified with real
+gradcheck coverage — now that coverage exists, worth actually doing. The other two
+items this section used to list are both done: the repo-local `gradcheck` skill
+(step 4 of the 4.1 recipe) is written (`.claude/skills/gradcheck/SKILL.md`), and
+deciding whether to pursue `correctGradientCRK`'s and `computeVsigWarp`'s
+loop-adjacent findings with the warp-lang project resolved to "no need" — both turned
+out to have real local fixes (`correctGradientCRK` upstream in warpSPHCore,
+`computeVsigWarp` here, via a technique distinct from `computeAlphaWarp`'s "different
+scope" fix — see the vsig entry under Tier 2 above). There is currently no confirmed
+AD bug anywhere in this repo's gradcheck coverage without a landed fix.
 
 Deliberately last: the repo-weight rewrite, so it operates on the polished Phase 2
 files that are actually worth publishing rather than on soon-to-be-regenerated output.

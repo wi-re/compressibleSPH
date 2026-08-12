@@ -432,7 +432,7 @@ def computeBarecascoSurfaceDetectionWarp(
                     renormalizationState,
                 ),
                 additionalArguments=(
-                    barecascoThreshold,
+                    scalar_t(barecascoThreshold),
                 ),
             )
 

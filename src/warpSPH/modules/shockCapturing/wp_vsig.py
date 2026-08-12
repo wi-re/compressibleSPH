@@ -8,9 +8,47 @@ from warpSPHCore import *
 
 
 @wp.func
-def computeVsig_Func_i(
+def computeVsig_valueAt(
     # General Shape Parameters and indices
-    i : wp.int32,  dim: wp.int32, 
+    dim: wp.int32,
+
+    # SPH properties for the query set
+    xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, # type: ignore
+
+    # SPH properties for the reference set (indexed by j, a single, already-known index)
+    referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
+    j: wp.int32,
+
+    domainState: domainData,
+
+    vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
+    individual_cs: wp.bool, cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
+) -> scalar_t:
+    # The per-neighbor vsig formula, evaluated once for a single, already-known
+    # neighbor index -- deliberately *not* inside a loop. See this file's module
+    # docstring: this is the piece that must stay outside the dynamic neighbor loop
+    # for Warp's reverse-mode AD to differentiate it correctly.
+    xj, hj, mj, rhoj, kj = getParticle(referenceState, j)
+    vel_j = referenceVelocities[j]
+    cs_j = access_optional(referenceCs, j, individual_cs, scalar_t(1.0))
+
+    x_ij = computeDistanceVec(xi, xj, domainState)
+    r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
+
+    v_ij = vel_i - vel_j
+    mu_ij = wp.dot(v_ij, x_ij) / (r_ij + scalar_t(1.0e-14) * hi)
+
+    c_bar = scalar_t(0.5) * (cs_i + cs_j)
+    vsigs = c_bar - mu_ij
+    if mu_ij > 0:
+        vsigs = scalar_t(0.0)
+    return vsigs
+
+
+@wp.func
+def computeVsig_Func_i_argmax(
+    # General Shape Parameters and indices
+    i : wp.int32,  dim: wp.int32,
 
     # SPH properties for the query set (indexed by i)
     xi: vector(dtype = scalar_t, length=Any), hi: scalar_t, mi: scalar_t, rhoi: scalar_t, # type: ignore
@@ -22,10 +60,10 @@ def computeVsig_Func_i(
     # periodicity : wp.array(dtype = wp.bool), domainMin : wp.array(dtype = scalar_t), domainMax : wp.array(dtype = scalar_t), # type: ignore
     domainState: domainData,
     kernelProperties: kernelState,
-    
+
     # Operation specific parameters
      # type: ignore
-            
+
     beginIndex: wp.int32, # type: ignore
     numIndices: wp.int32, # type: ignore
     offsetArray: wp.array(dtype = wp.int64), # type: ignore
@@ -33,27 +71,21 @@ def computeVsig_Func_i(
     # Operation Mode for masking certain kinds of interactions, e.g. for directional operations
     ki : wp.int32, referenceKinds : wp.array(dtype = wp.int32), # type: ignore
 
-    # Optional Correction Terms:
-    # Gradient renormalization matrices for each query point, used for correcting the kernel gradient based on the local particle distribution.
-    useGradientRenormalization: wp.bool, Li: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
-    # Grad-h correction terms for each query and reference point, used for correcting the kernel gradient based on the local particle distribution and smoothing length variations.
-    useGradHTerms: wp.bool, Viscosity_i: scalar_t, referenceViscositys: wp.array(dtype = scalar_t),  # type: ignore
-    # Whether to use actual volume (mass/density) or apparent volume for the gradient computation, and the corresponding volumes if needed.
-    useVolume: bool, Vi: scalar_t, referenceVolumes: wp.array(dtype = scalar_t), # type: ignore
-    # Whether to use CRK kernel correction for the computation, and the corresponding correction terms if needed.
-    useCRK: bool, Ai: scalar_t, Bi: vector(length=Any, dtype=scalar_t), gradAi: vector(length=Any, dtype=scalar_t), gradBi: matrix(shape=(Any, Any), dtype=scalar_t), # type: ignore
-    
     vel_i: vector(length=Any, dtype=scalar_t), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
 
     individual_cs: wp.bool, cs_i: scalar_t, referenceCs: wp.array(dtype = scalar_t), # type: ignore
-    
-    # Dummy value to allow allocation
-    outputValue: Any, # type: ignore
 ):
-    # Initialize the output value
-    out     = zero_like_warp(outputValue)
-    
-    # # Loop over neighbors to compute the gradient contribution from each neighbor    
+    # Forward-only pass: find which neighbor achieves the max vsig, and its value,
+    # via the exact same loop-carried wp.max reassignment as before. That pattern is
+    # confirmed to silently zero this value's own adjoint under warp-lang 1.15.0 (see
+    # this file's module docstring) -- but nothing here is used differentiably: only
+    # the winning *index* (an int, which Warp never differentiates) crosses into the
+    # caller. computeVsig_valueAt() recomputes the actual differentiable value for
+    # that one index afterward, outside any loop.
+    found = wp.bool(False)
+    bestVal = scalar_t(0.0)
+    bestJ = wp.int32(0)
+
     for neighborIndex in range(numIndices):
         jj = beginIndex + neighborIndex
         j  = wp.int32(offsetArray[jj])
@@ -63,35 +95,46 @@ def computeVsig_Func_i(
         ##########################################################
         #   The core particle-particle interaction starts here   #
         ##########################################################
-        
+
         xj, hj, mj, rhoj, kj = getParticle(referenceState, j)
         vel_j = referenceVelocities[j]
-
-        apparentVolume = mj / rhoj if not useVolume else referenceVolumes[j]
-        cs_j = referenceCs[j] if individual_cs else scalar_t(1.0)
+        cs_j = access_optional(referenceCs, j, individual_cs, scalar_t(1.0))
 
         x_ij = computeDistanceVec(xi, xj, domainState)
         r_ij = safe_sqrt(wp.dot(x_ij, x_ij))
-        
+        # Unlike every sibling module in this family (wp_dilate.py, wp_sum.py, ...),
+        # this loop had no compact-support filter at all -- every entry in the
+        # candidate list was treated as a genuine neighbor unconditionally. That was
+        # invisible for the AdjacencyList path (radiusSearchCompactHashMap already
+        # returns an exact, pre-filtered neighbor list) but wrong for grid traversal
+        # (checkOffset returns every particle in a nearby *cell*, which is coarser
+        # than the exact kernel support radius) -- confirmed by comparing grid vs.
+        # AdjacencyList results on the same particle set before/after this check:
+        # they disagreed without it and match exactly with it.
+        hij = computePairwiseSupport(hi, hj, kernelProperties.supportMode)
+        if r_ij >= hij and i != j:
+            continue
 
         v_ij = vel_i - vel_j
         mu_ij = wp.dot(v_ij, x_ij) / (r_ij + scalar_t(1.0e-14) * hi)
 
         c_bar = scalar_t(0.5) * (cs_i + cs_j)
-        vsigs           = c_bar - mu_ij
-        # vsigs[mu_ij > 0]= 0
+        vsigs = c_bar - mu_ij
         if mu_ij > 0:
             vsigs = scalar_t(0.0)
 
-        out = wp.max(out, vsigs)
-        
-    return out
+        if vsigs > bestVal:
+            bestVal = vsigs
+            bestJ = j
+            found = wp.bool(True)
+
+    return found, bestVal, bestJ
 
 
 
 @wp.func
-def computeVsig_Func_Adjacency(
-    i : wp.int32, dim: wp.int32, 
+def computeVsig_Func_Adjacency_argmax(
+    i : wp.int32, dim: wp.int32,
 
     queryState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
     referenceState: Any, # particleDataSoA with the exact type based on the dimensionality, e.g., particleDataSoA_2 for 2D, particleDataSoA_3 for 3D, etc.
@@ -103,44 +146,52 @@ def computeVsig_Func_Adjacency(
     gridState: gridData,
     numOffsets: wp.int32,
 
-    kernelProperties: kernelState, 
-    
+    kernelProperties: kernelState,
+
     queryVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), referenceVelocities: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     individual_cs: wp.bool, queryCs: wp.array(dtype = scalar_t), referenceCs: wp.array(dtype = scalar_t), # type: ignore
-    
-    outputValue : Any, # type: ignore
 ):
+    # Forward-only, mirrors computeVsig_Func_i_argmax's own argmax approach, but one
+    # level up: finds the single neighbor with the globally largest vsig across
+    # *every* offset, not a per-offset winner. This must compare across offsets
+    # rather than accumulate (+=) them -- unlike a linear accumulation (safe to sum
+    # across a dynamic outer loop, as computeAlphaWarp's fix relies on), each
+    # offset's own vsig winner is already a *max*, and summing several offsets'
+    # maxes together is a different (and for grid traversal, wrong -- up to 27
+    # offsets in 3D) quantity than the max over their union. checkDirectionality_i's
+    # early-return case is folded into "not found" here (dim/mi/rhoi/xi/hi are read
+    # once by the caller and passed through unused by this function's early-return
+    # path in the original, so nothing is lost by returning found=False instead of a
+    # zero value).
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
         if not checkDirectionality_i(ki, kernelProperties.operationMode):
-            return zero_like_warp(outputValue)
-        
-    useGradientRenormalization, Li = getL_i(correctionData, i)
-    useGradHTerms, omega_i = getGradH_i(correctionData, i)
-    useVolume, Vi = getVolume_i(correctionData, i)
-    useCRK, Ai, Bi, gradA_i, gradB_i = getCRK_i(correctionData, i)
+            return wp.bool(False), wp.int32(0)
+
     vel_i = queryVelocities[i]
+    cs_i = access_optional(queryCs, i, individual_cs, scalar_t(1.0))
 
-    cs_i = queryCs[i] if individual_cs else scalar_t(1.0)
+    globalFound = wp.bool(False)
+    globalBestVal = scalar_t(0.0)
+    globalBestJ = wp.int32(0)
 
-    out = zero_like_warp(outputValue)
     for o in range(numOffsets):
         beginIndex = wp.int32(0)
         numIndices = wp.int32(0)
-        if useAdjacency:    
+        if useAdjacency:
             beginIndex = adjacencyState.neighborOffsets[i]
             numIndices = adjacencyState.numNeighbors[i]
         else:
             beginIndex, numIndices = checkOffset(
-                i, queryState.positions, gridState.numCells, gridState.D, 
+                i, queryState.positions, gridState.numCells, gridState.D,
                 o, gridState.cellOffsets, gridState.hashTable, gridState.cellTable,
                 domainState.periodicity, gridState.qMin, gridState.qMax, gridState.hCell
             )
             if beginIndex < 0:
                 continue
-        
-        out += computeVsig_Func_i(
-            i, dim, 
+
+        found, bestVal, bestJ = computeVsig_Func_i_argmax(
+            i, dim,
             xi, hi, mi, rhoi,
             referenceState, domainState,
             kernelProperties,
@@ -148,18 +199,15 @@ def computeVsig_Func_Adjacency(
             beginIndex, numIndices, adjacencyState.neighborList if useAdjacency else gridState.sortIndex,
             ki, referenceState.kinds,
 
-            useGradientRenormalization, Li,
-            useGradHTerms, omega_i, correctionData.referenceOmegas,
-            useVolume, Vi , correctionData.referenceVolumes,
-            useCRK, Ai, Bi, gradA_i, gradB_i,
             vel_i, referenceVelocities,
             individual_cs, cs_i, referenceCs,
-
-            outputValue,
-
-            # Viscosity function parameters
         )
-    return out
+        if found and bestVal > globalBestVal:
+            globalBestVal = bestVal
+            globalBestJ = bestJ
+            globalFound = wp.bool(True)
+
+    return globalFound, globalBestJ
 
 
 
@@ -184,17 +232,32 @@ def computeVsig_Kernel(
     if i >= numParticles:
         return
 
-    outputValues[i] = computeVsig_Func_Adjacency(
-        i, domainState.dim, 
+    found, bestJ = computeVsig_Func_Adjacency_argmax(
+        i, domainState.dim,
         queryState, referenceState, correctionData, domainState,
         useAdjacency, adjacencyState, gridState, gridState.numOffsets if not useAdjacency else 1,
         kernelProperties,  #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
         queryVelocities, referenceVelocities,
         individual_cs, queryCs, referenceCs,
-
-        zero_like_warp(outputValues)
     )
+
+    if found:
+        # The one and only differentiable evaluation, done here in the primary
+        # caller rather than per-offset in the traversal function -- see this
+        # file's module docstring and computeVsig_Func_Adjacency_argmax's own
+        # docstring for why summing per-offset winners would be wrong (grid
+        # traversal visits up to 27 offsets in 3D) as well as non-differentiable.
+        xi, hi, mi, rhoi, ki = getParticle(queryState, i)
+        vel_i = queryVelocities[i]
+        cs_i = access_optional(queryCs, i, individual_cs, scalar_t(1.0))
+        outputValues[i] = computeVsig_valueAt(
+            domainState.dim, xi, hi, referenceState, bestJ, domainState,
+            vel_i, referenceVelocities,
+            individual_cs, cs_i, referenceCs,
+        )
+    else:
+        outputValues[i] = zero_like_warp(outputValues)
 
 def computeVsigWarp(
     queryParticles: ParticleState,

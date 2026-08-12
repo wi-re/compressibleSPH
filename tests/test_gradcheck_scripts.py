@@ -44,6 +44,11 @@ GRADCHECK_SCRIPTS = [
     "gradcheck_deltaSPH.py",
     "gradcheck_shockCapturing.py",
     "gradcheck_mdbc.py",
+    "gradcheck_incompressible.py",
+    "gradcheck_liu.py",
+    "gradcheck_surfaceDetection.py",
+    "gradcheck_util.py",
+    "gradcheck_deltaShift.py",
 ]
 
 

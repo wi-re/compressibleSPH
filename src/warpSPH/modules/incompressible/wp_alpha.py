@@ -112,10 +112,10 @@ def computeAlpha_Func_i_first(
         sumA += term1
         sumB += term2
             
-    alpha = areaI / mi * wp.dot(sumA, sumA) + areaI * sumB
+    # alpha = areaI / mi * wp.dot(sumA, sumA) + areaI * sumB
     # alpha = areaI * sumB
 
-    return alpha
+    return sumA, sumB
 
 
 
@@ -165,7 +165,7 @@ def computeAlpha_Func_Adjacency_first(
             if beginIndex < 0:
                 continue
         
-        out += computeAlpha_Func_i_first(
+        sumA, sumB = computeAlpha_Func_i_first(
             i, dim, 
             xi, hi, mi, rhoi,
             referenceState, domainState,
@@ -182,6 +182,8 @@ def computeAlpha_Func_Adjacency_first(
             # Viscosity function parameters
             areaI, referenceApparentAreas
         )
+        alpha = areaI / mi * wp.dot(sumA, sumA) + areaI * sumB
+        out += alpha
     return out
 
 
