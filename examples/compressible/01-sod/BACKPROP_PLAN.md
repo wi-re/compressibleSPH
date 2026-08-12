@@ -1,9 +1,9 @@
 # Sod differentiability tests: three backprop-through-trajectory cases
 
-Status: **in progress**, drafted 2026-08-12. Deliverable is
-`sod_backprop.ipynb` in this directory (not yet created). This file is the
-plan/design record, kept for reference — update its Status line as work
-lands rather than deleting it once done.
+Status: **done**, drafted and landed 2026-08-12. Deliverable is
+`sod_backprop.ipynb` in this directory. This file is the plan/design record,
+kept for reference — see "Results" at the bottom for what the runs actually
+showed, including where the plan's own expectations were wrong.
 
 ## Context
 
@@ -213,3 +213,72 @@ convergence, not just clean execution:
   coverage or any other CompSPH case.
 - `scripts/run_sweep.py --cases sod` unaffected (doesn't touch
   `storeMode`/`extraFields`/anything this plan changes).
+
+## Results (2026-08-12)
+
+All three cases converge; backprop chains correctly through the CompSPH
+integrator for at least 200 steps. Two things came out differently from what
+the plan above assumed, both recorded in the notebook itself.
+
+**The `gamma` bug was real, and the fix was applied as specified** — but the
+pre/post-fix comparison the plan designed had to be restructured, because a
+notebook cannot reload a changed `@wp.kernel` signature mid-session. Instead
+the pre-fix behaviour is re-created *in* the fixed source by detaching `gamma`
+at the balance call site only (a `functools.wraps` patch of
+`warpSPH.schemes.compSPH.computeCompSPHBalanceTermWarp`). That emulation was
+validated against the real pre-fix source: case 2 was run for 60 iterations
+against unfixed `balance.py`, then again after the fix with the emulation, and
+the two agree **bit-for-bit** on loss, parameter error and gradient norm at
+every iteration. So the notebook shows both curves live in one kernel session
+and does not depend on which version of `balance.py` is on disk.
+
+**What the missing gradient actually costs: nothing at short trajectories,
+and it compounds.** Measured at `nx=100`, `gamma=2.0`, every run
+bit-deterministic (three repeats agreed exactly):
+
+| steps | severed vs. full | full vs. central FD | severed vs. FD |
+|---|---|---|---|
+| 5 | +0.003% | | |
+| 20 | +0.044% | -0.009% | +0.035% |
+| 50 | +0.226% | -0.010% | +0.216% |
+| 100 | +0.673% | -0.009% | +0.663% |
+| 200 | +2.350% | +0.010% | +2.359% |
+
+At the 5-step size the two optimization runs are indistinguishable (`gamma`
+recovered to 1.680127 vs. 1.680126 from a 2.0 start, true 5/3), so the plan's
+"does it converge, and how fast" question resolves to "identically, at this
+depth" — the bug would not have been caught by watching a short optimization.
+The finite-difference columns are what make this a correctness claim rather
+than a difference: the fixed gradient tracks FD to ~0.01% at every step size
+tried, the severed one is off by a consistent 2.33-2.36% at 200 steps.
+
+**Case 1 converges in loss much faster than in parameter error** (loss 7.9e-4
+-> 3.2e-6 over 250 iterations, a factor of 250, while the relative mass error
+only goes 4.8% -> 2.4%). That is the inverse problem's conditioning, not a
+gradient defect: 125 free masses against a 4-field endpoint leaves a large
+near-null subspace. Confirmed by a directional finite difference, which the
+notebook keeps as a cell — the analytic mass gradient agrees with FD to
+0.02-0.14%, and separately to ~0.01% at one step, at five steps, along a
+random direction, and under `adaptiveSupportScheme='Monaghan'` as well as
+Sod's default `'Owen'`. Worth noting because `masses` reach the physics partly
+through `evaluateOptimalSupport`'s fixed-point solver, which the plan above
+deliberately routed around rather than verifying.
+
+**Case 3** recovers `[1.25, 0.80, 0.325, 0.135]` -> `[1.019, 1.009, 0.236,
+0.170]` against a true `[1.0, 1.0, 0.25, 0.1795]` in 60 iterations. One
+deviation from the plan: the analytic solution is interpolated onto the
+particles' *final* (detached) positions rather than the IC's, since the
+particles have moved by `t = N*dt`; it is still a fixed target outside the
+backward graph, so `numpy.interp` is still all it needs.
+
+**Scaling.** All the numbers above are at the notebook's interactive default
+(`nx=100`, 5 steps). The user separately ran the gradient test at `nx=400` over
+100 steps and reports it working, so nothing about the approach is tied to the
+small size; the 200-step measurements in the table were made in the same
+session at `nx=100`.
+
+**Also landed:** `run_balance_gamma_gradcheck` in
+`scripts/gradcheck_compSPH.py`, a regression guard for the fixed argument
+(gradcheck of `gamma` itself under every `EnergyScheme`, plus an assertion
+that the gradient is non-zero exactly under `CRK`). Verified to fail against
+the pre-fix source and pass against the fixed one. Full suite: 57 passed.

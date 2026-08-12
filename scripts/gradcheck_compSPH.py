@@ -24,6 +24,18 @@ throughout; its own differentiability (a materially different code path,
 `asScalarArg` + a `wp.array`-typed kernel parameter) is
 `gradcheck_scalarArg_dt.py`'s job, not this script's.
 
+`run_balance_gamma_gradcheck` is a regression guard for a real bug, found
+while building `examples/compressible/01-sod/sod_backprop.ipynb` (see
+`BACKPROP_PLAN.md`): `gamma` used to be passed as `scalar_t(gamma)` into a
+by-value `gamma: scalar_t` kernel parameter, severing its gradient while
+`dt` -- two arguments earlier in the same call -- already had the
+`asScalarArg` + `wp.array(dtype=scalar_t)` treatment. It produced no crash
+and no zero gradient, only a silently incomplete one (the EOS route still
+carried most of it), so nothing short of a check like this one catches it.
+Only `EnergyScheme.CRK` reads `gamma` at all (`s_i = P_i / rho_i**gamma`);
+under every other scheme the correct gradient is exactly zero, which is
+also asserted below.
+
 All three functions require an explicit adjacency (`if adjacency is None or
 isinstance(adjacency, CompactHashMap): raise ValueError`), unlike Tier 0's
 targets -- build_adjacency's CSR AdjacencyList satisfies that. `SupportScheme
@@ -158,6 +170,51 @@ def run_balance_gradcheck(scheme: EnergyScheme) -> bool:
         return False
 
 
+def run_balance_gamma_gradcheck(scheme: EnergyScheme) -> bool:
+    """Gradcheck balance's `gamma` itself, as a differentiable tensor argument."""
+    domain, positions, supports, masses, densities, adjacency, kinds, velocities, internalEnergies, pressures, soundspeeds, alphas = _build_case()
+    numEdges = adjacency.i.shape[0]
+    ap_ij = torch.randn(numEdges, DIM, dtype=DTYPE, device=DEVICE)
+    av_ij = torch.randn(numEdges, DIM, dtype=DTYPE, device=DEVICE)
+    gamma = torch.tensor(1.4, dtype=DTYPE, device=DEVICE, requires_grad=True)
+
+    def f(g):
+        state = make_compressible_state(positions, supports, masses, densities, velocities, internalEnergies, pressures=pressures, kinds=kinds)
+        return computeCompSPHBalanceTermWarp(
+            queryParticles=state,
+            operationProperties=OperationProperties(kernel=KERNEL, supportMode=SupportScheme.Gather),
+            domain=domain,
+            energyScheme=scheme,
+            dt=0.01,
+            gamma=g,
+            pairWise_pressureAccel=ap_ij,
+            pairWise_viscosityAccel=av_ij,
+            adjacency=adjacency,
+        )
+
+    print(f"\n=== computeCompSPHBalanceTermWarp ({scheme.name}), gamma: torch.autograd.gradcheck ===")
+    try:
+        ok = bool(torch.autograd.gradcheck(f, (gamma,), eps=1e-6, atol=1e-5))
+        # Only CRK reads gamma; anywhere else a *non*-zero gradient would mean
+        # the argument had leaked into a branch that should not see it.
+        f(gamma).sum().backward()
+        expectNonZero = scheme is EnergyScheme.CRK
+        if gamma.grad is None:
+            print("FAILED: no gradient reached gamma at all -- the kernel argument is "
+                  "severed (a by-value scalar_t parameter, or a call site that "
+                  "collapses the tensor to a float)")
+            return False
+        if (gamma.grad.abs().item() > 0) != expectNonZero:
+            print(f"FAILED: gamma.grad = {gamma.grad.item()!r}, expected "
+                  f"{'a non-zero' if expectNonZero else 'exactly zero'} gradient")
+            return False
+        print("PASSED" if ok else "FAILED (gradcheck returned False)")
+        return ok
+    except Exception as exc:  # noqa: BLE001 - deliberately broad, this is a canary script
+        print(f"FAILED: {type(exc).__name__}: {exc}")
+        return False
+
+
 def main():
     wp.init()
     torch.manual_seed(0)
@@ -167,6 +224,8 @@ def main():
     ok &= run_dudt_gradcheck()
     for scheme in EnergyScheme:
         ok &= run_balance_gradcheck(scheme)
+    for scheme in EnergyScheme:
+        ok &= run_balance_gamma_gradcheck(scheme)
 
     print()
     if ok:

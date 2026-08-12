@@ -62,11 +62,13 @@ def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     }
 
 
-def setupPlot(ctx: RunContext, state):
+def setupPlot(ctx: RunContext, state, scatter: bool = False):
+    """The six Sod profile panels. `scatter` is what the 2D/3D variants need:
+    many particles share an x there, so a line through them is meaningless."""
     left, right = states(ctx)
     fig, axis = plotSod(state.state, ctx.config, ctx.schemeConfig, ctx.config.domain,
                         ctx.param('gamma'), left, right,
-                        plotReference=True, plotLabels=False, scatter=False, t_=state.t)
+                        plotReference=True, plotLabels=False, scatter=scatter, t_=state.t)
     if ctx.imagePath:
         fig.savefig(os.path.join(ctx.imagePath, 'frame_00000.png'))
     openWindow(ctx, (fig, axis))

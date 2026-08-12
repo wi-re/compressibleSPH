@@ -71,15 +71,41 @@ see README for the current layout, not reconstructed here.
         — a real generic reader (promoting the shape of `compressedLoader.ipynb`'s
         inline, plot-only logic into a library function that reconstructs a live,
         resumable `SimulationState`, which nothing did before).
-      - **Deferred, not built in this pass**: 2D and 3D variants of Sod (3D also
-        needs a general plotting solution that doesn't exist yet), and a
-        backprop-over-trajectory demo — two-stage per the user: (1) self-consistency
-        recovery (perturb a known parameter, recover it via BPTT) first, as the
-        straightforward case, then (2) fitting the SPH trajectory to
-        `sodSolution.solve`'s analytic Riemann solution, which is more involved.
+      - **2D and 3D Sod: done (2026-08-12)**, `warpSPH/cases/sodND.py`
+        (`sod2d`/`sod3d`, plus `examples/compressible/01-sod/sod_2d.py`/`_3d.py`
+        and matching notebooks following `sod_1d.ipynb`'s pattern — parameters
+        cell, real case code for the IC, unrolled step loop — with two cells
+        that only make sense here: the sampler's integer choices inspected
+        without building anything, and the density field drawn in the slab
+        itself (2D) or a thin z-slice of it (3D)),
+        sampled at equal particle *mass* rather than equal spacing --
+        `caseUtils/compressible/sod/sodND.py`. The 3D plotting gap this entry
+        used to cite turned out not to exist: the solution is 1D along the tube,
+        so the existing six Sod profile panels work in any dimension as a
+        scatter (`plotSod_` now indexes the x column explicitly, a no-op in 1D).
+        Running actual 3D physics for the first time found two real bugs, both
+        fixed and both regression-tested: warpSPHCore's B7 kernel had a **3D
+        normalisation constant 16x too small** (1D and 2D correct), and Owen's
+        adaptive-support psi LUT was cached in an **unkeyed module global**, so
+        the first dimension a process touched won and everything after it
+        relaxed supports against the wrong table.
+      - **Backprop-over-trajectory demo: done (2026-08-12)**,
+        `examples/compressible/01-sod/sod_backprop.ipynb`, both stages the user
+        asked for — self-consistency recovery (perturbed `masses`, then `gamma`)
+        and the fit to `sodSolution.solve`'s analytic Riemann solution. Not in
+        CI (a 500-step BPTT is too expensive per commit); the logic is written
+        as importable functions so a future
+        `scripts/gradcheck_sod_trajectory.py` can lift it. Design record and
+        measured results in that directory's `BACKPROP_PLAN.md`. Found and fixed
+        a real severed-gradient bug on `balance.py`'s `gamma` kernel argument
+        (the `dt` treatment of Phase 4.2, applied to the argument next to it),
+        guarded by a new `run_balance_gamma_gradcheck` in
+        `scripts/gradcheck_compSPH.py`.
 - [ ] **Notebook simplification, the rest.** 13,112 LOC across the other 33
       notebooks vs. 42 KB total for their equivalent `.py` scripts (both figures
-      predate the Sod pilot above).
+      predate the Sod pilot above). **Read `PORTING_EXAMPLES.md` first** — the
+      procedure, the notebook conventions that have a reason behind them, and
+      (separately) how to take a case to 2D/3D, all written from doing Sod.
       - Boilerplate cell duplicated verbatim in 16 notebooks, still on the
         pre-`warpSPHBootstrap` config path — cheapest win, do first.
       - Apply the Sod pilot's pattern (real case code + generic helpers, visible
@@ -99,6 +125,15 @@ see README for the current layout, not reconstructed here.
 - [x] `datagen/weaklyCompressible/loader.ipynb` — removed. `compressedLoader.ipynb`
       already reads the current (compressed) export layout, making the hardcoded-path
       loader redundant rather than something to fix.
+- [x] **`B7_C_d`'s 3D normalisation constant was 16x too small**
+      (`warpSPHCore/kernels/kernelFunctions/B7.py`): `1024/(105*pi)` where the
+      integral of `k` over the unit ball gives `16384/(105*pi)`. An SPH density
+      sum over a uniform 3D lattice returned 1/16 of the mass it was built from;
+      1D and 2D were already correct, and B7 is the compressible examples'
+      default kernel. Found by `sod3d`, the repo's first 3D case. Every other
+      kernel checked at the same time and correct in all three dimensions
+      (`Poly6`/`Spiky` are off in 1D/2D, but those are the graphics kernels,
+      normalised for 3D only — left alone).
 
 ### Won't fix / rejected (recorded so they aren't re-proposed)
 

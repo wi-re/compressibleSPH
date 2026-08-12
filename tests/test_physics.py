@@ -64,6 +64,171 @@ def test_sodDoesNotDiverge(sodResult):
     assert len(sodResult.trajectory) == STEPS + 1
 
 
+# --- Sod in 2D and 3D: the same tube, sampled at equal mass ------------------
+
+#: `nx` here is the dense side's count across its own half of the domain, so
+#: these are ~500 (2D) and ~4000 (3D) particles -- the 3D one is the most
+#: expensive test in the suite even at that size. `transverseSpacings` is left
+#: at its default: it is a multiple of the particle spacing, so the minimum the
+#: sampler will accept (~16 in 3D) does not fall with `nx`, and trimming it to
+#: make the test cheaper only trips the periodic-image guard.
+_SOD_ND = {'sod2d': dict(nx=20), 'sod3d': dict(nx=8)}
+
+
+@pytest.fixture(scope='module', params=sorted(_SOD_ND))
+def sodNDResult(request):
+    from warpSPH.cases import sodND
+    case = {'sod2d': sodND.sod2dCase, 'sod3d': sodND.sod3dCase}[request.param]
+    return request.param, _run(case, **_SOD_ND[request.param])
+
+
+def test_sodNDConservesTotalEnergyAndMoves(sodNDResult):
+    """The 1D assertions, in the dimension the case actually runs in."""
+    name, result = sodNDResult
+    assert not result.diverged, f'{name} diverged'
+    energy = result.series('totalEnergy')
+    drift = abs(energy[-1] - energy[0]) / abs(energy[0])
+    assert drift < 1e-5, f'{name} total energy drifted by {drift:.3e}'
+    kinetic = result.series('kineticEnergy')
+    assert kinetic[0] == pytest.approx(0.0, abs=1e-12)
+    assert kinetic[-1] > 0.0, f'{name} never started moving'
+    assert result.series('thermalEnergy')[-1] < result.series('thermalEnergy')[0]
+
+
+def test_sodNDStaysUniformAcrossTheSlab(sodNDResult):
+    """The transverse directions are periodic and the solution does not depend
+    on them, so the spread of density at a given x measures how much the
+    sampling and the periodic wrap are corrupting a 1D answer."""
+    name, result = sodNDResult
+    state = result.state.state
+    x = state.positions[:, 0].detach().cpu().numpy()
+    rho = state.densities.detach().cpu().numpy()
+    # Away from the waves, where the answer is still exactly the initial state.
+    quiet = np.abs(x) < 0.15
+    assert quiet.sum() > 10
+    spread = rho[quiet].std() / rho[quiet].mean()
+    assert spread < 0.02, f'{name} density varies by {spread:.2%} across the slab'
+
+
+@pytest.mark.parametrize('dim,nx', [(1, 100), (1, 800), (2, 20), (2, 100), (3, 10), (3, 40)])
+def test_sodSamplingMatchesParticleMasses(dim, nx):
+    """The point of `sodND`'s sampler. Equal *spacing* would leave the dense
+    side's particles `rho_l/rho_r = 4` times heavier (a 75% mismatch); equal
+    mass is what it is for, and 3D cannot be exact -- `4**(1/3)` is irrational
+    -- so it is allowed a little slack, but not much."""
+    from warpSPH.caseUtils import sodInitialState, sodSampling
+    sampling = sodSampling(nx, dim, 2.0, 20 if dim > 1 else 1,
+                           sodInitialState(p=1.0, rho=1.0, v=0.0),
+                           sodInitialState(p=0.1795, rho=0.25, v=0.0))
+    assert abs(sampling.massRatio - 1) < 0.05, (
+        f'dim={dim} nx={nx}: masses differ by {abs(sampling.massRatio - 1):.2%}')
+    assert sampling.anisotropy <= 1.25, (
+        f'dim={dim} nx={nx}: cells stretched {sampling.anisotropy:.3f}:1')
+
+
+def test_sodSamplingAgreesWithThe1DBuilder():
+    """`sodND` at dim=1 must reproduce `buildSod1D`'s lattice, or the 2D/3D
+    cases are not extruding the case the 1D one actually runs."""
+    from warpSPH.caseUtils import sodInitialState, sodSampling
+    left = sodInitialState(p=1.0, rho=1.0, v=0.0)
+    right = sodInitialState(p=0.1795, rho=0.25, v=0.0)
+    for nx in (100, 800):
+        sampling = sodSampling(nx, 1, 2.0, 1, left, right)
+        # buildSod1D: dx = (L/2)/nx on the left, samplingRatio=4 coarser on the
+        # right, giving nx//4 particles over the same extent.
+        assert sampling.dense[2] == pytest.approx(1.0 / nx)
+        assert sampling.light[0] == nx // 4
+        assert sampling.light[2] == pytest.approx(4.0 / nx)
+        assert sampling.massRatio == pytest.approx(1.0)
+
+
+def test_sodNDKeepsTheLightStateOutOfTheDenseBlock():
+    """`buildSod1D` samples the light state as one block centred on the origin
+    and pushes its halves outward, which leaves a particle at exactly x=0 --
+    inside the *dense* state, carrying the light state's mass -- whenever the
+    light count is odd (`nx=100` does it; the `nx=800` default does not).
+    `sodND` lays the same state out as a wrapped periodic interval instead, so
+    it cannot happen at any `nx`. Both are checked here: the 1D builder's
+    behaviour is recorded rather than fixed, since the backprop notebook's
+    numbers are tied to its exact output.
+    """
+    import io
+    import contextlib
+
+    import torch
+
+    from warpSPH.caseUtils import buildSodND, sodInitialState
+    from warpSPH.cases.sod import sodCase
+    from warpSPH.runner import CaseSpec, buildContext
+
+    def build(nx, dim):
+        spec = CaseSpec(caseName=sodCase.name, scheme=sodCase.scheme,
+                        params=dict(sodCase.params)).merged(**sodCase.defaults)
+        spec = spec.merged(nx=nx, dim=dim, plot=False, store=False, quiet=True)
+        ctx = buildContext(sodCase, spec)
+        sodCase.configureScheme(ctx)
+        with contextlib.redirect_stdout(io.StringIO()):
+            oneD = sodCase.buildSystem(ctx).state
+            nd = buildSodND(
+                ctx.SimulationSystem, ctx.SimulationState,
+                sodInitialState(p=1.0, rho=1.0, v=0.0),
+                sodInitialState(p=0.1795, rho=0.25, v=0.0),
+                ctx.param('gamma'), ctx.config, transverseSpacings=1, verbose=False).state
+        return oneD, nd
+
+    def strandedLightParticles(state):
+        return int(((state.materials == 1) & (state.positions[:, 0].abs() < 0.5 - 1e-6)).sum())
+
+    oneD, nd = build(nx=100, dim=1)
+    assert strandedLightParticles(oneD) == 1, 'buildSod1D no longer strands one at x=0'
+    assert strandedLightParticles(nd) == 0
+    # Same particle count and the same set of masses, stray particle aside.
+    assert nd.positions.shape[0] == oneD.positions.shape[0]
+    assert torch.allclose(nd.masses.sort().values, oneD.masses.sort().values)
+
+
+def test_adaptiveSupportDoesNotDependOnWhatRanBefore():
+    """Owen's psi lookup table is sliced by dimension and cached, so building a
+    2D case in between two 1D builds must not change the 1D answer.
+
+    It used to: the cache was a single unkeyed global, so the first dimension a
+    *process* touched won, and everything after it got supports relaxed against
+    the wrong table -- silently, since a support radius has no obviously wrong
+    value. Invisible until a case ran in two dimensions in one process, which
+    nothing did before `sod3d`.
+    """
+    import io
+    import contextlib
+
+    from warpSPH.cases import sodND  # noqa: F401 - registers sod2d/sod3d
+    from warpSPH.runner import CaseSpec, buildContext, getCase
+
+    def supports(name, **overrides):
+        case = getCase(name)
+        spec = CaseSpec(caseName=case.name, scheme=case.scheme,
+                        params=dict(case.params)).merged(**case.defaults)
+        spec = spec.merged(plot=False, store=False, quiet=True, **overrides)
+        ctx = buildContext(case, spec)
+        case.configureScheme(ctx)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return case.buildSystem(ctx).state.supports.max().item()
+
+    before = supports('sod', nx=100)
+    supports('sod2d', nx=20)
+    after = supports('sod', nx=100)
+    assert after == pytest.approx(before, rel=1e-9), (
+        f'a 2D build in between changed the 1D supports: {before} -> {after}')
+
+
+def test_sodNDRejectsASlabNarrowerThanItsKernel():
+    """A slab under twice the support radius lets particles interact with their
+    own periodic images, and nothing downstream would notice -- so the sampler
+    has to refuse rather than return a quietly wrong initial condition."""
+    from warpSPH.cases import sodND
+    with pytest.raises(ValueError, match='periodic images'):
+        _run(sodND.sod2dCase, nx=20, params=dict(transverseSpacings=4))
+
+
 # --- the three compressible solvers, as comparison runs ----------------------
 
 #: Total-energy drift each solver is allowed over 20 steps. CompSPH is

@@ -261,7 +261,8 @@ notebooks stay for exploration; the scripts are what you run unattended.
 
 | case | script | notes |
 |---|---|---|
-| `sod` | [01-sod/sod_1d.py](examples/compressible/01-sod/sod_1d.py) | Sod shock tube, 1D; own directory ([01-sod/](examples/compressible/01-sod/)) with a resume script/notebook and a trajectory-export demo -- see its notebooks for the pattern |
+| `sod` | [01-sod/sod_1d.py](examples/compressible/01-sod/sod_1d.py) | Sod shock tube, 1D; own directory ([01-sod/](examples/compressible/01-sod/)) with a resume script/notebook, a trajectory-export demo, and [sod_backprop.ipynb](examples/compressible/01-sod/sod_backprop.ipynb) (backprop through the trajectory) -- see its notebooks for the pattern |
+| `sod2d`, `sod3d` | [01-sod/sod_2d.py](examples/compressible/01-sod/sod_2d.py), [sod_3d.py](examples/compressible/01-sod/sod_3d.py) | the same tube extruded into a periodic slab, sampled at equal particle *mass* rather than equal spacing (`--no-equalMass` for the comparison); [sod_2d.ipynb](examples/compressible/01-sod/sod_2d.ipynb)/[sod_3d.ipynb](examples/compressible/01-sod/sod_3d.ipynb) add the sampling arithmetic and a slab/slice view of the density field |
 | `linearWave` | [02-linear-wave.py](examples/compressible/02-linear-wave.py) | linear acoustic wave, 1D |
 | `kidder` | [03-kidder-isentropic-compression.py](examples/compressible/03-kidder-isentropic-compression.py) | isentropic compression; analytically driven boundary bands |
 | `noh` | [04-noh-implosion.py](examples/compressible/04-noh-implosion.py) | Noh implosion, 1D |
@@ -311,6 +312,10 @@ scratchpad rather than a published example.
 
 A `Case` is a name, a scheme, and a set of hooks over a `RunContext`. Only
 `buildSystem` is required.
+
+Porting an *existing* example onto this, or taking a case up to 2D/3D, has a
+procedure and a set of things that bite:
+[PORTING_EXAMPLES.md](PORTING_EXAMPLES.md).
 
 ```python
 from warpSPH.runner import Case, RunContext, caseMain, registerCase

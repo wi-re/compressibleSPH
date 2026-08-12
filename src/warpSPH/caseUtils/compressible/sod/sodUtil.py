@@ -51,21 +51,27 @@ def plotSod_(fig, axis, simulationState, simulationConfig, schemeConfig, domain,
     simText = f'{schemeConfig.schemeName}, kernel: {simulationConfig.kernel.name}, support: {simulationConfig.supportMode.name}, integrator: {simulationConfig.integrationScheme.name}' + f', Energy: {schemeConfig.energyScheme.name}' if hasattr(schemeConfig, 'energyScheme') and schemeConfig.energyScheme is not None else ''
 
     fig.suptitle(f'{simText}\nnx = {pos.shape[0]//2}, t = {t:6.4g}, Kinetic = {kineticEnergy_.cpu().item():6.4g}, Thermal = {thermalEnergy_.cpu().item():6.4g}, Total = {totalEnergy.cpu().item():6.4g}')
+    # Everything is plotted against x, and the shock runs along x, so 2D/3D
+    # runs (`sodND`) drop straight into these panels as a scatter over the
+    # transverse directions. Indexing the x column explicitly is what makes
+    # that work; for dim=1 it is the same data these lines always plotted.
+    x = pos[indices, 0]
+    velocityX = velocities[indices, 0]
     if not scatter:
-        axis[0,0].plot(pos[indices], densities[indices], label='Density')
-        axis[0,1].plot(pos[indices], supports[indices], label='Supports')
-        axis[0,2].plot(pos[indices], velocities[indices], label='Velocity')
-        axis[1,0].plot(pos[indices], thermalEnergy[indices], label='Thermal Energy')
-        axis[1,1].plot(pos[indices], pressures[indices], label='Pressure')
-        axis[1,2].plot(pos[indices], A_[indices], label='Neighbors')
+        axis[0,0].plot(x, densities[indices], label='Density')
+        axis[0,1].plot(x, supports[indices], label='Supports')
+        axis[0,2].plot(x, velocityX, label='Velocity')
+        axis[1,0].plot(x, thermalEnergy[indices], label='Thermal Energy')
+        axis[1,1].plot(x, pressures[indices], label='Pressure')
+        axis[1,2].plot(x, A_[indices], label='Neighbors')
     else:
         s = 1
-        axis[0,0].scatter(pos[indices], densities[indices], s = s, label='Density')
-        axis[0,1].scatter(pos[indices], supports[indices], s = s, label='Supports')
-        axis[0,2].scatter(pos[indices], velocities[indices], s = s, label='Velocity')
-        axis[1,0].scatter(pos[indices], thermalEnergy[indices], s = s, label='Thermal Energy')
-        axis[1,1].scatter(pos[indices], pressures[indices], s = s, label='Pressure')
-        axis[1,2].scatter(pos[indices], A_[indices], s = s, label='Masses')
+        axis[0,0].scatter(x, densities[indices], s = s, label='Density')
+        axis[0,1].scatter(x, supports[indices], s = s, label='Supports')
+        axis[0,2].scatter(x, velocityX, s = s, label='Velocity')
+        axis[1,0].scatter(x, thermalEnergy[indices], s = s, label='Thermal Energy')
+        axis[1,1].scatter(x, pressures[indices], s = s, label='Pressure')
+        axis[1,2].scatter(x, A_[indices], s = s, label='Masses')
     
     axis[0,0].set_title('Density')
     axis[0,1].set_title('Supports')

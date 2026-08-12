@@ -16,6 +16,7 @@ from __future__ import annotations
 CASE_MODULES = (
     # compressible -- examples/compressible/*.ipynb
     'sod',
+    'sodND',
     'linearWave',
     'kidder',
     'noh',

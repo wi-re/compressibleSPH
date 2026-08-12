@@ -264,7 +264,7 @@ def computeCompSPHBalanceTerm_Kernel(
 
     pressureAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
     viscosityAccel_ij: wp.array(dtype = vector(length=Any, dtype=scalar_t)), # type: ignore
-    energyScheme_int: wp.int32, dt: wp.array(dtype = scalar_t), gamma: scalar_t, # type: ignore
+    energyScheme_int: wp.int32, dt: wp.array(dtype = scalar_t), gamma: wp.array(dtype = scalar_t), # type: ignore
 
     # The last parameter is always the output array and should not be changed
     f_ij : wp.array(dtype = Any), # type: ignore
@@ -284,7 +284,7 @@ def computeCompSPHBalanceTerm_Kernel(
         queryEnergies, referenceEnergies,
         queryPressures, referencePressures,
         pressureAccel_ij, viscosityAccel_ij,
-        energyScheme_int, dt[0], gamma,
+        energyScheme_int, dt[0], gamma[0],
         f_ij
     )
 
@@ -297,7 +297,7 @@ def computeCompSPHBalanceTermWarp(
     
     energyScheme: EnergyScheme,
     dt: Union[float, torch.Tensor],
-    gamma: scalar_t,
+    gamma: Union[float, torch.Tensor],
 
     pairWise_pressureAccel: torch.Tensor, #ap_ij
     pairWise_viscosityAccel: torch.Tensor, #av_ij
@@ -385,7 +385,8 @@ def computeCompSPHBalanceTermWarp(
                     queryEnergies_, referenceEnergies_,
                     queryPressures_, referencePressures_,
                     pairWise_pressureAccel, pairWise_viscosityAccel,
-                    wp.int32(energyScheme.value), asScalarArg(dt, device=device), scalar_t(gamma)
+                    wp.int32(energyScheme.value), asScalarArg(dt, device=device),
+                    asScalarArg(gamma, device=device)
                 ),
             )
 

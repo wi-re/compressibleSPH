@@ -7,7 +7,10 @@ here is superseded by a later fix, it's been removed rather than marked stale.
 
 For the AD/gradcheck bug-class catalog specifically (nine bug classes, with fix
 recipes, found rolling gradcheck out across 25 kernel files), see
-**`.claude/skills/gradcheck/SKILL.md`** — not duplicated here.
+**`.claude/skills/gradcheck/SKILL.md`** — not duplicated here. For the procedure
+of porting an example onto the `Case`/runner style, and for taking a case to
+2D/3D, see **`PORTING_EXAMPLES.md`** — this file keeps the general lessons, that
+one keeps the recipe.
 
 ## AD-readiness / autograd bridge
 
@@ -46,8 +49,61 @@ recipes, found rolling gradcheck out across 25 kernel files), see
   an equally real state object) instead of the bare fixture for new gradcheck
   coverage of this repo's scheme layer.
 
+- **The damage from a severed scalar kernel argument compounds with BPTT depth,
+  so short-trajectory verification hides it.** `balance.py`'s `gamma` (the
+  by-value case above, next to the already-fixed `dt`) was worth 0.003% of
+  `dL/dgamma` after 5 integrator steps and 2.35% after 200 — each step's missing
+  contribution is also absent from every earlier step's adjoint, so the error
+  grows roughly as the square of the trajectory length. Two optimization runs
+  with and without it are literally indistinguishable at 5 steps. Measured in
+  `examples/compressible/01-sod/sod_backprop.ipynb`; don't conclude a partial
+  gradient is harmless from a short rollout.
+- **A directional central difference is the practical gradcheck for a whole
+  trajectory.** `torch.autograd.gradcheck` needs one full BPTT rollout per
+  component and is hopeless here, but two forward rollouts along a single
+  direction resolve a systematically wrong gradient just as well — that is what
+  distinguished "the fix changed the gradient" from "the fix made the gradient
+  correct" for the case above (fixed: ~0.01% off FD; severed: a consistent
+  2.33-2.36% off). Keep `eps` at or above ~1e-3 of the parameter scale; below
+  that, float32 cancellation in the difference makes agreement *worse*.
+
+## Dimensionality
+
+Nothing in this repo ran in 3D until `sod3d` (2026-08-12). Adding it found two
+bugs in an afternoon, both of the same shape: a value that depends on the
+dimension, computed or cached once, by code that only ever saw one.
+
+- **A kernel's normalisation constant is per-dimension, and a wrong one is
+  invisible in the wave structure.** `B7_C_d`'s 3D constant was 16x too small,
+  so every 3D density came back at 1/16 of the mass it was built from — while
+  velocities, pressures-as-a-fraction and shock/contact positions all still
+  looked *right*, because a uniform factor on density largely cancels in the
+  dynamics. Check a kernel by summing it over a uniform lattice of known
+  density (`sum_j m_j W_ij` must return the density you built) rather than by
+  looking at a result and judging whether it seems plausible. Doing that across
+  all nine kernels and all three dimensions is ~20 lines and caught this in one
+  run.
+- **A cache keyed on nothing is a bug the moment a second variant exists.**
+  Owen's psi LUT (`modules/adaptiveSupport/optimalSupportOwen.py`) is sliced by
+  dimension, built into a module-level global on first use, and reused for
+  every call after — so in a process that touched two dimensions, the second
+  one relaxed its supports against the first one's table. No exception, no
+  obviously wrong number, and invisible to every existing test because each ran
+  one dimension per process. When caching anything derived from config, key it
+  on the parts of the config it was derived from, even if today only one value
+  is ever used.
+
 ## Testing / coverage gaps
 
+- **Per-kernel gradcheck only covers a kernel's *declared* differentiable
+  inputs.** `gradcheck_compSPH.py` had exercised `computeCompSPHBalanceTermWarp`
+  for six `EnergyScheme` values without ever noticing its `gamma` argument was
+  severed, because `gamma` was passed as a plain float and so was not one of the
+  gradcheck inputs. A parameter that a call site happens to pass as a constant is
+  exactly the one nothing checks; when adding a differentiable-scalar path, add
+  the gradcheck case for it too (`run_balance_gamma_gradcheck` is the pattern,
+  including asserting the gradient is zero on the branches that should not read
+  it).
 - **A scheme or branch only reachable via a flag rots unnoticed if no test passes
   that flag.** Monaghan (`--scheme Monaghan`) had two independent breaking signature
   drifts — a missing `t` parameter on three boundary-condition helpers, a removed

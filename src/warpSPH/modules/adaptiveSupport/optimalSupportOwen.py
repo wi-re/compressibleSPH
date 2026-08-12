@@ -9,7 +9,18 @@ from .wp_psi0 import computePsi0Warp
 from .owenLUT import computeOwen, interpolateLUT
 
 from torch.profiler import profile, record_function, ProfilerActivity
-PsiLUT_fn = None
+
+#: Owen's psi lookup table, cached per ``(kernel, dim)``.
+#:
+#: This used to be a single unkeyed global, built on the first call and reused
+#: for every call after it -- but `computeOwen` slices the table by dimension
+#: (`psi[:, dim-1]`) and generates it from one specific kernel, so a process
+#: that touched two dimensions got the *first* one's table for both, and its
+#: supports came out silently wrong. Nothing caught it because every case in
+#: the repo ran in 1D or 2D but never both in one process, until `sod3d`
+#: arrived and the test suite started building a 1D and a 2D Sod back to back.
+#: Keyed like this, a single-dimension process behaves exactly as before.
+PsiLUTs = {}
 
 # assumes convention from CRKSPH with $\eta$ = 1
 def n_h_to_nH(n_h, dim):
@@ -42,12 +53,15 @@ def evaluateOptimalSupportOwen(
         verbose = False
         ):
     with record_function("[warpSPH] - evaluateOptimalSupport - Owen"):
-        global PsiLUT_fn
-
         kernel = kernel_ if kernel_ is not None else config.kernel
+        # Note `kernel`, not `kernel_`: the table is built from whichever kernel
+        # this call resolved to, so a caller that leaves `kernel_` at None gets
+        # a table for `config.kernel` rather than one built from None.
+        key = (kernel, config.domain.dim)
+        PsiLUT_fn = PsiLUTs.get(key)
         if PsiLUT_fn is None:
-            PsiLUT_fn = computeOwen(kernel_, dim = config.domain.dim, nMin = 2.0, nMax = 6.0, nLUT = 2**12)
-            # config['support']['LUT'] = PsiLUT_fn
+            PsiLUT_fn = PsiLUTs[key] = computeOwen(
+                kernel, dim = config.domain.dim, nMin = 2.0, nMax = 6.0, nLUT = 2**12)
         # particles, domain, kernel, targetNeighbors, PsiLUT_fn, nIter = 16, neighborhood = None, verbose = False,eps = 1e-3, neighborhoodAlgorithm = 'compact'):
         hs = [particles.supports]
         # print(particles)
