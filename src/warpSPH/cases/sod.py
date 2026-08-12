@@ -1,6 +1,6 @@
 """Sod shock tube (1D), compressible.
 
-The script form of this case was `examples/compressible/01-sod-shock-tube-1d.py`;
+The script form of this case is `examples/compressible/01-sod/sod_1d.py`;
 everything below the hooks is now `warpSPH.runner`.
 """
 
@@ -100,6 +100,11 @@ sodCase = registerCase(Case(
     setupPlot=setupPlot,
     updatePlot=updatePlot,
     extraData=extraData,
+    # internalEnergies is the core EOS state variable for an ideal-gas scheme
+    # (pressures/soundspeeds/entropies are cheap to recompute from it via
+    # idealGasEOS); supports must be re-written every frame too because Sod's
+    # default adaptiveSupportScheme keeps them drifting from the IC snapshot.
+    extraFields=('internalEnergies', 'supports'),
     defaults=dict(
         caseName='01-sodShockTube',
         dim=1,

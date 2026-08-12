@@ -1,6 +1,6 @@
 """The step loop, once.
 
-`examples/compressible/01-sod-shock-tube-1d.py`,
+`examples/compressible/01-sod/sod_1d.py`,
 `examples/incompressible/01-tgv-incomp.py` and
 `datagen/weaklyCompressible/generator.py` each carried their own copy of: build
 config, unpack ``buildScheme``, initialize state, loop the integrator, time it,
@@ -226,7 +226,8 @@ def _run(case: Case, spec: CaseSpec, startedAt: float) -> RunResult:
         groups = writeInitialData(ctx.exportPath, outFile, ctx.scheme, ctx.config,
                                   ctx.schemeConfig,
                                   SimpleNamespace(exportInterval=spec.exportInterval),
-                                  runningState, extraData=extraData)
+                                  runningState, extraData=extraData,
+                                  extraFields=case.extraFields)
 
     # `config.dt` is only final once the case has configured it -- weakly
     # compressible cases derive it from the sound speed during setup.
@@ -361,7 +362,8 @@ def _plotAndStore(ctx: RunContext, case: Case, spec: CaseSpec, state, stepResult
         if spec.storeMode == 'trajectory':
             writeFrame(groups, i, stepResult.state, stepResult.stages,
                        config=ctx.config, schemeConfig=ctx.schemeConfig,
-                       uniqueParticles=True, writeStages=False)
+                       uniqueParticles=True, writeStages=False,
+                       extraFields=case.extraFields)
         else:
             exportSimulationSystem(ctx.exportPath, f'state_{i:04d}', ctx.scheme,
                                    state, exportAdjacency=False,

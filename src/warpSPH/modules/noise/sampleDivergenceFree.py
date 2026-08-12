@@ -22,6 +22,11 @@ def generateNoiseInterpolator(fluidResolution, noiseResolution, domain: DomainDe
     for d in range(domain.dim):
         grid.append(np.linspace(domain.min[d].detach().cpu() + dx , domain.max[d].detach().cpu() - dx, noiseResolution))
     interpolator = RegularGridInterpolator(grid, noiseField.cpu().numpy(), bounds_error=False, fill_value=None)
+    # scipy's RegularGridInterpolator has no autograd, so d(noise)/d(x) is unconditionally
+    # zero through this closure -- fine for both call sites (an initial-condition field in
+    # sampleDivergenceFreeNoise, and the per-step Kolmogorov forcing in
+    # caseUtils/weaklyCompressible.py's forcing()), since neither is meant to be optimized
+    # through; not fine to assume for any future caller without checking.
     return lambda x: torch.tensor(interpolator(x.cpu().numpy()).reshape(x.shape[0])).to(x.device)
 
 

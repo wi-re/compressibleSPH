@@ -1,6 +1,7 @@
 """Reading a run back from disk: the inverse of :mod:`.export`."""
 
 import json
+import os
 from typing import Any, Optional
 
 import h5py
@@ -8,6 +9,7 @@ import torch
 
 from ..configurations import dictToConfig
 from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
+from ..modules import idealGasEOS
 from ..schemes import buildScheme
 from .hdf5 import loadAdjacency, loadState, loadStage, hdfDtypeToTorchDtype
 
@@ -109,4 +111,123 @@ def importConfigs(configPath, import_fn):
     return dictToConfig(configDict['config']), import_fn(configDict['schemeConfig'])
 
 
-__all__ = ['schemeNameToSimulationScheme', 'importSimulationSystem', 'importConfigs']
+def _toTensor(dataset, device):
+    return torch.from_numpy(dataset[:]).to(device).to(hdfDtypeToTorchDtype(dataset.dtype))
+
+
+def loadTrajectory(
+    exportPath,
+    device,
+    SimulationSystem: Optional[Any] = None,
+    SimulationState: Optional[Any] = None,
+    SimulationUpdate: Optional[Any] = None,
+    extraFields=(),
+):
+    """Open a ``storeMode='trajectory'`` export (the inverse of ``writeInitialData``/``writeFrame``).
+
+    Returns ``(trajectoryFile, meta)``. ``trajectoryFile`` is the open
+    ``h5py.File`` -- keep it open and pass it to :func:`loadTrajectoryFrame` to
+    materialise individual frames, and to append further frames when resuming
+    (matching how the file was written in the first place: one growing
+    ``trajectory.h5``, not one file per frame). ``meta['static']`` holds the
+    fields written once at t=0 (``masses``/``kinds``/``materials``/``UIDs``,
+    plus ``supports`` as the fallback for schemes that don't re-export it every
+    frame); ``meta['frameKeys']`` is the sorted list of per-frame keys actually
+    present in ``positions``/``velocities``/``densities``/``times`` and any of
+    `extraFields` that the file was written with (a case may have requested
+    fewer than `extraFields` lists, e.g. an older export).
+    """
+    trajectoryFile = h5py.File(os.path.join(exportPath, 'trajectory.h5'), 'r')
+
+    schemeName = trajectoryFile.attrs['scheme']
+    schemeEnum = schemeNameToSimulationScheme(schemeName)
+    # Always built, even when the caller overrides the three classes above --
+    # `bundle.stepFunction`/`exportFunction` are what a resume loop needs to
+    # keep stepping, and building it is cheap class resolution, not a kernel
+    # compile.
+    bundle = buildScheme(schemeEnum)
+    SimulationSystem = SimulationSystem or bundle.SimulationSystem
+    SimulationState = SimulationState or bundle.SimulationState
+    SimulationUpdate = SimulationUpdate or bundle.SimulationUpdate
+
+    static = {
+        'masses': _toTensor(trajectoryFile['combinedMasses'], device),
+        'supports': _toTensor(trajectoryFile['combinedSupports'], device),
+        'kinds': _toTensor(trajectoryFile['combinedKinds'], device),
+        'materials': _toTensor(trajectoryFile['combinedMaterials'], device),
+        'UIDs': _toTensor(trajectoryFile['combinedUIDs'], device),
+    }
+
+    meta = dict(
+        SimulationSystem=SimulationSystem,
+        SimulationState=SimulationState,
+        SimulationUpdate=SimulationUpdate,
+        bundle=bundle,
+        scheme=schemeEnum,
+        static=static,
+        frameKeys=sorted(trajectoryFile['positions'].keys()),
+        extraFields=tuple(name for name in extraFields if name in trajectoryFile),
+    )
+    return trajectoryFile, meta
+
+
+def loadTrajectoryFrame(trajectoryFile, meta, frameIndex: int, schemeConfig=None, gamma: Optional[float] = None):
+    """Reconstruct one full particle state at ``meta['frameKeys'][frameIndex]``.
+
+    ``positions``/``velocities``/``densities`` and any of ``meta['extraFields']``
+    present in the file come from that frame; ``masses``/``kinds``/
+    ``materials``/``UIDs`` (and ``supports``, unless it was exported every
+    frame) come from the static initial-condition snapshot `loadTrajectory`
+    already read. ``pressures``/``soundspeeds``/``entropies`` are not stored --
+    they are recomputed from ``densities``/``internalEnergies`` via the same
+    ``idealGasEOS`` call the case's own IC builder makes, using ``gamma`` (or
+    ``schemeConfig.gamma`` when ``gamma`` is not given).
+    """
+    key = meta['frameKeys'][frameIndex]
+    static = meta['static']
+    device = static['masses'].device
+
+    positions = _toTensor(trajectoryFile['positions'][key], device)
+    velocities = _toTensor(trajectoryFile['velocities'][key], device)
+    densities = _toTensor(trajectoryFile['densities'][key], device)
+    t = float(trajectoryFile['times'][key][0])
+
+    frameFields = {name: _toTensor(trajectoryFile[name][key], device) for name in meta['extraFields']}
+    supports = frameFields.get('supports', static['supports'])
+    internalEnergies = frameFields.get('internalEnergies')
+
+    stateKwargs = dict(
+        positions=positions, velocities=velocities, densities=densities, supports=supports,
+        masses=static['masses'], kinds=static['kinds'], materials=static['materials'], UIDs=static['UIDs'],
+        UIDcounter=int(static['UIDs'].max().item()) + 1,
+        # Matches the case IC builders (e.g. buildSod1D): a fresh state always
+        # starts divergence at zero and alpha0s/alphas at one -- a resumed
+        # state needs the same starting point, not the `None` a scheme
+        # otherwise reads as "never computed" (which, for divergence, is only
+        # handled as a one-off fallback; alpha0s/alphas have no such fallback).
+        divergence=torch.zeros_like(densities),
+        alpha0s=torch.ones_like(densities), alphas=torch.ones_like(densities),
+    )
+
+    if internalEnergies is not None:
+        gammaValue = gamma if gamma is not None else schemeConfig.gamma
+        A_, u_, P_, c_s = idealGasEOS(A=None, u=internalEnergies, P=None, rho=densities, gamma=gammaValue)
+        # Same formula the case's own IC builder (e.g. buildSod1D) uses --
+        # totalEnergies isn't in extraFields (it's a pure function of
+        # velocities/internalEnergies/masses, all already reconstructed
+        # above), but it is still a required field for a scheme's `finalize`
+        # step, so it has to be filled in here rather than left None.
+        kineticEnergy = torch.linalg.norm(velocities, dim=-1) ** 2 / 2
+        totalEnergies = (u_ + kineticEnergy) * static['masses']
+        stateKwargs.update(internalEnergies=u_, pressures=P_, soundspeeds=c_s, entropies=A_,
+                          totalEnergies=totalEnergies)
+
+    state = meta['SimulationState'](**stateKwargs)
+    system = meta['SimulationSystem'](state=state, adjacency=None, t=t)
+    return system, t
+
+
+__all__ = [
+    'schemeNameToSimulationScheme', 'importSimulationSystem', 'importConfigs',
+    'loadTrajectory', 'loadTrajectoryFrame',
+]

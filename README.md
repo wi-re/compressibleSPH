@@ -113,7 +113,7 @@ well as by a command line.
 ```bash
 warpsph-run <case> [flags]                  # the console script
 python -m warpSPH.cases.sod [flags]         # the same case, as a module
-python examples/compressible/01-sod-shock-tube-1d.py [flags]
+python examples/compressible/01-sod/sod_1d.py [flags]
 ```
 
 `warpsph-run` with no case name lists everything with its description.
@@ -261,7 +261,7 @@ notebooks stay for exploration; the scripts are what you run unattended.
 
 | case | script | notes |
 |---|---|---|
-| `sod` | [01-sod-shock-tube-1d.py](examples/compressible/01-sod-shock-tube-1d.py) | Sod shock tube, 1D |
+| `sod` | [01-sod/sod_1d.py](examples/compressible/01-sod/sod_1d.py) | Sod shock tube, 1D; own directory ([01-sod/](examples/compressible/01-sod/)) with a resume script/notebook and a trajectory-export demo -- see its notebooks for the pattern |
 | `linearWave` | [02-linear-wave.py](examples/compressible/02-linear-wave.py) | linear acoustic wave, 1D |
 | `kidder` | [03-kidder-isentropic-compression.py](examples/compressible/03-kidder-isentropic-compression.py) | isentropic compression; analytically driven boundary bands |
 | `noh` | [04-noh-implosion.py](examples/compressible/04-noh-implosion.py) | Noh implosion, 1D |
@@ -526,7 +526,7 @@ Previews and embedded videos for the compressible set:
 
 | Case | Notebook | Preview | Video |
 |---|---|---|---|
-| 01. Sod Shock Tube (1D) | [ipynb](examples/compressible/01-Sod_Shock_Tube_1D.ipynb) | ![](examples/compressible/outputs/01-Sod_Shock_Tube.png) | [MP4](examples/compressible/outputs/01-Sod_Shock_Tube.mp4) |
+| 01. Sod Shock Tube (1D) | [ipynb](examples/compressible/01-sod/sod_1d.ipynb) | ![](examples/compressible/01-sod/outputs/01-Sod_Shock_Tube.png) | [MP4](examples/compressible/01-sod/outputs/01-Sod_Shock_Tube.mp4) |
 | 02. Linear Wave | [ipynb](examples/compressible/02-Linear_Wave.ipynb) | ![](examples/compressible/outputs/02-Linear_wave.png) | [MP4](examples/compressible/outputs/02-Linear_wave.mp4) |
 | 03. Kidder Isentropic Compression | [ipynb](examples/compressible/03-Kidder_Isentropic_Compression.ipynb) | ![](examples/compressible/outputs/03-Kidder_Isentropic_compression.png) | [MP4](examples/compressible/outputs/03-Kidder_Isentropic_compression.mp4) |
 | 04. Noh Implosion | [ipynb](examples/compressible/04-Noh_Implosion.ipynb) | ![](examples/compressible/outputs/04-Noh_Implosion.png) | [MP4](examples/compressible/outputs/04-Noh_Implosion.mp4) |

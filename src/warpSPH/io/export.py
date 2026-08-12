@@ -209,6 +209,7 @@ def writeInitialData(
     args: Any,
     runningState: Any,
     extraData: dict | None = None,
+    extraFields: tuple = (),
 ):
     if extraData is None:
         extraData = {}
@@ -240,7 +241,7 @@ def writeInitialData(
     copy_dict_to_h5(outFile['config'], loadedConfig)
 
     rigidBodyGroup = outFile.create_group('rigidBodies')
-    for r, rigidBody in enumerate(schemeConfig.rigidBodies):
+    for r, rigidBody in enumerate(getattr(schemeConfig, 'rigidBodies', []) or []):
         cGroup = rigidBodyGroup.create_group(f'rigidBody_{r:02d}')
         cGroup.attrs['centerOfMass'] = rigidBody.centerOfMass.cpu().numpy()
         cGroup.attrs['orientation'] = rigidBody.orientation.cpu().numpy()
@@ -276,7 +277,8 @@ def writeInitialData(
     boundarySupports = initialState.supports[boundaryMask]
     boundaryUIDs = initialState.UIDs[boundaryMask]
     boundaryKinds = initialState.kinds[boundaryMask]
-    boundaryOffsets = initialState.ghostOffsets[boundaryMask] if initialState.ghostOffsets is not None else None
+    stateGhostOffsets = getattr(initialState, 'ghostOffsets', None)
+    boundaryOffsets = stateGhostOffsets[boundaryMask] if stateGhostOffsets is not None else None
 
     outFile.create_dataset('boundaryPositions', data=boundaryPositions.detach().cpu().numpy(), dtype=np.float32)
     outFile.create_dataset('boundaryMasses', data=boundaryMasses.detach().cpu().numpy(), dtype=np.float32)
@@ -319,8 +321,8 @@ def writeInitialData(
     outFile.create_dataset('combinedDensities', data=initialState.densities.detach().cpu().numpy(), dtype=np.float32)
     outFile.create_dataset('combinedVelocities', data=initialState.velocities.detach().cpu().numpy(), dtype=np.float32)
     outFile.create_dataset('combinedMaterials', data=initialState.materials.detach().cpu().numpy(), dtype=np.float32)
-    if initialState.ghostOffsets is not None:
-        outFile.create_dataset('combinedGhostOffsets', data=initialState.ghostOffsets.detach().cpu().numpy(), dtype=np.float32)
+    if stateGhostOffsets is not None:
+        outFile.create_dataset('combinedGhostOffsets', data=stateGhostOffsets.detach().cpu().numpy(), dtype=np.float32)
         outFile.create_dataset('combinedGhostIndices', data=initialState.ghostIndices.detach().cpu().numpy(), dtype=np.int32)
 
     positionGroup = outFile.create_group('positions')
@@ -328,12 +330,14 @@ def writeInitialData(
     densityGroup = outFile.create_group('densities')
     timeGroup = outFile.create_group('times')
     rigidBodyGroup = outFile.create_group('rigidBodyTrajectories')
+    extraGroups = tuple(outFile.create_group(name) for name in extraFields)
 
-    return (positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup)
+    return (positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup) + extraGroups
 
 
-def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=True, writeStages=False):
-    positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup = groups
+def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=True, writeStages=False,
+              extraFields: tuple = ()):
+    positionGroup, velocityGroup, densityGroup, timeGroup, rigidBodyGroup, *extraGroups = groups
 
     positionGroup.create_dataset(f'frame_{i:05d}', data=state.state.positions.cpu().numpy())
     velocityGroup.create_dataset(f'frame_{i:05d}', data=state.state.velocities.cpu().numpy())
@@ -342,9 +346,11 @@ def writeFrame(groups, i, state, stages, config, schemeConfig, uniqueParticles=T
         f'frame_{i:05d}',
         data=np.array([state.t.cpu().item() if isinstance(state.t, torch.Tensor) else state.t], dtype=np.float32),
     )
+    for name, group in zip(extraFields, extraGroups):
+        group.create_dataset(f'frame_{i:05d}', data=getattr(state.state, name).detach().cpu().numpy())
 
     rbg = rigidBodyGroup.create_group(f'frame_{i:05d}')
-    for r, rigidBody in enumerate(schemeConfig.rigidBodies):
+    for r, rigidBody in enumerate(getattr(schemeConfig, 'rigidBodies', []) or []):
         rbg.attrs[f'rigidBody_{r:02d}_centerOfMass'] = rigidBody.centerOfMass.cpu().numpy()
         rbg.attrs[f'rigidBody_{r:02d}_orientation'] = rigidBody.orientation.cpu().numpy()
         rbg.attrs[f'rigidBody_{r:02d}_angularVelocity'] = rigidBody.angularVelocity.cpu().numpy()

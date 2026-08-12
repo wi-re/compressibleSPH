@@ -70,6 +70,28 @@ def compSPH_step(
         domain = config.domain,
         adjacency = adjacency,
     )
+    # Computed here (rather than where it is otherwise used, further down)
+    # because a state reconstructed with `divergence=None` (e.g. resumed from
+    # a trajectory export, which doesn't persist divergence) needs it in the
+    # first-time branch immediately below; `computeOmega` only reads
+    # positions/supports/masses/densities, all already finalised above, so
+    # moving this earlier changes nothing about what it computes.
+    if schemeConfig.adaptiveSupportCorrections:
+        omega = computeOmega(currentState,
+                OperationProperties(
+                    kernel = config.kernel,
+                    supportMode = SupportScheme.Gather, # E.5
+                ),
+                domain = config.domain,
+                adjacency = adjacency
+        )
+
+        gradHState = GradHState(
+            queryOmegas = omega
+        )
+    else:
+        gradHState = None
+
     if currentState.divergence is None:
         print('Warning: divergence is None, computing for the first time')
         drhodt = computeMomentumConsistent(
@@ -91,22 +113,6 @@ def compSPH_step(
         rho = currentState.densities,
         gamma = schemeConfig.gamma,
     )
-
-    if schemeConfig.adaptiveSupportCorrections:
-        omega = computeOmega(currentState, 
-                OperationProperties(
-                    kernel = config.kernel,
-                    supportMode = SupportScheme.Gather, # E.5
-                ),
-                domain = config.domain,
-                adjacency = adjacency
-        )
-
-        gradHState = GradHState(
-            queryOmegas = omega
-        )
-    else:
-        gradHState = None
 
     currentState.alphas, switchState = computeViscositySwitchTerms(
         dt,

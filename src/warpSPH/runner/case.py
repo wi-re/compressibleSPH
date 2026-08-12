@@ -125,6 +125,12 @@ class Case:
     #: ``CaseSpec.params``.
     params: Dict[str, Any] = field(default_factory=dict)
 
+    #: State field names written every frame under ``storeMode='trajectory'``,
+    #: in addition to the always-written positions/velocities/densities --
+    #: e.g. a compressible case's ``('internalEnergies', 'supports')``.
+    #: Ignored under ``storeMode='states'``.
+    extraFields: tuple = ()
+
     description: str = ''
 
 

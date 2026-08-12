@@ -29,6 +29,26 @@ _HEADLESS_BACKENDS = frozenset({'agg', 'cairo', 'pdf', 'pgf', 'ps', 'svg', 'temp
 _warned = False
 
 
+def _runningUnderIPython() -> bool:
+    """True inside a live IPython/Jupyter kernel (classic Jupyter, JupyterLab,
+    or VS Code's notebook extension -- all three run an IPython kernel).
+
+    `False` for a plain `python script.py` process, which is the only case
+    that actually needs `openWindow`'s "pop a window" dance below: a notebook
+    frontend already displays a newly-created figure on its own (`%matplotlib
+    widget`/ipympl included -- that's the whole point of the magic), so
+    calling `Figure.show()`/`plt.ion()` again on top of that is not just
+    redundant, it visibly duplicates the display and appears to freeze,
+    because whichever copy someone is looking at may not be the one
+    `pumpEvents` keeps redrawing during the loop.
+    """
+    try:
+        from IPython import get_ipython
+        return get_ipython() is not None
+    except ImportError:
+        return False
+
+
 def figureOf(handle) -> Optional[Any]:
     """The matplotlib `Figure` behind a plot handle, or `None`.
 
@@ -47,10 +67,16 @@ def openWindow(ctx: 'RunContext', handle) -> None:
     """Show the figure live, if the run asked for it and a display exists.
 
     Called once from a case's `setupPlot`. Safe to call headless: it reports
-    once and leaves the run writing frames as before.
+    once and leaves the run writing frames as before. A no-op inside a
+    Jupyter/IPython kernel (see `_runningUnderIPython`) -- the notebook
+    frontend already displays a freshly-created figure on its own, so this
+    would only duplicate it and confuse which copy `pumpEvents` is actually
+    redrawing.
     """
     global _warned
     if not getattr(ctx.spec, 'show', True):
+        return
+    if _runningUnderIPython():
         return
 
     figure = figureOf(handle)
@@ -149,12 +175,23 @@ def closeWindow(handle) -> None:
                 pass
 
 
+#: ipympl (`%matplotlib widget`) and its nbAgg ancestor redraw over a Jupyter
+#: Comm, not a native GUI event loop -- `draw_idle`'s "redraw whenever the
+#: toolkit is next idle" only actually fires once the toolkit's own loop gets
+#: a turn, which a tight synchronous Python loop never yields to. A forced,
+#: immediate `draw()` is what these backends' own examples use for exactly
+#: this "update every iteration of a loop" shape, and what this repo's own
+#: pre-`Case` notebooks always called here.
+_FORCE_DRAW_BACKENDS_SUBSTR = ('ipympl', 'nbagg', 'webagg')
+
+
 def pumpEvents(handle) -> None:
     """Repaint, and let the GUI toolkit process its events.
 
     `draw_idle` alone only marks the canvas dirty; without `flush_events` the
     window never actually repaints during a tight step loop, and the toolkit
-    treats it as unresponsive.
+    treats it as unresponsive. ipympl/nbAgg-style backends need a forced
+    `draw()` instead -- see `_FORCE_DRAW_BACKENDS_SUBSTR`.
     """
     figure = figureOf(handle)
     if figure is None:
@@ -162,7 +199,12 @@ def pumpEvents(handle) -> None:
             handle.show()
         return
     try:
-        figure.canvas.draw_idle()
+        import matplotlib
+        backend = matplotlib.get_backend().lower().removeprefix('module://')
+        if any(name in backend for name in _FORCE_DRAW_BACKENDS_SUBSTR):
+            figure.canvas.draw()
+        else:
+            figure.canvas.draw_idle()
         figure.canvas.flush_events()
     except Exception:
         # A closed window, or a backend without an event loop -- neither is a

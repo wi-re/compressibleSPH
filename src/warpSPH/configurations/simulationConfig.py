@@ -195,10 +195,17 @@ def _decodeValue(annotation: Any, value: Any, device, dtype) -> Any:
         if annotation is torch.dtype:
             return getattr(torch, str(value).split('.')[-1])
         if annotation is _DomainDescription:
+            # `_encodeValue` collapses a 1-element tensor to a bare scalar via
+            # `.item()` (dim=1's min/max/periodic are exactly that), which loses
+            # the shape-(dim,) a fresh `buildDomainDescription` always has --
+            # `torch.tensor(scalar)` would otherwise come back 0-d and break any
+            # code that iterates per-dimension (e.g. the neighbor search).
+            def _atLeast1D(v):
+                return v if isinstance(v, list) else [v]
             return _DomainDescription(
-                min=torch.tensor(value['min'], device=device, dtype=dtype),
-                max=torch.tensor(value['max'], device=device, dtype=dtype),
-                periodic=torch.tensor(value['periodic'], device=device, dtype=torch.bool),
+                min=torch.tensor(_atLeast1D(value['min']), device=device, dtype=dtype),
+                max=torch.tensor(_atLeast1D(value['max']), device=device, dtype=dtype),
+                periodic=torch.tensor(_atLeast1D(value['periodic']), device=device, dtype=torch.bool),
                 dim=int(value['dim']),
             )
         if annotation is bool:

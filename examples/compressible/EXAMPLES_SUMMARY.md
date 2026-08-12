@@ -10,7 +10,7 @@ This page summarizes the 15 benchmark examples in this folder.
 
 | Case | Notebook | Preview |
 |---|---|---|
-| 01. Sod Shock Tube (1D) | [01-Sod_Shock_Tube_1D.ipynb](01-Sod_Shock_Tube_1D.ipynb) | ![](outputs/01-Sod_Shock_Tube.png) |
+| 01. Sod Shock Tube (1D) | [01-sod/sod_1d.ipynb](01-sod/sod_1d.ipynb) | ![](01-sod/outputs/01-Sod_Shock_Tube.png) |
 | 02. Linear Wave | [02-Linear_Wave.ipynb](02-Linear_Wave.ipynb) | ![](outputs/02-Linear_wave.png) |
 | 03. Kidder Isentropic Compression | [03-Kidder_Isentropic_Compression.ipynb](03-Kidder_Isentropic_Compression.ipynb) | ![](outputs/03-Kidder_Isentropic_compression.png) |
 | 04. Noh Implosion | [04-Noh_Implosion.ipynb](04-Noh_Implosion.ipynb) | ![](outputs/04-Noh_Implosion.png) |
@@ -29,13 +29,14 @@ This page summarizes the 15 benchmark examples in this folder.
 ## Case Details (Preview + MP4)
 
 ### 01. Sod Shock Tube (1D)
-Classical 1D Riemann problem with rarefaction, contact discontinuity, and shock.
+Classical 1D Riemann problem with rarefaction, contact discontinuity, and shock. Own directory
+([01-sod/](01-sod/)) with a resume script/notebook and a demo of the trajectory export scheme.
 
-![](outputs/01-Sod_Shock_Tube.png)
+![](01-sod/outputs/01-Sod_Shock_Tube.png)
 
-<video src="outputs/01-Sod_Shock_Tube.mp4" controls width="900"></video>
+<video src="01-sod/outputs/01-Sod_Shock_Tube.mp4" controls width="900"></video>
 
-[Open MP4](outputs/01-Sod_Shock_Tube.mp4)
+[Open MP4](01-sod/outputs/01-Sod_Shock_Tube.mp4)
 
 ### 02. Linear Wave
 Small-amplitude acoustic wave propagation test for phase and dissipation behavior.
