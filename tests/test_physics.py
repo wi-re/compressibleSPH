@@ -353,3 +353,151 @@ def test_dambreakGravityDoesWorkOnTheFluid(dambreakResult):
 
 def test_dambreakDoesNotDiverge(dambreakResult):
     assert not dambreakResult.diverged
+
+
+# --- Sedov-Taylor: point energy deposit, one case run at dim 1/2/3 ----------
+
+#: `nx` is the per-dimension particle count (`nx**dim` total), so these keep
+#: 2D/3D in the same rough budget as 1D despite the extra dimension(s). Odd,
+#: to satisfy `'hat'`/`'singular'`'s "particle exactly at the origin" need
+#: (`buildSedov` itself bumps an even `nx` up by one; picking odd here just
+#: avoids the warning).
+_SEDOV = {'sedov1d': dict(dim=1, nx=51), 'sedov2d': dict(dim=2, nx=21), 'sedov3d': dict(dim=3, nx=11)}
+
+
+@pytest.fixture(scope='module', params=sorted(_SEDOV))
+def sedovResult(request):
+    from warpSPH.cases.sedov import sedovCase
+    return request.param, _run(sedovCase, **_SEDOV[request.param])
+
+
+def test_sedovConservesTotalEnergy(sedovResult):
+    """CRKSPH is an energy-conserving discretisation: the point deposit
+    converting to a blast wave must not change the total."""
+    name, result = sedovResult
+    energy = result.series('totalEnergy')
+    drift = abs(energy[-1] - energy[0]) / abs(energy[0])
+    assert drift < 1e-3, f'{name} total energy drifted by {drift:.3e}'
+
+
+def test_sedovConvertsThermalEnergyIntoMotion(sedovResult):
+    """The medium starts at rest; the point deposit has to set it moving."""
+    name, result = sedovResult
+    kinetic = result.series('kineticEnergy')
+    assert kinetic[0] == pytest.approx(0.0, abs=1e-8)
+    assert kinetic[-1] > 0.0, f'{name} never started moving'
+
+
+def test_sedovDoesNotDiverge(sedovResult):
+    name, result = sedovResult
+    assert not result.diverged, f'{name} diverged'
+    assert len(result.trajectory) == STEPS + 1
+
+
+@pytest.mark.parametrize('initialization,dim,nx', [
+    ('hat', 1, 51), ('hat', 2, 21), ('hat', 3, 11),
+    ('singular', 1, 51), ('quadrant', 1, 50),
+])
+def test_sedovInitialConditionConservesE0(initialization, dim, nx):
+    """Regression test for `'hat'`: it used to raise `NotImplementedError`
+    (`buildSedov` called `warpKernelToDiffSPHKernel`/`diffSPHKernel`, names
+    left over from the pre-warp stack that no longer exist). The fix deposits
+    E0 on the particle nearest the origin -- same as `'singular'` -- then
+    smooths it with one SPH interpolation pass over the finalized adaptive
+    supports, renormalized because that pass is not an exact partition of
+    unity next to so few neighbours. All three initializations must still
+    conserve E0 exactly at t=0, regardless of dimension.
+    """
+    from warpSPH.cases.sedov import sedovCase
+    from warpSPH.runner import CaseSpec, buildContext
+
+    spec = CaseSpec(caseName=sedovCase.name, scheme=sedovCase.scheme,
+                    params=dict(sedovCase.params)).merged(**sedovCase.defaults)
+    spec = spec.merged(dim=dim, nx=nx, plot=False, store=False, quiet=True,
+                       params=dict(initialization=initialization))
+    with contextlib.redirect_stdout(io.StringIO()):
+        ctx = buildContext(sedovCase, spec)
+        sedovCase.configureScheme(ctx)
+        state = sedovCase.buildSystem(ctx).initializeNewState().state
+
+    totalEnergy = (state.internalEnergies * state.masses).sum().item()
+    assert totalEnergy == pytest.approx(spec.param('E0'), rel=1e-3)
+
+
+def test_sedovHatSpreadsTheSpikeOverMoreThanOneParticle():
+    """The point of the fix: `'hat'` must not still be a single-particle
+    delta the way `'singular'` deliberately is."""
+    from warpSPH.cases.sedov import sedovCase
+    from warpSPH.runner import CaseSpec, buildContext
+
+    def nonzeroParticles(initialization):
+        spec = CaseSpec(caseName=sedovCase.name, scheme=sedovCase.scheme,
+                        params=dict(sedovCase.params)).merged(**sedovCase.defaults)
+        spec = spec.merged(dim=1, nx=101, plot=False, store=False, quiet=True,
+                           params=dict(initialization=initialization))
+        with contextlib.redirect_stdout(io.StringIO()):
+            ctx = buildContext(sedovCase, spec)
+            sedovCase.configureScheme(ctx)
+            state = sedovCase.buildSystem(ctx).initializeNewState().state
+        return int((state.internalEnergies > 0).sum())
+
+    assert nonzeroParticles('singular') == 1
+    assert nonzeroParticles('hat') > 1
+
+
+@pytest.mark.parametrize('dim,nx', [(1, 40), (2, 40), (3, 32)])
+def test_uniformLatticeDensityMatchesBuiltDensity(dim, nx):
+    """`sum_j m_j W_ij` over a uniform lattice of known density must return
+    what it was built from -- `PORTING_EXAMPLES.md`'s recipe for catching a
+    dimension-dependent kernel-normalisation bug, section 4.7.
+
+    This is a real regression test, not a precaution: `buildSedov`'s B7
+    density estimate came back at exactly 1/16 of `rho0` at dim=3 only (found
+    while adding the 3D Sedov variant), tracing to a wrong `B7_C_d(3)`
+    constant in the sibling `warpSPHCore` repo -- the same "16x too small"
+    bug `PORTING_EXAMPLES.md` already documented as found and fixed via Sod's
+    3D porting, evidently not on this code path (`sampleRegularParticles` +
+    plain `WarpOperation.Density`, which only a dim=3 case exercises; Sod's
+    own 3D IC uses a different, bespoke sampler). Fixed in `warpSPHCore`
+    (uncommitted there -- a separate repo -- flag to whoever finds this
+    failing again rather than re-deriving the diagnosis from scratch).
+    """
+    import torch
+
+    from warpSPH.cases.sedov import sedovCase
+    from warpSPH.runner import CaseSpec, buildContext
+    from warpSPH.sample import sampleRegularParticles
+    from warpSPHCore import (OperationProperties, WarpOperation, SupportScheme,
+                             GradientScheme, warpOperation)
+
+    spec = CaseSpec(caseName=sedovCase.name, scheme=sedovCase.scheme,
+                    params=dict(sedovCase.params)).merged(**sedovCase.defaults)
+    spec = spec.merged(dim=dim, nx=nx, L=2.0, plot=False, store=False, quiet=True)
+    with contextlib.redirect_stdout(io.StringIO()):
+        ctx = buildContext(sedovCase, spec)
+        sedovCase.configureScheme(ctx)
+        particles_ = sampleRegularParticles(nx, ctx.config.domain, ctx.config.targetNeighbors)
+        particles = ctx.SimulationState(
+            positions=particles_.positions, supports=particles_.supports,
+            masses=particles_.masses, densities=particles_.densities,
+            velocities=torch.zeros_like(particles_.positions),
+            kinds=torch.zeros_like(particles_.positions[:, 0], dtype=torch.int32),
+            materials=torch.zeros_like(particles_.positions[:, 0], dtype=torch.int32),
+            UIDs=torch.arange(particles_.positions.shape[0], device=ctx.device, dtype=torch.int32),
+            UIDcounter=particles_.positions.shape[0],
+            internalEnergies=None, totalEnergies=None, entropies=None,
+            pressures=None, soundspeeds=None,
+            divergence=torch.zeros_like(particles_.densities),
+            alpha0s=torch.ones_like(particles_.densities),
+            alphas=torch.ones_like(particles_.densities),
+        )
+        densities = warpOperation(
+            particles,
+            OperationProperties(kernel=ctx.config.kernel, operation=WarpOperation.Density,
+                                supportMode=SupportScheme.Gather, gradientMode=GradientScheme.Difference),
+            domain=ctx.config.domain,
+        )
+
+    assert densities.mean().item() == pytest.approx(1.0, rel=1e-3), (
+        f'dim={dim} nx={nx}: uniform-lattice B7 density estimate is '
+        f'{densities.mean().item():.6g}, not 1.0 -- kernel normalisation regression')

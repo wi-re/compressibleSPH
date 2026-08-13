@@ -41,9 +41,9 @@ def buildSedov(
     # dim = 2
     domain = buildDomainDescription(domainExtent, dim, periodic = periodicDomain, device = device, dtype = dtype)
 
-    if initialization == 'singular':
+    if initialization in ('singular', 'hat'):
         if nx % 2 == 0:
-            warnings.warn('nx should be odd for singular initialization, setting to nx + 1')
+            warnings.warn(f'nx should be odd for {initialization} initialization, setting to nx + 1')
             nx += 1
     elif initialization == 'quadrant':
         if nx % 2 == 1:
@@ -142,13 +142,37 @@ def buildSedov(
         
 
     if initialization == 'hat':
-        # positions_warp = wp.from_torch(simulationState_.positions)
-        raise NotImplementedError('Hat initialization not implemented yet')
-        wrappedKernel = warpKernelToDiffSPHKernel(kernel)
-        W = diffSPHKernel(wrappedKernel, torch.tensor([[0,0]], device = device, dtype = dtype) - simulationState_.positions, simulationState_.supports)
-        W = W/W.sum()
-        simulationState_.internalEnergies = E0 * W / simulationState_.masses
-        A_, u_, P_, c_s = idealGasEOS(A = None, u = simulationState_.internalEnergies, P = None, rho = rho_optimal, gamma = gamma)
+        # Deposit all of E0 on the single particle nearest the origin (same
+        # placement 'singular' uses), then smooth that spike with one SPH
+        # interpolation pass -- summation-interpolation with the finalized
+        # adaptive supports (`adjacency`/`h_optimal` from evaluateOptimalSupport
+        # above) spreads it over one smoothing scale instead of leaving a
+        # single-particle delta, which is what made 'singular' numerically
+        # harsh at low resolution. Renormalized afterwards because the SPH
+        # kernel sum only reproduces a constant field exactly in the interior
+        # -- near the (few) neighbours of the central particle it is not
+        # exactly a partition of unity, so an unnormalized smoothing pass
+        # leaks a small fraction of E0.
+        dist = torch.linalg.norm(simulationState_.positions, dim = -1)
+        sortedDist, idx = torch.sort(dist)
+        u_delta = torch.zeros_like(simulationState_.masses)
+        u_delta[idx[0]] = E0 / simulationState_.masses[idx[0]]
+
+        u_ = warpOperation(
+            simulationState_,
+            OperationProperties(
+                kernel = kernel,
+                operation = WarpOperation.Interpolate,
+                supportMode = SupportScheme.Gather,
+            ),
+            domain = domain,
+            adjacency = adjacency,
+            queryValues = u_delta,
+        )
+        u_ = u_ * (E0 / (u_ * simulationState_.masses).sum())
+
+        A_, u_, P_, c_s = idealGasEOS(A = None, u = u_, P = None, rho = rho_optimal, gamma = gamma)
+        simulationState_.internalEnergies = u_
         simulationState_.pressures = P_
         simulationState_.soundspeeds = c_s
     elif initialization == 'singular':

@@ -29,6 +29,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+import numpy as np
 import torch
 
 from ..runner import RunContext
@@ -176,6 +177,17 @@ def profilePlot(axes: Sequence[ProfileAxis], shape: Tuple[int, int],
     exported alongside `setupPlot`/`updatePlot` so a notebook can call it
     directly for live updates, the same way `sod.py` calls `plotSod`/`plotSod_`
     directly instead of going through the `Case` hooks.
+
+    At `dim==1` this scatters every particle against its raw (signed) `x`, and
+    a vector quantity is read at `spec.component`, matching Sod/Noh/Kidder/
+    Woodward-Colella, all of which only ever run at `dim==1`. A radially
+    symmetric problem (Sedov) that also runs at `dim>1` instead wants every
+    particle against its distance from the origin `r = |x|`, unsigned, with a
+    vector quantity read as its magnitude rather than one component -- the
+    same "collapse, don't average" idea `PORTING_EXAMPLES.md` describes for
+    Sod's `x`, just with the invariant coordinate a radially symmetric problem
+    actually has. That branch only triggers when `ctx.spec.dim > 1`, so it is
+    inert for every existing `dim==1` caller.
     """
     rows, cols = shape
 
@@ -184,12 +196,16 @@ def profilePlot(axes: Sequence[ProfileAxis], shape: Tuple[int, int],
 
         fig, axis = handle
         flat = axis.flatten()
-        positions = state.state.positions.detach().cpu().numpy()[:, 0]
+        radial = ctx.spec.dim > 1
+        positionsFull = state.state.positions.detach().cpu().numpy()
+        positions = np.linalg.norm(positionsFull, axis=-1) if radial else positionsFull[:, 0]
         for ax, spec in zip(flat, axes):
             ax.clear()
             values = getattr(state.state, spec.quantity).detach().cpu().numpy()
-            if spec.component is not None and values.ndim > 1:
-                values = values[:, spec.component]
+            if values.ndim > 1:
+                values = (np.linalg.norm(values, axis=-1) if radial
+                          else values[:, spec.component] if spec.component is not None
+                          else values)
             values = values.reshape(len(positions), -1)[:, 0]
             ax.scatter(positions, values, s=1)
             if spec.reference is not None:

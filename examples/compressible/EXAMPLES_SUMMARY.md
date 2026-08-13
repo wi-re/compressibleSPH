@@ -1,6 +1,7 @@
 # Compressible SPH Example Gallery
 
-This page summarizes the 15 benchmark examples in this folder.
+This page summarizes the 14 benchmark examples in this folder (numbered 01-15;
+07 was folded into 06's own directory alongside its 1D/2D variants).
 
 - Static PNG previews are used to keep the page lightweight.
 - Each case also includes an embedded MP4 (plus a direct link).
@@ -15,8 +16,7 @@ This page summarizes the 15 benchmark examples in this folder.
 | 03. Kidder Isentropic Compression | [03-Kidder_Isentropic_Compression.ipynb](03-Kidder_Isentropic_Compression.ipynb) | ![](outputs/03-Kidder_Isentropic_compression.png) |
 | 04. Noh Implosion | [04-Noh_Implosion.ipynb](04-Noh_Implosion.ipynb) | ![](outputs/04-Noh_Implosion.png) |
 | 05. Woodward-Colella Double Blastwave | [05-Woodward_Colella.ipynb](05-Woodward_Colella.ipynb) | ![](outputs/05-Wodward_Colella_Double_Blastwave.png) |
-| 06. Sedov-Taylor Blastwave (1D) | [06-Sedov_Taylor_Blastwave_1D.ipynb](06-Sedov_Taylor_Blastwave_1D.ipynb) | ![](outputs/06-Sedov_Taylor_Blastwave_1D.png) |
-| 07. Sedov-Taylor Blastwave (2D) | [07-Sedov_Taylor_Blastwave_2D.ipynb](07-Sedov_Taylor_Blastwave_2D.ipynb) | ![](outputs/07-Sedov_Taylor_Blastwave_2D.png) |
+| 06. Sedov-Taylor Blastwave (1D/2D/3D) | [06-sedov/sedov_1d.ipynb](06-sedov/sedov_1d.ipynb) | ![](06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.png) |
 | 08. Hydrostatic | [08-Hydrostatic.ipynb](08-Hydrostatic.ipynb) | ![](outputs/08-Hydrostatic.png) |
 | 09. Gresho-Chan Vortex | [09-Gresho_Chan_Vortex.ipynb](09-Gresho_Chan_Vortex.ipynb) | ![](outputs/09-Gresho_Chan_Vortex.png) |
 | 10. Yee Vortex | [10-Yee_Vortex.ipynb](10-Yee_Vortex.ipynb) | ![](outputs/10-Yee_Vortex.png) |
@@ -74,23 +74,29 @@ Interacting strong shocks and contacts in 1D.
 
 [Open MP4](outputs/05-Wodward_Colella_Double_Blastwave.mp4)
 
-### 06. Sedov-Taylor Blastwave (1D)
-Localized energy deposition driving a strong self-similar blast wave in 1D.
+### 06. Sedov-Taylor Blastwave (1D/2D/3D)
+Localized energy deposition driving a strong, self-similar blast wave -- a compressible
+scheme's strong-shock and energy-conservation test under an extreme initial gradient. Own
+directory ([06-sedov/](06-sedov/)) with 1D/2D/3D variants of the same case, and a smoothed
+(`'hat'`) as well as a raw single-particle-spike (`'singular'`) initial condition.
 
-![](outputs/06-Sedov_Taylor_Blastwave_1D.png)
+![](06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.png)
 
-<video src="outputs/06-Sedov_Taylor_Blastwave_1D.mp4" controls width="900"></video>
+<video src="06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.mp4" controls width="900"></video>
 
-[Open MP4](outputs/06-Sedov_Taylor_Blastwave_1D.mp4)
+[Open MP4](06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.mp4)
 
-### 07. Sedov-Taylor Blastwave (2D)
-Radial blast expansion benchmark for isotropy and shock-front shape.
+![](06-sedov/outputs/06-Sedov_Taylor_Blastwave_2D.png)
 
-![](outputs/07-Sedov_Taylor_Blastwave_2D.png)
+<video src="06-sedov/outputs/06-Sedov_Taylor_Blastwave_2D.mp4" controls width="900"></video>
 
-<video src="outputs/07-Sedov_Taylor_Blastwave_2D.mp4" controls width="900"></video>
+[Open MP4](06-sedov/outputs/06-Sedov_Taylor_Blastwave_2D.mp4)
 
-[Open MP4](outputs/07-Sedov_Taylor_Blastwave_2D.mp4)
+![](06-sedov/outputs/06-Sedov_Taylor_Blastwave_3D.png)
+
+<video src="06-sedov/outputs/06-Sedov_Taylor_Blastwave_3D.mp4" controls width="900"></video>
+
+[Open MP4](06-sedov/outputs/06-Sedov_Taylor_Blastwave_3D.mp4)
 
 ### 08. Hydrostatic
 Gravity-balanced static fluid test for hydrostatic equilibrium preservation.

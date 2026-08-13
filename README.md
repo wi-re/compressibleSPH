@@ -267,7 +267,7 @@ notebooks stay for exploration; the scripts are what you run unattended.
 | `kidder` | [03-kidder-isentropic-compression.py](examples/compressible/03-kidder-isentropic-compression.py) | isentropic compression; analytically driven boundary bands |
 | `noh` | [04-noh-implosion.py](examples/compressible/04-noh-implosion.py) | Noh implosion, 1D |
 | `woodwardColella` | [05-woodward-colella.py](examples/compressible/05-woodward-colella.py) | interacting blast waves, 1D |
-| `sedov` | [06](examples/compressible/06-sedov-taylor-blastwave-1d.py), [07](examples/compressible/07-sedov-taylor-blastwave-2d.py) | Sedov-Taylor blast; `--dim 1` or `--dim 2` |
+| `sedov` | [06-sedov/sedov_1d.py](examples/compressible/06-sedov/sedov_1d.py), [sedov_2d.py](examples/compressible/06-sedov/sedov_2d.py), [sedov_3d.py](examples/compressible/06-sedov/sedov_3d.py) | Sedov-Taylor blast; `--dim 1`/`2`/`3`; own directory ([06-sedov/](examples/compressible/06-sedov/)); `--initialization hat` (default) smooths the point deposit over one smoothing scale via an SPH interpolation pass, `singular` is the raw spike, `quadrant` spreads it over the `2**dim` innermost particles |
 | `hydrostatic` | [08-hydrostatic.py](examples/compressible/08-hydrostatic.py) | hydrostatic equilibrium; the exact answer is "nothing happens" |
 | `gresho` | [09-gresho-chan-vortex.py](examples/compressible/09-gresho-chan-vortex.py) | Gresho-Chan vortex, a steady state |
 | `yee` | [10-yee-vortex.py](examples/compressible/10-yee-vortex.py) | Yee isentropic vortex, sampled on shells |
@@ -536,8 +536,7 @@ Previews and embedded videos for the compressible set:
 | 03. Kidder Isentropic Compression | [ipynb](examples/compressible/03-Kidder_Isentropic_Compression.ipynb) | ![](examples/compressible/outputs/03-Kidder_Isentropic_compression.png) | [MP4](examples/compressible/outputs/03-Kidder_Isentropic_compression.mp4) |
 | 04. Noh Implosion | [ipynb](examples/compressible/04-Noh_Implosion.ipynb) | ![](examples/compressible/outputs/04-Noh_Implosion.png) | [MP4](examples/compressible/outputs/04-Noh_Implosion.mp4) |
 | 05. Woodward-Colella Double Blastwave | [ipynb](examples/compressible/05-Woodward_Colella.ipynb) | ![](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.png) | [MP4](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.mp4) |
-| 06. Sedov-Taylor Blastwave (1D) | [ipynb](examples/compressible/06-Sedov_Taylor_Blastwave_1D.ipynb) | ![](examples/compressible/outputs/06-Sedov_Taylor_Blastwave_1D.png) | [MP4](examples/compressible/outputs/06-Sedov_Taylor_Blastwave_1D.mp4) |
-| 07. Sedov-Taylor Blastwave (2D) | [ipynb](examples/compressible/07-Sedov_Taylor_Blastwave_2D.ipynb) | ![](examples/compressible/outputs/07-Sedov_Taylor_Blastwave_2D.png) | [MP4](examples/compressible/outputs/07-Sedov_Taylor_Blastwave_2D.mp4) |
+| 06. Sedov-Taylor Blastwave (1D/2D/3D) | [ipynb](examples/compressible/06-sedov/sedov_1d.ipynb) | ![](examples/compressible/06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.png) | [MP4](examples/compressible/06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.mp4) |
 | 08. Hydrostatic | [ipynb](examples/compressible/08-Hydrostatic.ipynb) | ![](examples/compressible/outputs/08-Hydrostatic.png) | [MP4](examples/compressible/outputs/08-Hydrostatic.mp4) |
 | 09. Gresho-Chan Vortex | [ipynb](examples/compressible/09-Gresho_Chan_Vortex.ipynb) | ![](examples/compressible/outputs/09-Gresho_Chan_Vortex.png) | [MP4](examples/compressible/outputs/09-Gresho_Chan_Vortex.mp4) |
 | 10. Yee Vortex | [ipynb](examples/compressible/10-Yee_Vortex.ipynb) | ![](examples/compressible/outputs/10-Yee_Vortex.png) | [MP4](examples/compressible/outputs/10-Yee_Vortex.mp4) |

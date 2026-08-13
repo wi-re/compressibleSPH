@@ -145,8 +145,18 @@ see README for the current layout, not reconstructed here.
 - `examples/weaklyCompressible/naca.ipynb`, `examples/incompressible/1d-test.ipynb`
   — deliberately have no case (standalone SDF viz / exploratory scratchpad, not
   published examples).
-- Sedov's `initialization='hat'` — both notebooks crashed on this default; the case
-  now defaults to `'singular'`. Reviving `'hat'` is a separate, unscoped job.
+- ~~Sedov's `initialization='hat'` — both notebooks crashed on this default; the case
+  now defaults to `'singular'`. Reviving `'hat'` is a separate, unscoped job.~~ Done
+  2026-08-13: `'hat'` now deposits E0 on the central particle and smooths it with one
+  SPH interpolation pass over the finalized adaptive supports; it's the case default
+  again. Sedov also moved into its own directory (`examples/compressible/06-sedov/`,
+  1D/2D/3D) in the same pass, which surfaced a real bug: `B7_C_d(dim=3)` in the sibling
+  `warpSPHCore` repo was 16x too small (a regression of the "B7's 3D kernel
+  normalisation" bug noted in `PORTING_EXAMPLES.md` section 4.7 — apparently never
+  fixed for the `sampleRegularParticles`/plain-`Density` code path Sod's own 3D builder
+  doesn't use). Fixed there (uncommitted, separate repo); see
+  `tests/test_physics.py::test_uniformLatticeDensityMatchesBuiltDensity` for the
+  regression test.
 
 ## Deferred by decision
 

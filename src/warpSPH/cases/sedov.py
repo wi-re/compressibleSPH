@@ -1,11 +1,11 @@
 """Sedov-Taylor blast wave, compressible.
 
-The script forms of this case were
-`examples/compressible/06-Sedov_Taylor_Blastwave_1D.ipynb` and
-`07-Sedov_Taylor_Blastwave_2D.ipynb`. They are the *same* case at two
-dimensionalities -- identical sampler, identical scheme, identical stopping
-rule -- so this is one case run as ``--dim 1`` or ``--dim 2``, and only the
-plot branches on it.
+The script/notebook forms of this case live in `examples/compressible/06-sedov/`
+(`sedov_1d.py`/`.ipynb`, `sedov_2d.py`/`.ipynb`, `sedov_3d.py`/`.ipynb`). All
+three dimensionalities are the *same* case -- identical sampler, identical
+scheme, identical stopping rule -- so this is one `Case` run as ``--dim 1``,
+``--dim 2`` or ``--dim 3``; only `nx` (and, for the notebooks, `PRESET`)
+differs.
 
 The run ends when the shock reaches `goalRadius`, which is a time derived from
 the analytic self-similar solution rather than a number chosen by hand.
@@ -13,18 +13,16 @@ the analytic self-similar solution rather than a number chosen by hand.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
-
-import numpy as np
+from typing import Dict, List
 
 from ..caseUtils import SedovSolution, beta, buildSedov, radius
 from ..runner import Case, RunContext, caseMain, registerCase
 from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            compressibleDiagnostics, configureCompressible,
                            paramExtraData)
-from .plotting import Field, ProfileAxis, particlePlot, profilePlot
+from .plotting import ProfileAxis, profilePlot
 
-__all__ = ['sedovCase', 'sedovSolution', 'goalTime']
+__all__ = ['sedovCase', 'sedovSolution', 'goalTime', 'drawSedov']
 
 
 def sedovSolution(ctx: RunContext) -> SedovSolution:
@@ -62,21 +60,32 @@ def buildSystem(ctx: RunContext):
 
 
 # -- plotting ----------------------------------------------------------------
-# 1D shows radial profiles against the analytic shock state; 2D shows the two
-# fields the blast is actually read from. `setupPlot` picks between them at run
-# time because the dimension is not known until the spec is resolved.
+# One set of radial profile panels for every dimension: `profilePlot` scatters
+# each particle against its own distance from the origin at `dim>1` (unsigned,
+# vector quantities read as their magnitude) and against raw signed `x` at
+# `dim==1` (matching the two reference notebooks this case replaces, which
+# plotted the same two shock-radius estimates the two ways below). Two
+# reference targets are kept at every dimension: `r2`/`vs`/`rho2` come from
+# `SedovSolution`'s full self-similar solve, `rt` from the closed-form
+# `beta`-fit estimate the notebooks also overlaid -- the gap between the two
+# is itself a diagnostic worth seeing.
+
+def _mirror(ctx: RunContext, values: List[float]) -> List[float]:
+    """Add the negative of each value too, but only for the signed `dim==1` x-axis."""
+    return list(values) + [-v for v in values] if ctx.spec.dim == 1 else list(values)
+
 
 def _shock(ctx: RunContext, state):
-    """`(shockSpeed, r2, v2, rho2, P2)` and the front radius at the current t."""
+    """`(shockSpeed, r2, v2, rho2, P2)` and the front radius the beta-fit predicts."""
     solution = ctx.scratch['solution']
     t = max(float(state.t), 1e-12)
     return solution.shockState(t), radius(beta(ctx.spec.dim), ctx.param('E0'), t,
-                                          ctx.param('rho0'), 1)
+                                          ctx.param('rho0'), ctx.spec.dim)
 
 
 def _fronts(ctx: RunContext, state):
     (_, r2, _, _, _), rt = _shock(ctx, state)
-    return [r2, -r2, rt, -rt]
+    return _mirror(ctx, [r2, rt])
 
 
 def _shockDensity(ctx: RunContext, state):
@@ -86,10 +95,10 @@ def _shockDensity(ctx: RunContext, state):
 
 def _shockVelocity(ctx: RunContext, state):
     (vs, _, v2, _, _), _ = _shock(ctx, state)
-    return [vs, -vs, v2, -v2]
+    return _mirror(ctx, [vs, v2])
 
 
-_profileSetup, _profileUpdate, _profileDraw = profilePlot(
+setupPlot, updatePlot, drawSedov = profilePlot(
     [
         ProfileAxis('internalEnergies', 'Internal energy', yscale='log', vlines=_fronts),
         ProfileAxis('densities', 'Density', yscale='log', vlines=_fronts,
@@ -101,22 +110,6 @@ _profileSetup, _profileUpdate, _profileDraw = profilePlot(
     shape=(2, 2), figsize=(9, 6), xlim=(0, 1),
 )
 
-_fieldSetup, _fieldUpdate = particlePlot([
-    Field('internalEnergies', 'internal energy', colorMap='viridis',
-          scaling='Logarithmic', vMin=1e-10, gridResolution=1024),
-    Field('densities', 'density', colorMap='cividis'),
-])
-
-
-def setupPlot(ctx: RunContext, state):
-    ctx.scratch['plotters'] = ((_profileSetup, _profileUpdate) if ctx.spec.dim == 1
-                               else (_fieldSetup, _fieldUpdate))
-    return ctx.scratch['plotters'][0](ctx, state)
-
-
-def updatePlot(ctx: RunContext, state, handle, step: int) -> None:
-    ctx.scratch['plotters'][1](ctx, state, handle, step)
-
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     return compressibleDiagnostics(ctx, state)
@@ -125,7 +118,7 @@ def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
 sedovCase = registerCase(Case(
     name='sedov',
     scheme='CRKSPH',
-    description='Sedov-Taylor blast wave (1D or 2D), compressible SPH.',
+    description='Sedov-Taylor blast wave (1D, 2D or 3D), compressible SPH.',
     buildSystem=buildSystem,
     configureScheme=configureCompressible,
     diagnostics=diagnostics,
@@ -135,8 +128,10 @@ sedovCase = registerCase(Case(
     defaults=dict(
         COMPRESSIBLE_DEFAULTS,
         caseName='06-sedovTaylorBlastwave',
-        # 1D was the notebook's nx=800; the 2D notebook used nx=200, which is
-        # `--dim 2 --nx 200`.
+        # `nx` is per-dimension particle count along one axis of the domain,
+        # so the total particle count grows as `nx**dim`: 1D uses the
+        # notebook's nx=800, 2D and 3D each dial it back (see sedov_2d.py/
+        # sedov_3d.py) to keep the 2D/3D examples in a comparable budget.
         dim=1,
         nx=800,
         L=2.0,
@@ -149,14 +144,14 @@ sedovCase = registerCase(Case(
         COMPRESSIBLE_PARAMS,
         E0=1.0,
         goalRadius=0.8,
-        # Both notebooks asked for 'hat' and both therefore crashed:
-        # `buildSedov` raises NotImplementedError for it, and the dead code
-        # below that raise calls `warpKernelToDiffSPHKernel`/`diffSPHKernel`,
-        # names left over from the pre-warp stack that no longer exist
-        # anywhere. 'singular' deposits E0 on the single central particle and
-        # is what actually runs; 'quadrant' spreads it over the 2^dim
-        # innermost particles.
-        initialization='singular',
+        # 'hat' deposits E0 on the single particle nearest the origin, same as
+        # 'singular', then smooths that spike with one SPH interpolation pass
+        # over the finalized adaptive supports -- spreading it over one
+        # smoothing scale instead of leaving a single-particle delta, which is
+        # what 'singular' does and what makes it numerically harsh at low
+        # resolution. 'quadrant' instead spreads E0 evenly over the 2^dim
+        # innermost particles, with no smoothing.
+        initialization='hat',
     ),
 ))
 
