@@ -1,7 +1,8 @@
 # Compressible SPH Example Gallery
 
-This page summarizes the 14 benchmark examples in this folder (numbered 01-15;
-07 was folded into 06's own directory alongside its 1D/2D variants).
+This page summarizes the 13 benchmark examples in this folder (numbered 01-14;
+07 was folded into 06's own directory alongside its 1D/2D variants, and 15 was
+folded into 14's own directory alongside its equal-mass/equal-spacing variants).
 
 - Static PNG previews are used to keep the page lightweight.
 - Each case also includes an embedded MP4 (plus a direct link).
@@ -23,8 +24,7 @@ This page summarizes the 14 benchmark examples in this folder (numbered 01-15;
 | 11. Shearing Noh Implosion (2D) | [11-Shearing_Noh_Implosion_2D.ipynb](11-Shearing_Noh_Implosion_2D.ipynb) | ![](outputs/11-Shearing_Noh_2D.png) |
 | 12. Kelvin-Helmholtz | [12-Kelvin-Helmholtz.ipynb](12-Kelvin-Helmholtz.ipynb) | ![](outputs/12-Kelvin_Helmholtz.png) |
 | 13. Rayleigh-Taylor | [13-Rayleigh_Taylor.ipynb](13-Rayleigh_Taylor.ipynb) | ![](outputs/13-Rayleigh_Taylor.png) |
-| 14. Triple Point (Equal Resolution) | [14-Triple_point.ipynb](14-Triple_point.ipynb) | ![](outputs/14-Triple_Point_equal_resolution.png) |
-| 15. Triple Point (Equal Mass) | [15-Triple_point_equalMass.ipynb](15-Triple_point_equalMass.ipynb) | ![](outputs/15-Triple_Point_equal_mass.png) |
+| 14. Triple Point (Equal Spacing/Mass) | [14-triplePoint/triplePoint_equalSpacing.ipynb](14-triplePoint/triplePoint_equalSpacing.ipynb) | ![](14-triplePoint/outputs/14-Triple_Point_equal_resolution.png) |
 
 ## Case Details (Preview + MP4)
 
@@ -152,20 +152,20 @@ Buoyancy-driven instability with bubble and spike growth.
 
 [Open MP4](outputs/13-Rayleigh_Taylor.mp4)
 
-### 14. Triple Point (Equal Resolution)
-Multi-region 2D Riemann interaction with shocks, contacts, and slip lines.
+### 14. Triple Point (Equal Spacing/Mass)
+Multi-region 2D Riemann interaction with shocks, contacts, and slip lines -- a
+compressible scheme's test for mass-resolution handling at a density jump. Own
+directory ([14-triplePoint/](14-triplePoint/)) with equal-spacing and
+equal-mass sampling variants of the same case.
 
-![](outputs/14-Triple_Point_equal_resolution.png)
+![](14-triplePoint/outputs/14-Triple_Point_equal_resolution.png)
 
-<video src="outputs/14-Triple_Point_equal_resolution.mp4" controls width="900"></video>
+<video src="14-triplePoint/outputs/14-Triple_Point_equal_resolution.mp4" controls width="900"></video>
 
-[Open MP4](outputs/14-Triple_Point_equal_resolution.mp4)
+[Open MP4](14-triplePoint/outputs/14-Triple_Point_equal_resolution.mp4)
 
-### 15. Triple Point (Equal Mass)
-Triple-point interaction with equal-mass sampling for method comparison.
+![](14-triplePoint/outputs/14-Triple_Point_equal_mass.png)
 
-![](outputs/15-Triple_Point_equal_mass.png)
+<video src="14-triplePoint/outputs/14-Triple_Point_equal_mass.mp4" controls width="900"></video>
 
-<video src="outputs/15-Triple_Point_equal_mass.mp4" controls width="900"></video>
-
-[Open MP4](outputs/15-Triple_Point_equal_mass.mp4)
+[Open MP4](14-triplePoint/outputs/14-Triple_Point_equal_mass.mp4)

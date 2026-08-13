@@ -17,7 +17,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['shearingNohCase']
+__all__ = ['shearingNohCase', 'SHEARING_NOH_FIELDS']
 
 
 def buildSystem(ctx: RunContext):
@@ -25,11 +25,15 @@ def buildSystem(ctx: RunContext):
                              dict(ctx.spec.params), ctx.SimulationState, ctx.SimulationSystem)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The two panels, exported so a notebook can pass them to
+#: `buildFieldPlotter`/`refreshFieldPlotter` directly (see `hydrostatic.py`).
+SHEARING_NOH_FIELDS = [
     # x-velocity rather than its magnitude: the shear is what this case is for.
     Field('velocities', 'velocities', colorMap='viridis', mapping='x'),
     Field('densities', 'densities', colorMap='cividis', flip=True, gridResolution=512),
-])
+]
+
+setupPlot, updatePlot = particlePlot(SHEARING_NOH_FIELDS)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

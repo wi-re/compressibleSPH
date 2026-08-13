@@ -20,7 +20,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['hydrostaticCase']
+__all__ = ['hydrostaticCase', 'HYDROSTATIC_FIELDS']
 
 
 def buildSystem(ctx: RunContext):
@@ -29,10 +29,15 @@ def buildSystem(ctx: RunContext):
         ctx.config, ctx.schemeConfig, ctx.SimulationState, ctx.SimulationSystem)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The two panels, as `particlePlot`/`buildFieldPlotter` want them -- named
+#: and exported so a notebook can pass them to `buildFieldPlotter`/
+#: `refreshFieldPlotter` directly instead of re-deriving them.
+HYDROSTATIC_FIELDS = [
     Field('velocities', 'velocities', colorMap='viridis', mapping='L2Norm'),
     Field('densities', 'densities', colorMap='cividis', flip=True),
-])
+]
+
+setupPlot, updatePlot = particlePlot(HYDROSTATIC_FIELDS)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

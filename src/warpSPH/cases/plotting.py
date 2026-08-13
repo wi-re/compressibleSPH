@@ -4,7 +4,10 @@ Every 2D example notebook built the same `warpSPHPlotting.visualize` call --
 one or two particle fields, a mosaic, `export` to `frame_NNNNN.png` -- differing
 only in which fields and which colour maps. :func:`particlePlot` is that call as
 data, so a case declares the fields and gets a matching `setupPlot` /
-`updatePlot` pair back.
+`updatePlot` pair back. :func:`buildFieldPlotter`/:func:`refreshFieldPlotter`
+are the window/event-loop-free core of that pair -- what a notebook calls
+directly instead of the `Case` hooks, the same way `profilePlot`'s `draw` is
+its `setupPlot` minus `openWindow`/`pumpEvents`.
 
 The 1D compressible examples instead scattered a few state fields against `x`;
 :func:`profilePlot` is that, with an optional analytic overlay.
@@ -34,8 +37,10 @@ import torch
 
 from ..runner import RunContext
 
-__all__ = ['Field', 'particlePlot', 'profilePlot', 'ProfileAxis', 'figureTitle',
-           'openWindow', 'pumpEvents', 'holdWindow', 'closeWindow', 'figureOf']
+__all__ = ['Field', 'particlePlot', 'buildFieldPlotter', 'refreshFieldPlotter',
+           'profilePlot', 'ProfileAxis', 'figureTitle',
+           'openWindow', 'pumpEvents', 'holdWindow', 'closeWindow', 'figureOf',
+           'resolvePlotBackend', 'visualizeWithFallback']
 
 
 # -- live display -----------------------------------------------------------
@@ -103,6 +108,49 @@ def figureTitle(ctx: RunContext, state, row: Optional[Dict[str, float]] = None) 
     return ' | '.join(parts)
 
 
+def _mosaicKeys(fields: Sequence[Field]) -> List[str]:
+    return [chr(ord('A') + i) for i in range(len(fields))]
+
+
+def buildFieldPlotter(ctx: RunContext, state, fields: Sequence[Field],
+                      figsize: Tuple[float, float] = (11, 5), dpi: int = 300):
+    """Build the `fields` plotter and export its frame 0 -- no window calls.
+
+    This is `particlePlot`'s `setupPlot` minus `openWindow`; a notebook calls
+    it directly instead of a case's `setupPlot` hook, the same reason
+    `profilePlot` exports its `draw`.
+    """
+    keys = _mosaicKeys(fields)
+    markerSize = ctx.param('markerSize', 2)
+    plotter = visualizeWithFallback(
+        ctx, resolvePlotBackend(ctx),
+        particleState=state.state,
+        domain=ctx.config.domain,
+        quantities={k: f.tensor(state) for k, f in zip(keys, fields)},
+        plotOptions={k: _plotOptions(f, markerSize) for k, f in zip(keys, fields)},
+        figTitle=figureTitle(ctx, state),
+        mosaic=''.join(keys),
+        figsize=figsize,
+    )
+    _export(ctx, plotter, 0, dpi)
+    return plotter
+
+
+def refreshFieldPlotter(ctx: RunContext, state, plotter, fields: Sequence[Field],
+                        step: int = 0, dpi: int = 300) -> None:
+    """Update an existing `fields` plotter in place -- no event-pump calls."""
+    keys = _mosaicKeys(fields)
+    plotter.updateQuantities(
+        {k: f.tensor(state) for k, f in zip(keys, fields)},
+        newParticleState=state.state,
+    )
+    # The notebooks never refreshed the title, so every frame after the
+    # first showed t = 0 -- which makes the encoded video misleading about
+    # what it is showing.
+    plotter.updateTitle(figureTitle(ctx, state))
+    _export(ctx, plotter, step, dpi)
+
+
 def particlePlot(fields: Sequence[Field], figsize: Tuple[float, float] = (11, 5),
                  dpi: int = 300) -> Tuple[Callable, Callable]:
     """`(setupPlot, updatePlot)` rendering `fields` side by side.
@@ -110,34 +158,14 @@ def particlePlot(fields: Sequence[Field], figsize: Tuple[float, float] = (11, 5)
     Panels are keyed 'A', 'B', ... in order, which is exactly the mosaic string
     the notebooks passed.
     """
-    keys = [chr(ord('A') + i) for i in range(len(fields))]
 
     def setupPlot(ctx: RunContext, state):
-        markerSize = ctx.param('markerSize', 2)
-        plotter = visualizeWithFallback(
-            ctx, resolvePlotBackend(ctx),
-            particleState=state.state,
-            domain=ctx.config.domain,
-            quantities={k: f.tensor(state) for k, f in zip(keys, fields)},
-            plotOptions={k: _plotOptions(f, markerSize) for k, f in zip(keys, fields)},
-            figTitle=figureTitle(ctx, state),
-            mosaic=''.join(keys),
-            figsize=figsize,
-        )
-        _export(ctx, plotter, 0, dpi)
+        plotter = buildFieldPlotter(ctx, state, fields, figsize, dpi)
         openWindow(ctx, plotter)
         return plotter
 
     def updatePlot(ctx: RunContext, state, plotter, step: int) -> None:
-        plotter.updateQuantities(
-            {k: f.tensor(state) for k, f in zip(keys, fields)},
-            newParticleState=state.state,
-        )
-        # The notebooks never refreshed the title, so every frame after the
-        # first showed t = 0 -- which makes the encoded video misleading about
-        # what it is showing.
-        plotter.updateTitle(figureTitle(ctx, state))
-        _export(ctx, plotter, step, dpi)
+        refreshFieldPlotter(ctx, state, plotter, fields, step, dpi)
         pumpEvents(plotter)
 
     return setupPlot, updatePlot

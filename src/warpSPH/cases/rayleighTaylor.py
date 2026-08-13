@@ -20,7 +20,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['rayleighTaylorCase']
+__all__ = ['rayleighTaylorCase', 'RAYLEIGH_TAYLOR_FIELDS']
 
 
 def configureScheme(ctx: RunContext) -> None:
@@ -45,12 +45,16 @@ def buildSystem(ctx: RunContext):
         ctx.SimulationState, ctx.SimulationSystem)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The two panels, exported so a notebook can pass them to
+#: `buildFieldPlotter`/`refreshFieldPlotter` directly (see `hydrostatic.py`).
+RAYLEIGH_TAYLOR_FIELDS = [
     Field('velocities', 'Velocity', colorMap='viridis', mapping='L2',
           vMin=0.0, vMax=1 / np.sqrt(2)),
     Field('densities', 'density', colorMap='RdBu', colorMapKind='diverging',
           flip=True, gridResolution=1024, vMin=0.95, vMax=2.05),
-], figsize=(12, 12))
+]
+
+setupPlot, updatePlot = particlePlot(RAYLEIGH_TAYLOR_FIELDS, figsize=(12, 12))
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

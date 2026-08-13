@@ -18,7 +18,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            configureCompressible, paramExtraData)
 from .plotting import ProfileAxis, profilePlot
 
-__all__ = ['woodwardColellaCase', 'WOODWARD_REGIONS']
+__all__ = ['woodwardColellaCase', 'WOODWARD_REGIONS', 'drawWoodwardColella']
 
 #: The three initial states, as `sampleShockRegions1D` wants them. Positions are
 #: |x|, so each entry is mirrored about the origin.
@@ -35,7 +35,7 @@ def buildSystem(ctx: RunContext):
                                 ctx.param('regions'))
 
 
-setupPlot, updatePlot, _draw = profilePlot(
+setupPlot, updatePlot, drawWoodwardColella = profilePlot(
     [
         ProfileAxis('densities', 'Density'),
         ProfileAxis('internalEnergies', 'Internal energy'),

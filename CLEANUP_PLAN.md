@@ -101,13 +101,23 @@ see README for the current layout, not reconstructed here.
         (the `dt` treatment of Phase 4.2, applied to the argument next to it),
         guarded by a new `run_balance_gamma_gradcheck` in
         `scripts/gradcheck_compSPH.py`.
-- [ ] **Notebook simplification, the rest.** 13,112 LOC across the other 33
-      notebooks vs. 42 KB total for their equivalent `.py` scripts (both figures
-      predate the Sod pilot above). **Read `PORTING_EXAMPLES.md` first** — the
-      procedure, the notebook conventions that have a reason behind them, and
-      (separately) how to take a case to 2D/3D, all written from doing Sod.
-      - Boilerplate cell duplicated verbatim in 16 notebooks, still on the
-        pre-`warpSPHBootstrap` config path — cheapest win, do first.
+- [x] **Notebook simplification, compressible family (2026-08-13).** All 13
+      `examples/compressible/` slots (14 cases) converted; see
+      `examples/compressible/MIGRATION_STATUS.md` for the full case list and
+      the two notebook shapes (`profilePlot` 1D, `particlePlot` 2D field —
+      the latter's window/event-loop-free core, `buildFieldPlotter`/
+      `refreshFieldPlotter`, is new in `cases/plotting.py`, piloted on `08`).
+      `14`/`15` merged into one `14-triplePoint/` directory the way `06`/`07`
+      merged into `06-sedov/` earlier in this item.
+- [ ] **Notebook simplification, the rest.** The non-compressible families —
+      `examples/weaklyCompressible/` and `examples/incompressible/` — are still
+      on the old shape. **Read `PORTING_EXAMPLES.md` first** — the procedure,
+      the notebook conventions that have a reason behind them, and (separately)
+      how to take a case to 2D/3D, all written from doing Sod; the compressible
+      pass above is a second worked example, particularly for any case that
+      turns out to be 2D/field-plot shaped.
+      - Boilerplate cell duplicated verbatim in the remaining notebooks, still
+        on the pre-`warpSPHBootstrap` config path — cheapest win, do first.
       - Apply the Sod pilot's pattern (real case code + generic helpers, visible
         step loop, explicit parameters cell) rather than collapsing to thin
         wrappers; keep genuinely notebook-shaped analysis/plotting as its own cells.

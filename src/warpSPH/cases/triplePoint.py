@@ -1,16 +1,18 @@
 """Triple-point shock interaction (2D), compressible.
 
-The script forms of this case were `examples/compressible/14-Triple_point.ipynb`
-and `15-Triple_point_equalMass.ipynb`. Both run the same three-region initial
-state in the same 14x6 box; they differ only in how the regions are sampled --
-one particle spacing everywhere (`--no-equalMass`), or one particle *mass*
-everywhere, which means the light region is sampled sqrt(8) times coarser
-(`--equalMass`).
+The script forms of this case are
+`examples/compressible/14-triplePoint/triplePoint_equalSpacing.ipynb` and
+`triplePoint_equalMass.ipynb` (formerly flat notebooks in slots 14/15; merged
+into one directory the way `sedov`'s 1D/2D/3D variants were). Both run the
+same three-region initial state in the same 14x6 box; they differ only in how
+the regions are sampled -- one particle spacing everywhere (`--no-equalMass`),
+or one particle *mass* everywhere, which means the light region is sampled
+sqrt(8) times coarser (`--equalMass`).
 
-Notebook 15 also carried an inline copy of `sampleTriplePointEqualMass`,
-re-deriving the region masks by hand after calling the helper. The packaged
-helper is used here instead; the two agree apart from the sign of `splitY`,
-which is symmetric anyway.
+The original equal-mass notebook also carried an inline copy of
+`sampleTriplePointEqualMass`, re-deriving the region masks by hand after
+calling the helper. The packaged helper is used here instead; the two agree
+apart from the sign of `splitY`, which is symmetric anyway.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            configureCompressible, paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['triplePointCase']
+__all__ = ['triplePointCase', 'TRIPLE_POINT_FIELDS']
 
 
 def configureScheme(ctx: RunContext) -> None:
@@ -59,11 +61,15 @@ def buildSystem(ctx: RunContext):
     return sampleTriplePointEqualResolution(nx=ctx.spec.nx, **common)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The one panel, exported so a notebook can pass it to
+#: `buildFieldPlotter`/`refreshFieldPlotter` directly (see `hydrostatic.py`).
+TRIPLE_POINT_FIELDS = [
     Field('densities', 'Density field (log scale)', colorMap='RdBu',
           colorMapKind='diverging', flip=True, scaling='Logarithmic',
           gridResolution=1024, vMin=0.2, vMax=7.0),
-], figsize=(12, 6))
+]
+
+setupPlot, updatePlot = particlePlot(TRIPLE_POINT_FIELDS, figsize=(12, 6))
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

@@ -20,7 +20,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['kelvinHelmholtzCase']
+__all__ = ['kelvinHelmholtzCase', 'KELVIN_HELMHOLTZ_FIELDS']
 
 
 def configureScheme(ctx: RunContext) -> None:
@@ -40,11 +40,15 @@ def buildSystem(ctx: RunContext):
         ctx.SimulationState, ctx.SimulationSystem)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The two panels, exported so a notebook can pass them to
+#: `buildFieldPlotter`/`refreshFieldPlotter` directly (see `hydrostatic.py`).
+KELVIN_HELMHOLTZ_FIELDS = [
     Field('velocities', 'Velocity', colorMap='viridis', mapping='L2'),
     Field('densities', 'density', colorMap='RdBu', colorMapKind='diverging',
           flip=True, gridResolution=1024),
-])
+]
+
+setupPlot, updatePlot = particlePlot(KELVIN_HELMHOLTZ_FIELDS)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

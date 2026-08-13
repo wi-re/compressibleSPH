@@ -17,7 +17,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import Field, particlePlot
 
-__all__ = ['greshoVortexCase']
+__all__ = ['greshoVortexCase', 'GRESHO_FIELDS']
 
 
 def buildSystem(ctx: RunContext):
@@ -25,10 +25,14 @@ def buildSystem(ctx: RunContext):
                               ctx.SimulationState, ctx.SimulationSystem)
 
 
-setupPlot, updatePlot = particlePlot([
+#: The two panels, exported so a notebook can pass them to
+#: `buildFieldPlotter`/`refreshFieldPlotter` directly (see `hydrostatic.py`).
+GRESHO_FIELDS = [
     Field('velocities', 'velocities', colorMap='viridis', mapping='L2Norm'),
     Field('pressures', 'pressures', colorMap='cividis', flip=True),
-])
+]
+
+setupPlot, updatePlot = particlePlot(GRESHO_FIELDS)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

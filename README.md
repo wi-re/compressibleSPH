@@ -3,7 +3,7 @@
 *(formerly `compressibleSPH`; the SPH core previously hosted at this URL now lives at
 [`wi-re/warpSPHCore`](https://github.com/wi-re/warpSPHCore))*
 
-![](examples/compressible/outputs/15-Triple_Point_equal_mass.gif)
+![](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_mass.gif)
 
 A GPU-oriented Python package for Smoothed Particle Hydrodynamics experiments,
 built on [NVIDIA Warp](https://github.com/NVIDIA/warp) and PyTorch. It covers
@@ -274,7 +274,7 @@ notebooks stay for exploration; the scripts are what you run unattended.
 | `shearingNoh` | [11-shearing-noh-implosion-2d.py](examples/compressible/11-shearing-noh-implosion-2d.py) | Noh implosion with transverse shear |
 | `kelvinHelmholtz` | [12-kelvin-helmholtz.py](examples/compressible/12-kelvin-helmholtz.py) | Kelvin-Helmholtz instability |
 | `rayleighTaylor` | [13-rayleigh-taylor.py](examples/compressible/13-rayleigh-taylor.py) | Rayleigh-Taylor instability |
-| `triplePoint` | [14](examples/compressible/14-triple-point.py), [15](examples/compressible/15-triple-point-equal-mass.py) | `--equalMass` or `--no-equalMass` sampling |
+| `triplePoint` | [14-triplePoint/](examples/compressible/14-triplePoint/) ([equalSpacing](examples/compressible/14-triplePoint/triplePoint_equalSpacing.py), [equalMass](examples/compressible/14-triplePoint/triplePoint_equalMass.py)) | `--equalMass` or `--no-equalMass` sampling; own directory like `sedov` |
 
 ### Weakly compressible (deltaSPH)
 
@@ -543,8 +543,8 @@ Previews and embedded videos for the compressible set:
 | 11. Shearing Noh Implosion (2D) | [ipynb](examples/compressible/11-Shearing_Noh_Implosion_2D.ipynb) | ![](examples/compressible/outputs/11-Shearing_Noh_2D.png) | [MP4](examples/compressible/outputs/11-Shearing_Noh_2D.mp4) |
 | 12. Kelvin-Helmholtz | [ipynb](examples/compressible/12-Kelvin-Helmholtz.ipynb) | ![](examples/compressible/outputs/12-Kelvin_Helmholtz.png) | [MP4](examples/compressible/outputs/12-Kelvin_Helmholtz.mp4) |
 | 13. Rayleigh-Taylor | [ipynb](examples/compressible/13-Rayleigh_Taylor.ipynb) | ![](examples/compressible/outputs/13-Rayleigh_Taylor.png) | [MP4](examples/compressible/outputs/13-Rayleigh_Taylor.mp4) |
-| 14. Triple Point (Equal Resolution) | [ipynb](examples/compressible/14-Triple_point.ipynb) | ![](examples/compressible/outputs/14-Triple_Point_equal_resolution.png) | [MP4](examples/compressible/outputs/14-Triple_Point_equal_resolution.mp4) |
-| 15. Triple Point (Equal Mass) | [ipynb](examples/compressible/15-Triple_point_equalMass.ipynb) | ![](examples/compressible/outputs/15-Triple_Point_equal_mass.png) | [MP4](examples/compressible/outputs/15-Triple_Point_equal_mass.mp4) |
+| 14. Triple Point (Equal Spacing) | [ipynb](examples/compressible/14-triplePoint/triplePoint_equalSpacing.ipynb) | ![](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_resolution.png) | [MP4](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_resolution.mp4) |
+| 14. Triple Point (Equal Mass) | [ipynb](examples/compressible/14-triplePoint/triplePoint_equalMass.ipynb) | ![](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_mass.png) | [MP4](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_mass.mp4) |
 
 ## Precision, and other things that bite
 
