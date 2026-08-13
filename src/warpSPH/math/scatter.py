@@ -5,7 +5,7 @@ from typing import Optional, Union
 # Scatter summation functionality based on pytorch geometric scatter functionality
 # This is included here to make the code independent of pytorch geometric for portability
 # Note that pytorch geometric is licensed under an MIT licenses for the PyG Team <team@pyg.org>
-@torch.jit.script
+# @torch.jit.script
 def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     if dim < 0:
         dim = other.dim() + dim
@@ -19,7 +19,7 @@ def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
 
 from torch.profiler import record_function
 
-@torch.jit.script
+# @torch.jit.script
 def scatter_sum(src: torch.Tensor, index: torch.Tensor, dim: int = -1,
                 out: Optional[torch.Tensor] = None,
                 dim_size: Optional[int] = None) -> torch.Tensor:

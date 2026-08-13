@@ -4,7 +4,7 @@ from .wp_psi import generatePSILut_warp
 
 
 def linearInterpolateLUT(LUT, x, xvalues):
-    ileft = (torch.searchsorted(xvalues, x, right = True) - 1).clamp(min = 0, max = len(xvalues) - 2)
+    ileft = (torch.searchsorted(xvalues.contiguous(), x, right = True) - 1).clamp(min = 0, max = len(xvalues) - 2)
     iright = ileft + 1
     alpha = (x - xvalues[ileft]) / (xvalues[iright] - xvalues[ileft])
     alpha = alpha.clamp(min = 0.0, max = 1.0)

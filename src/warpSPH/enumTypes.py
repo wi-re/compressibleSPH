@@ -1,7 +1,7 @@
 from enum import Enum
 import torch    
 
-@torch.jit.script
+# @torch.jit.script
 class EnergyScheme(Enum):
     equalWork = 0
     PdV = 1
@@ -10,13 +10,13 @@ class EnergyScheme(Enum):
     hybrid = 4
     CRK = 5
 
-@torch.jit.script
+# @torch.jit.script
 class AdaptiveSupportScheme(Enum):
     NoScheme = 0
     Monaghan = 1
     Owen = 2
 
-@torch.jit.script
+# @torch.jit.script
 class ViscositySwitch(Enum):
     Balsara1995 = 0
     Colagrossi2004 = 1
@@ -27,17 +27,17 @@ class ViscositySwitch(Enum):
     NoneSwitch = 6
 
 
-@torch.jit.script
+# @torch.jit.script
 class CompressibleSPHScheme(Enum):
     Monaghan = 0
     CompSPH = 1
     CRKSPH = 2
 
-@torch.jit.script
+# @torch.jit.script
 class WeaklyCompressibleSPHScheme(Enum):
     deltaSPH = 0
 
-@torch.jit.script
+# @torch.jit.script
 class IncompressibleSPHScheme(Enum):
     divergenceFree = 0
 
