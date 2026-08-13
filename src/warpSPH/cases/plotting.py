@@ -168,8 +168,15 @@ class ProfileAxis:
 
 def profilePlot(axes: Sequence[ProfileAxis], shape: Tuple[int, int],
                 figsize: Tuple[float, float] = (10, 6), dpi: int = 150,
-                xlim: Optional[Tuple[float, float]] = None) -> Tuple[Callable, Callable]:
-    """`(setupPlot, updatePlot)` scattering 1D state fields against position."""
+                xlim: Optional[Tuple[float, float]] = None) -> Tuple[Callable, Callable, Callable]:
+    """`(setupPlot, updatePlot, draw)` scattering 1D state fields against position.
+
+    `draw(ctx, state, (fig, axis))` is the self-contained per-frame redraw
+    (clears and re-populates every axis, no `openWindow`/`pumpEvents`) --
+    exported alongside `setupPlot`/`updatePlot` so a notebook can call it
+    directly for live updates, the same way `sod.py` calls `plotSod`/`plotSod_`
+    directly instead of going through the `Case` hooks.
+    """
     rows, cols = shape
 
     def draw(ctx: RunContext, state, handle):
@@ -220,7 +227,7 @@ def profilePlot(axes: Sequence[ProfileAxis], shape: Tuple[int, int],
         _save(ctx, fig, step, dpi)
         pumpEvents(handle)
 
-    return setupPlot, updatePlot
+    return setupPlot, updatePlot, draw
 
 
 def _save(ctx: RunContext, fig, step: int, dpi: int) -> None:

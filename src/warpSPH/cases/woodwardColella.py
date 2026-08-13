@@ -35,7 +35,7 @@ def buildSystem(ctx: RunContext):
                                 ctx.param('regions'))
 
 
-setupPlot, updatePlot = profilePlot(
+setupPlot, updatePlot, _draw = profilePlot(
     [
         ProfileAxis('densities', 'Density'),
         ProfileAxis('internalEnergies', 'Internal energy'),

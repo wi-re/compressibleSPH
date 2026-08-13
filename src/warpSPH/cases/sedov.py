@@ -89,7 +89,7 @@ def _shockVelocity(ctx: RunContext, state):
     return [vs, -vs, v2, -v2]
 
 
-_profileSetup, _profileUpdate = profilePlot(
+_profileSetup, _profileUpdate, _profileDraw = profilePlot(
     [
         ProfileAxis('internalEnergies', 'Internal energy', yscale='log', vlines=_fronts),
         ProfileAxis('densities', 'Density', yscale='log', vlines=_fronts,

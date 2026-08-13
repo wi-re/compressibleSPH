@@ -26,7 +26,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            configureCompressible, paramExtraData)
 from .plotting import ProfileAxis, profilePlot
 
-__all__ = ['kidderCase', 'kidderStates']
+__all__ = ['kidderCase', 'kidderStates', 'drawKidder']
 
 
 def kidderStates(ctx: RunContext) -> Tuple[float, float]:
@@ -101,7 +101,7 @@ def _shellEdges(ctx: RunContext, state):
     return [rInner, rOuter]
 
 
-setupPlot, updatePlot = profilePlot(
+setupPlot, updatePlot, drawKidder = profilePlot(
     [
         ProfileAxis('densities', 'Density', reference=_reference('rho'),
                     vlines=_shellEdges),

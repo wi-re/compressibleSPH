@@ -16,7 +16,7 @@ from .compressible import (COMPRESSIBLE_DEFAULTS, COMPRESSIBLE_PARAMS,
                            paramExtraData)
 from .plotting import ProfileAxis, profilePlot
 
-__all__ = ['nohCase', 'shockState']
+__all__ = ['nohCase', 'shockState', 'drawNoh']
 
 
 def shockState(ctx: RunContext):
@@ -37,7 +37,7 @@ def _shockFront(ctx: RunContext, state):
     return [front, -front]
 
 
-setupPlot, updatePlot = profilePlot(
+setupPlot, updatePlot, drawNoh = profilePlot(
     [
         ProfileAxis('densities', 'Density',
                     hlines=lambda ctx, state: [shockState(ctx)[0]]),
