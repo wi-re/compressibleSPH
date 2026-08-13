@@ -29,28 +29,29 @@ def maskParticles(particles, split_x, split_y, domain, nx):
         splitXLower, splitYLower = splitDomain(split_x[0], split_y[0], domain, nx)
         splitXUpper, splitYUpper = splitDomain(split_x[1], split_y[1], domain, nx)
 
-        A_1 = (particles.positions[:, 0] < splitXLower) & (particles.positions[:, 1] < splitYLower)
-        A_2 = (particles.positions[:, 0] >= splitXUpper) & (particles.positions[:, 1] < splitYLower)
-        A_3 = (particles.positions[:, 0] < splitXLower) & (particles.positions[:, 1] >= splitYUpper)
-        A_4 = (particles.positions[:, 0] >= splitXUpper) & (particles.positions[:, 1] >= splitYUpper)
+        x = particles.positions[:, 0]
+        y = particles.positions[:, 1]
+
+        A_1 = (x < splitXLower) & (y < splitYLower)
+        A_2 = (x >= splitXUpper) & (y < splitYLower)
+        A_3 = (x < splitXLower) & (y >= splitYUpper)
+        A_4 = (x >= splitXUpper) & (y >= splitYUpper)
         maskA = torch.logical_or(torch.logical_or(A_1, A_2), torch.logical_or(A_3, A_4))
 
-        B_1 = (particles.positions[:, 0] < splitXLower) & (particles.positions[:, 1] >= splitYLower)
-        B_2 = (particles.positions[:, 0] < splitXLower) & (particles.positions[:, 1] < splitYUpper)
-        B_3 = (particles.positions[:, 0] >= splitXUpper) & (particles.positions[:, 1] >= splitYLower)
-        B_4 = (particles.positions[:, 0] >= splitXUpper) & (particles.positions[:, 1] < splitYUpper)
-        maskB = torch.logical_or(torch.logical_and(B_1, B_2), torch.logical_and(B_3, B_4))
-
-        C_1 = (particles.positions[:, 0] >= splitXLower) & (particles.positions[:, 1] < splitYLower)
-        C_2 = (particles.positions[:, 0] < splitXUpper) & (particles.positions[:, 1] < splitYLower)
-        C_3 = (particles.positions[:, 0] >= splitXLower) & (particles.positions[:, 1] >= splitYUpper)
-        C_4 = (particles.positions[:, 0] < splitXUpper) & (particles.positions[:, 1] >= splitYUpper)
-        maskC = torch.logical_or(torch.logical_and(C_1, C_2), torch.logical_and(C_3, C_4))
+        # B/C split the strip between the x edges (splitXLower <= x < splitXUpper)
+        # by |y|: B is the outer band (y past splitYLower or before splitYUpper,
+        # i.e. the union of the top and bottom strips), C is the inner band
+        # between them. The previous version ANDed per-corner x/y terms taken
+        # from the A pattern, which made B's condition self-contradictory
+        # (never true) and left B's particles falling through to C's slot.
+        midX = (x >= splitXLower) & (x < splitXUpper)
+        maskB = midX & torch.logical_or(y >= splitYLower, y < splitYUpper)
+        maskC = midX & (y < splitYLower) & (y >= splitYUpper)
 
         mask = torch.ones_like(particles.positions[:, 0], dtype=torch.int64, device=device)*3
         mask[maskA] = 0
-        mask[maskB] = 2
-        mask[maskC] = 1
+        mask[maskB] = 1
+        mask[maskC] = 2
 
         return mask, [splitXLower, splitXUpper], [splitYLower, splitYUpper]
 

@@ -71,6 +71,9 @@ class Field:
     midPoint: Optional[float] = 0.0
     #: Resolution of the interpolated-grid rendering; `None` scatters particles.
     gridResolution: Optional[int] = None
+    #: Title-to-plot spacing: matplotlib title padding in points, vispy a
+    #: fraction of domain height. `None` keeps the backend default.
+    plotTitleGap: Optional[float] = None
 
     def tensor(self, state) -> torch.Tensor:
         return getattr(state.state, self.quantity)
@@ -91,6 +94,7 @@ def _plotOptions(field: Field, markerSize: float):
         quantityScaling=getattr(PlotScaling, field.scaling),
         mapping=getattr(Mapping, field.mapping),
         plotTitle=field.title,
+        plotTitleGap=field.plotTitleGap,
         vMin=field.vMin,
         vMax=field.vMax,
         gridVisualization=(GridVisualization(resolution=field.gridResolution)

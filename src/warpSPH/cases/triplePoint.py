@@ -66,7 +66,10 @@ def buildSystem(ctx: RunContext):
 TRIPLE_POINT_FIELDS = [
     Field('densities', 'Density field (log scale)', colorMap='RdBu',
           colorMapKind='diverging', flip=True, scaling='Logarithmic',
-          gridResolution=1024, vMin=0.2, vMax=7.0),
+          gridResolution=1024, vMin=0.2, vMax=7.0,
+          # The vispy default (0.04) crowds the panel title against the plot
+          # box with only one panel; multi-panel cases don't need this.
+          plotTitleGap=0.15),
 ]
 
 setupPlot, updatePlot = particlePlot(TRIPLE_POINT_FIELDS, figsize=(12, 6))
