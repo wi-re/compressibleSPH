@@ -26,7 +26,7 @@ def caseMain(case: Case, argv: Optional[List[str]] = None) -> RunResult:
     defaults.setdefault('scheme', case.scheme)
     # A person ran this from a terminal, so leave the final figure up to be
     # read. `--no-holdPlot` overrides, and programmatic `run()` never sets it.
-    defaults.setdefault('holdPlot', True)
+    defaults.setdefault('holdPlot', False)
 
     # Built after `defaults`, so `--help` can report what this case actually
     # runs rather than the generic CaseSpec value.

@@ -9,7 +9,6 @@ rewriting them.
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from typing import Any, Dict
 
@@ -21,10 +20,11 @@ from ..configurations.moduleConfigurations.gravity import GravityType
 from ..initializers import initializeWeaklyCompressibleSimulation
 from ..modules import setupWeaklyCompressibleTimestep
 from ..runner import Case, RunContext, caseMain, registerCase
-from ..runner.display import resolvePlotBackend
-from .plotting import openWindow, pumpEvents
+from .plotting import (Field, buildFieldPlotter, openWindow, pumpEvents,
+                       refreshFieldPlotter)
 
-__all__ = ['dambreakCase', 'caseArgs', 'simulationProperties']
+__all__ = ['dambreakCase', 'caseArgs', 'simulationProperties',
+           'DAMBREAK_FIELDS', 'DAMBREAK_FIELDS_DENSITY', 'dambreakFields']
 
 
 def freeSurface(ctx: RunContext) -> bool:
@@ -144,34 +144,44 @@ def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     }
 
 
-def setupPlot(ctx: RunContext, state):
-    from ..caseUtils.weaklyCompressiblePlot import setupPlotter
+#: The two panels a dam break actually ships with (`plotDensity=False`).
+#: Velocity is the flow; the cyclic-coloured particle IDs are how you see the
+#: fluid fold over itself at the free surface, which no scalar field shows.
+DAMBREAK_FIELDS = [
+    Field('velocities', 'Particle Velocity Magnitude', colorMap='viridis',
+          mapping='L2Norm', plotTitleGap=0.08),
+    Field('UIDs', 'Particle IDs', colorMap='twilight', colorMapKind='cyclic',
+          midPoint=None, plotTitleGap=0.08),
+]
 
-    backend = resolvePlotBackend(ctx)
-    try:
-        plotter = setupPlotter(state, ctx.scratch['args'], ctx.scratch['simSetup'],
-                               ctx.config, ctx.schemeConfig, backend=backend)
-    except Exception as exc:
-        if backend == 'matplotlib':
-            raise
-        print(f'the {backend!r} plotting backend failed to start '
-              f'({type(exc).__name__}: {exc}); falling back to matplotlib.')
-        plotter = setupPlotter(state, ctx.scratch['args'], ctx.scratch['simSetup'],
-                               ctx.config, ctx.schemeConfig, backend='matplotlib')
-        backend = 'matplotlib'
-    ctx.scratch['plotBackend'] = backend
-    if ctx.imagePath:
-        plotter.export(os.path.join(ctx.imagePath, 'frame_00000.png'), dpi=300)
+#: `--plotDensity`: the same, with the density panel between them.
+DAMBREAK_FIELDS_DENSITY = [
+    DAMBREAK_FIELDS[0],
+    Field('densities', 'Particle Density', colorMap='RdBu', colorMapKind='diverging',
+          flip=True, midPoint=1.0, plotTitleGap=0.08),
+    DAMBREAK_FIELDS[1],
+]
+
+
+def dambreakFields(ctx: RunContext):
+    """The panel list this run plots -- two, or three with `--plotDensity`."""
+    return DAMBREAK_FIELDS_DENSITY if ctx.param('plotDensity') else DAMBREAK_FIELDS
+
+
+def _figsize(ctx: RunContext):
+    # The dam break box is much wider than it is tall, so this case carries its
+    # own figure size rather than the 11x5 default.
+    return (ctx.param('plotWidth'), ctx.param('plotHeight'))
+
+
+def setupPlot(ctx: RunContext, state):
+    plotter = buildFieldPlotter(ctx, state, dambreakFields(ctx), figsize=_figsize(ctx))
     openWindow(ctx, plotter)
     return plotter
 
 
 def updatePlot(ctx: RunContext, state, plotter, step: int) -> None:
-    from ..caseUtils.weaklyCompressiblePlot import updatePlot as _update
-    _update(plotter, state, ctx.scratch['args'], ctx.scratch['simSetup'],
-            ctx.config, ctx.schemeConfig, None)
-    if ctx.imagePath:
-        plotter.export(os.path.join(ctx.imagePath, f'frame_{step:05d}.png'), dpi=300)
+    refreshFieldPlotter(ctx, state, plotter, dambreakFields(ctx), step=step)
     pumpEvents(plotter)
 
 
@@ -221,8 +231,20 @@ dambreakCase = registerCase(Case(
         W=4.0,
         band=5,
         targetDt=0.0005,
+        # The column is `fluidWidth * W` wide by `fillRatio * L` tall, in the
+        # bottom-left corner of a `W x L` tank. These two give 0.667 x 1.333 in
+        # the 4 x 2 tank: the canonical Koshizuka & Oka proportions, a column
+        # twice as tall as it is wide with six of its widths of run-out.
+        #
+        # parser.py's default was `fluidWidth = 5/2 * 1/3`, i.e. a 3.33-wide
+        # slab covering 83% of the tank -- not a dam break at all, and not a
+        # shape any shipped configuration used: every line of
+        # `datagen/weaklyCompressible/cases/dambreak.sh` passes an explicit
+        # `--fluidWidth` (5/12, 1/4 or 1/12 against fillRatio 1/3, 1/2, 2/3),
+        # so the default was never exercised. Same class of stale default as
+        # `obstacleType` below.
         fillRatio=1.0 / 3.0,
-        fluidWidth=5 / 2 * 1 / 3,
+        fluidWidth=1.0 / 3.0,
         semiPeriodic=False,
         fullyPeriodic=False,
 

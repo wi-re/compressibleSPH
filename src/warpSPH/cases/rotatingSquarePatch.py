@@ -8,6 +8,14 @@ here.
 
 A square of fluid in rigid rotation is not an equilibrium: the free surface has
 to deform, and the arms it grows are the thing being compared between schemes.
+
+The square is the benchmark, but the patch is a shape parameter like the impact
+case's -- `--shape` takes any key of
+:data:`~warpSPH.cases.weaklyCompressible.SHAPE_PRESETS`, sized by `--size` and
+`--aspectRatio` and pre-turned by `--rotation`. The corners are what make this
+test hard (a circle in rigid rotation *is* an equilibrium), so `--shape circle`
+is the null experiment and `--shape triangleIsosceles`/`--shape star5` are
+sharper versions of the same one.
 """
 
 from __future__ import annotations
@@ -18,16 +26,20 @@ from ..runner import Case, RunContext, caseMain, registerCase
 from .plotting import particlePlot
 from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  WEAKLY_COMPRESSIBLE_PARAMS, buildRegionSystem,
-                                 configureWeaklyCompressible, fluidRegion,
-                                 paramExtraData, setupTimestep, shapeSdf,
+                                 centredShapeSdf, configureWeaklyCompressible, fluidRegion,
+                                 paramExtraData, setupTimestep, shapeArgs,
                                  weaklyCompressibleDiagnostics)
 
 __all__ = ['rotatingSquarePatchCase']
 
 
 def buildSystem(ctx: RunContext):
-    half = ctx.param('halfExtent')
-    return buildRegionSystem(ctx, [fluidRegion(ctx, shapeSdf('box', [half, half]))])
+    args = shapeArgs(ctx.param('shape'), ctx.param('size'), ctx.param('aspectRatio'))
+    # Centred on the measured shape, not on the primitive's own origin, so the
+    # rotation below is about the patch rather than about a point beside it.
+    sdf, _ = centredShapeSdf(ctx.param('shape'), args, [0.0, 0.0], ctx.config.domain,
+                             rotation=ctx.param('rotation'))
+    return buildRegionSystem(ctx, [fluidRegion(ctx, sdf)])
 
 
 def initialConditions(ctx: RunContext, system) -> None:
@@ -69,7 +81,11 @@ rotatingSquarePatchCase = registerCase(Case(
     params=dict(
         WEAKLY_COMPRESSIBLE_PARAMS,
         freeSurface=True,
-        halfExtent=1.0,
+        # `box` at aspect 1 is the 2x2 square the benchmark is defined on.
+        shape='box',
+        size=1.0,
+        aspectRatio=1.0,
+        rotation=0.0,
         omega=4.0,
         markerSize=8,
     ),

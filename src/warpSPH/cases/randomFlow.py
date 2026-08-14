@@ -19,11 +19,12 @@ from typing import Dict
 from ..modules.noise.sampleDivergenceFree import sampleDivergenceFreeNoise
 from ..runner import Case, RunContext, caseMain, registerCase
 from .plotting import particlePlot
-from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DEFAULTS,
+from .weaklyCompressible import (OBSTACLE_PARAMS, VELOCITY_DENSITY_FIELDS,
+                                 WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  WEAKLY_COMPRESSIBLE_PARAMS, boundaryRegion,
                                  buildRegionSystem, configureWeaklyCompressible,
                                  domainBoundarySdf, domainFluidSdf, fluidRegion,
-                                 paramExtraData, setupTimestep, shapeSdf,
+                                 paramExtraData, paramShapeSdf, setupTimestep,
                                  weaklyCompressibleDiagnostics)
 
 __all__ = ['randomFlowCase', 'noiseVelocities']
@@ -40,7 +41,7 @@ def buildSystem(ctx: RunContext):
     if ctx.param('bounded'):
         regions.append(boundaryRegion(ctx, domainBoundarySdf(ctx)))
     if ctx.param('obstacle'):
-        regions.append(boundaryRegion(ctx, shapeSdf('circle', ctx.param('obstacleRadius'))))
+        regions.append(boundaryRegion(ctx, paramShapeSdf(ctx)))
     return buildRegionSystem(ctx, regions)
 
 
@@ -91,7 +92,9 @@ randomFlowCase = registerCase(Case(
         # cylinder both notebooks carried but only 06 switched on.
         bounded=False,
         obstacle=False,
-        obstacleRadius=0.25,
+        # Shape/size/aspect/rotation/offset of that cylinder -- a circle by
+        # default, any other key of `SHAPE_PRESETS` on request.
+        **OBSTACLE_PARAMS,
         bandWidth=16.0,
         octaves=3,
         lacunarity=2,

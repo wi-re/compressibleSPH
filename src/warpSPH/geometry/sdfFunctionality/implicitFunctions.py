@@ -53,9 +53,11 @@ def sdUnevenCapsule(p, r1, r2, h):
 def sdPentagon(p, r):
     k = torch.tensor([0.809016994, 0.587785252, 0.726542528], dtype = p.dtype, device = p.device)
     p = torch.stack((torch.abs(p[0]), p[1]))
-    p -= 2.0 * torch.min(torch.dot(torch.stack([-k[0], k[1]]), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([-k[0], k[1]])
-    p -= 2.0 * torch.min(torch.dot(torch.stack([k[0], k[1]]), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([k[0], k[1]])
-    p -= torch.stack([torch.clamp(p[0], -r * k[2], r * k[2]), torch.tensor(r, dtype = p.dtype, device = p.device)])
+    k0 = torch.stack([-k[0], k[1]])
+    p = p - 2.0 * torch.min(torch.dot(k0, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k0
+    k1 = torch.stack([k[0], k[1]])
+    p = p - 2.0 * torch.min(torch.dot(k1, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k1
+    p = p - torch.stack([torch.clamp(p[0], -r * k[2], r * k[2]), torch.tensor(r, dtype = p.dtype, device = p.device)])
     return torch.norm(p) * torch.sign(p[1])
 def sdHexagon(p, r):
     k = torch.tensor([-0.866025404, 0.5, 0.577350269], dtype = p.dtype, device = p.device)
@@ -64,19 +66,26 @@ def sdHexagon(p, r):
     p = p - torch.stack([torch.clamp(p[0], -k[2] * r, k[2] * r), torch.tensor(r, dtype = p.dtype, device = p.device)])
     return torch.norm(p) * torch.sign(p[1])
 def sdOctogon(p, r):
+    # Out-of-place throughout (as sdHexagon above): `p` is an input to the
+    # torch.dot on the line before each update, so mutating it in place makes
+    # sampleSDF's autograd gradient fail on a version-counter check.
     k = torch.tensor([-0.9238795325, 0.3826834323, 0.4142135623], dtype = p.dtype, device = p.device)
     p = torch.abs(p)
-    p -= 2.0 * torch.min(torch.dot(torch.tensor([k[0], k[1]], dtype = p.dtype, device = p.device), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([k[0], k[1]])
-    p -= 2.0 * torch.min(torch.dot(torch.tensor([-k[0], k[1]], dtype = p.dtype, device = p.device), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([-k[0], k[1]])
-    p -= torch.stack([torch.clamp(p[0], -k[2] * r, k[2] * r), torch.tensor(r, dtype = p.dtype, device = p.device)])
+    k0 = torch.stack([k[0], k[1]])
+    p = p - 2.0 * torch.min(torch.dot(k0, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k0
+    k1 = torch.stack([-k[0], k[1]])
+    p = p - 2.0 * torch.min(torch.dot(k1, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k1
+    p = p - torch.stack([torch.clamp(p[0], -k[2] * r, k[2] * r), torch.tensor(r, dtype = p.dtype, device = p.device)])
     return torch.norm(p) * torch.sign(p[1])
 
 def sdHexagram(p, r):
     k = torch.tensor([-0.5, 0.8660254038, 0.5773502692, 1.7320508076], dtype = p.dtype, device = p.device)
     p = torch.abs(p)
-    p -= 2.0 * torch.min(torch.dot(torch.stack([k[0], k[1]]), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([k[0], k[1]])
-    p -= 2.0 * torch.min(torch.dot(torch.stack([k[1], k[0]]), p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * torch.stack([k[1], k[0]])
-    p -= torch.stack([torch.clamp(p[0], r * k[2], r * k[3]), torch.tensor(r, dtype = p.dtype, device = p.device)])
+    k0 = torch.stack([k[0], k[1]])
+    p = p - 2.0 * torch.min(torch.dot(k0, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k0
+    k1 = torch.stack([k[1], k[0]])
+    p = p - 2.0 * torch.min(torch.dot(k1, p), torch.tensor(0.0, dtype = p.dtype, device = p.device)) * k1
+    p = p - torch.stack([torch.clamp(p[0], r * k[2], r * k[3]), torch.tensor(r, dtype = p.dtype, device = p.device)])
     return torch.norm(p) * torch.sign(p[1])
 def sdStar5(p, r, rf):
     k1 = torch.tensor([0.809016994375, -0.587785252292], dtype = p.dtype, device = p.device)
@@ -133,7 +142,9 @@ def sdVesica(p, r, d):
     b = float(np.sqrt(r*r - d*d))
     return torch.where((p[:, 1] - b) * d > p[:, 0] * b, torch.linalg.norm(p - torch.tensor([0.0, b], dtype = p.dtype, device = p.device), dim = -1), torch.linalg.norm(p - torch.tensor([-d, 0.0], dtype = p.dtype, device = p.device), dim = -1) - r)
 def sdMoon(p, d, ra, rb):
-      p[1] = torch.abs(p[1])
+      # Out-of-place: `p[1] = ...` wrote through to the caller's tensor, so a
+      # second evaluation of the same points saw an already-folded y.
+      p = torch.stack((p[0], torch.abs(p[1])))
       a = (ra * ra - rb * rb + d * d) / (2.0 * d)
       b = torch.sqrt(torch.max(torch.tensor(ra * ra - a * a, dtype = p.dtype, device = p.device), torch.tensor(0.0, dtype = p.dtype, device = p.device)))
       condition = d * (p[0] * b - p[1] * a) > d * d * torch.max(b - p[1], torch.tensor(0.0, dtype = p.dtype, device = p.device))
@@ -174,7 +185,6 @@ def sdBox(p : torch.Tensor, b : torch.Tensor):
     return torch.linalg.norm(torch.clamp(q, min = 0.0), dim=-1) + torch.clamp(torch.max(q, dim=-1)[0], max = 0.0)
 def sdRoundedBox(p : torch.Tensor, b : torch.Tensor, r : torch.Tensor):
     r = r.repeat(p.shape[0], 1)
-    print('r', r.shape)
     r[:,:2] = torch.where((p[:,0] > 0.0).repeat(2,1).mT, r[:,:2], r[:,2:])
     r[:,0] = torch.where(p[:,1] > 0.0, r[:,0], r[:,1])
 
@@ -187,7 +197,6 @@ def sdOrientedBox(p, a, b, th):
     d = (b - a) / l
     q = (p - (a + b) * 0.5)
     q = torch.matmul(torch.tensor([[d[0], -d[1]], [d[1], d[0]]], dtype = p.dtype, device = p.device), q)
-    print(q.shape)
     q = torch.abs(q) - torch.tensor([l, th], dtype = p.dtype, device = p.device) * 0.5
     return torch.linalg.norm(torch.max(q, torch.tensor(0.0, dtype = p.dtype, device = p.device))) + torch.min(torch.max(q[0], q[1]), torch.tensor(0.0, dtype = p.dtype, device = p.device))
 def sdSegment(p, a, b):
@@ -217,12 +226,12 @@ def sdParallelogram(p, wi, he, sk):
     e = torch.tensor([sk, he], dtype = p.dtype, device = p.device)
     p = torch.where(p[1] < 0.0, -p, p)
     w = p - e
-    w[0] -= torch.clamp(w[0], -wi, wi)
+    w = torch.stack((w[0] - torch.clamp(w[0], -wi, wi), w[1]))
     d = torch.stack((torch.dot(w,w), -w[1]))
     s = p[0] * e[1] - p[1] * e[0]
     p = torch.where(s < 0.0, -p, p)
     v = p - torch.tensor([wi, 0.0], dtype = p.dtype, device = p.device)
-    v -= e * torch.clamp(torch.dot(v, e) / torch.dot(e, e), -1.0, 1.0)
+    v = v - e * torch.clamp(torch.dot(v, e) / torch.dot(e, e), -1.0, 1.0)
     d = torch.min(d, torch.stack((torch.dot(v,v), wi * he - torch.abs(s))))
     return torch.sqrt(d[ 0]) * torch.sign(-d[1])
 

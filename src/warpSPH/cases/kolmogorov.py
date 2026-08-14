@@ -19,11 +19,12 @@ from ..runner import Case, RunContext, caseMain, registerCase
 from ..utils import buildDomainDescription
 from ..math import getPeriodicPositions
 from .plotting import particlePlot
-from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DEFAULTS,
+from .weaklyCompressible import (OBSTACLE_PARAMS, VELOCITY_DENSITY_FIELDS,
+                                 WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  WEAKLY_COMPRESSIBLE_PARAMS, buildRegionSystem,
                                  configureWeaklyCompressible, domainFluidSdf,
-                                 fluidRegion, paramExtraData, setupTimestep, shapeSdf,
-                                 weaklyCompressibleDiagnostics)
+                                 fluidRegion, paramExtraData, paramShapeSdf,
+                                 setupTimestep, weaklyCompressibleDiagnostics)
 
 __all__ = ['kolmogorovCase']
 
@@ -34,7 +35,7 @@ def buildSystem(ctx: RunContext):
     regions = [fluidRegion(ctx, fluidSdf)]
     if ctx.param('obstacle'):
         from .weaklyCompressible import boundaryRegion
-        regions.append(boundaryRegion(ctx, shapeSdf('circle', ctx.param('obstacleRadius'))))
+        regions.append(boundaryRegion(ctx, paramShapeSdf(ctx)))
     return buildRegionSystem(ctx, regions)
 
 
@@ -101,7 +102,9 @@ kolmogorovCase = registerCase(Case(
         k=4,
         noiseLevel=0.01,
         obstacle=False,
-        obstacleRadius=0.25,
+        # Shape/size/aspect/rotation/offset of that obstacle -- a circle by
+        # default, any other key of `SHAPE_PRESETS` on request.
+        **OBSTACLE_PARAMS,
         octaves=3,
         lacunarity=2,
         persistence=0.5,

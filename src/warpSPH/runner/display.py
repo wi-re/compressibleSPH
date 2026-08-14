@@ -234,8 +234,16 @@ def visualizeWithFallback(ctx: 'RunContext', backend: str, **kwargs):
     """`visualize(...)`, degrading to matplotlib if `backend` cannot start.
 
     vispy needs a GL context; over ssh without X forwarding, or in a container,
-    creating the canvas raises. Falling back keeps the run alive and still
-    writing frames -- losing the plot is not a reason to lose the simulation.
+    creating the canvas raises. On headless Linux (no `DISPLAY`/
+    `WAYLAND_DISPLAY`), `warpSPHPlotting`'s vispy backend already routes
+    itself to a headless EGL context instead of a windowed one *before* that
+    first attempt -- vispy's backend choice is a one-shot, process-global
+    decision, so retrying with a different `app_backend` here after a failed
+    call would not work (`RuntimeError: Can only select a backend once`).
+    What still reaches this `except` is a case EGL itself can't cover (no GPU,
+    EGL not installed, a non-Linux headless host, ...); falling back to
+    matplotlib there keeps the run alive and still writing frames -- losing
+    the plot is not a reason to lose the simulation.
     """
     global _warned
     from warpSPHPlotting import visualize

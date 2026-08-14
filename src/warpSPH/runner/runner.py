@@ -396,7 +396,7 @@ def _counting(steps, bar):
         yield i
         bar.update(1)
 
-
+import warp as wp
 def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
                   tLimit: float) -> str:
     # A time-limited run has no meaningful step total, so it counts time.
@@ -404,5 +404,20 @@ def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
              f't={row["t"]:.4g}' + ('' if nSteps is not None else f'/{tLimit:.4g}')]
     parts += [f'{k}={v:.4g}' for k, v in row.items()
               if k not in ('step', 't', 'stepTime_ms') and isinstance(v, (int, float))]
+
+    current_memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)  # in MB
+    current_memory_reserved = torch.cuda.memory_reserved() / (1024 ** 2)
+
+    warp_memory = wp.get_mempool_used_mem_current() / (1024 ** 2)  # in MB
+
+    if i % 10 == 0:
+        torch.cuda.empty_cache()
+
+
+    # tq.n = min(1000, int(t / spec.tLimit * 1000))
+    # tq_text = f"t: {t:.4f}, " + ", ".join(f"{k}: {v:.4f}" for k, v in row.items())
+    mem_text = f"Mem Alloc: {current_memory_allocated:.2f} MB, Mem Reserved: {current_memory_reserved:.2f} MB Warp Mem: {warp_memory:.2f} MB"
+
     parts.append(f'{row["stepTime_ms"]:.1f}ms')
+    parts.append(mem_text)
     return ' | '.join(parts)

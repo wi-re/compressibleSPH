@@ -19,7 +19,28 @@ from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DE
                                  paramExtraData, setupTimestep, shapeSdf,
                                  weaklyCompressibleDiagnostics)
 
-__all__ = ['oscillatingDropletCase']
+__all__ = ['oscillatingDropletCase', 'DROPLET_STRETCH', 'DROPLET_PERIOD',
+           'analyticEnvelope']
+
+#: Long semi-axis of the droplet at maximum elongation, in units of `R`.
+#: The short one is `R / DROPLET_STRETCH`: the flow is incompressible, so the
+#: ellipse has the same area as the circle it started as.
+DROPLET_STRETCH = 1.931843
+
+#: Oscillation period, in units of the strain time `1 / A`.
+DROPLET_PERIOD = 4.827
+
+
+def analyticEnvelope(R: float = 1.0, stretch: float = DROPLET_STRETCH):
+    """`(long, short)` semi-axes of the two extreme ellipses.
+
+    The droplet passes through the circle it started as and through two
+    ellipses that are each other's 90-degree rotation -- long axis horizontal
+    at one extreme, vertical at the other. `04-oscillating-droplet.ipynb` draws
+    all three over the particles as the check that the amplitude, not just the
+    period, came out right.
+    """
+    return stretch * R, R / stretch
 
 
 def configureScheme(ctx: RunContext) -> None:
@@ -68,8 +89,8 @@ oscillatingDropletCase = registerCase(Case(
         caseName='04-oscillatingDroplet',
         nx=192,
         L=6.0,
-        # One full oscillation period, T = 4.827 A with A = 1.
-        tLimit=4.827,
+        # One full oscillation period, DROPLET_PERIOD / A with A = 1.
+        tLimit=DROPLET_PERIOD,
         plotInterval=10,
     ),
     params=dict(

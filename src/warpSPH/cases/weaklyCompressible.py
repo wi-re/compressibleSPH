@@ -12,7 +12,8 @@ and an initial velocity field, and gets the rest.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence
+import math
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import torch
 
@@ -29,6 +30,8 @@ from .plotting import Field
 __all__ = [
     'WEAKLY_COMPRESSIBLE_DEFAULTS', 'WEAKLY_COMPRESSIBLE_PARAMS',
     'configureWeaklyCompressible', 'domainFluidSdf', 'domainBoundarySdf', 'shapeSdf',
+    'SHAPE_PRESETS', 'shapeArgs', 'sdfBounds', 'centredShapeSdf',
+    'OBSTACLE_PARAMS', 'paramShapeSdf',
     'buildRegionSystem', 'fluidRegion', 'boundaryRegion',
     'setupTimestep', 'weaklyCompressibleDiagnostics',
     'VELOCITY_DENSITY_FIELDS', 'paramExtraData',
@@ -125,18 +128,149 @@ def domainBoundarySdf(ctx: RunContext) -> Callable:
     return lambda x: sampleDomainSDF(x, interior, invert=False)
 
 
-def shapeSdf(name: str, size, offset=None, invert: bool = False) -> Callable:
-    """One of the built-in implicit shapes, optionally translated.
+def shapeSdf(name: str, size=None, offset=None, invert: bool = False, *,
+             args: Optional[Sequence] = None, rotation: float = 0.0) -> Callable:
+    """One of the built-in implicit shapes, optionally rotated and translated.
 
-    `size` is whatever that shape's function takes -- a radius for `circle`,
-    half-extents for `box`.
+    `size` is whatever that shape's *single* argument is -- a radius for
+    `circle`, half-extents for `box`. Shapes taking more than one argument
+    (`trapezoid`, `star5`, `vesica`, ...) are given the whole list as `args`
+    instead; :data:`SHAPE_PRESETS` builds that list from one characteristic
+    size, so a case exposing `--shape` does not have to know each signature.
+
+    `rotation` is in **degrees, counter-clockwise**, about the shape's own
+    origin -- which is not the shape's centre for every primitive (see
+    :func:`sdfBounds`) -- and is applied before `offset` translates it.
     """
+    if args is None:
+        if size is None:
+            raise ValueError(f'shapeSdf({name!r}) needs either `size` or `args`.')
+        args = [size]
+
     def sdf(points):
-        device = points.device
-        shape = lambda x: getSDF(name)['function'](x, torch.as_tensor(size).to(device))
+        device, dtype = points.device, points.dtype
+        cast = [torch.as_tensor(a).to(device=device, dtype=dtype) for a in args]
+        shape = lambda x: getSDF(name)['function'](x, *cast)
+        if rotation:
+            # op_rotate turns the *query point*, so the shape turns the other
+            # way; negate to make a positive angle counter-clockwise.
+            shape = operatorDict['rotate'](shape, -math.radians(rotation))
         if offset is not None:
-            shape = operatorDict['translate'](shape, torch.as_tensor(offset).to(device))
+            shape = operatorDict['translate'](
+                shape, torch.as_tensor(offset).to(device=device, dtype=dtype))
         return sampleSDF(points, shape, invert=invert)
+    return sdf
+
+
+#: Closed 2D primitives usable as a fluid body or an obstacle, as
+#: ``name -> (size, aspect) -> argument list`` for :func:`shapeSdf`.
+#:
+#: `size` is the shape's characteristic half-size and `aspect` squashes it in
+#: its second direction (or picks the secondary radius, for the shapes built
+#: from two of them), so `--shape hexagon --size 0.5` and
+#: `--shape box --size 0.5 --aspectRatio 0.5` are both meaningful without
+#: knowing that `sdBox` takes half-extents and `sdHexagon` takes a radius.
+#:
+#: These are the primitives from :data:`warpSPH.geometry.sdfFunctions` that
+#: enclose a single connected area around their own origin. `segment` and
+#: `polygon`/`star`/`ring` are left out: the first encloses nothing, and the
+#: other three raise from `getSDF` as shipped.
+SHAPE_PRESETS: Dict[str, Callable[[float, float], List[Any]]] = {
+    'circle':              lambda size, aspect: [size],
+    'box':                 lambda size, aspect: [[size, size * aspect]],
+    'roundedBox':          lambda size, aspect: [[size, size * aspect],
+                                                 [0.25 * size * aspect] * 4],
+    'rhombus':             lambda size, aspect: [[size, size * aspect]],
+    'trapezoid':           lambda size, aspect: [size, size * aspect, size],
+    'parallelogram':       lambda size, aspect: [size, size * aspect, size * 0.5],
+    'equilateralTriangle': lambda size, aspect: [size],
+    'triangleIsosceles':   lambda size, aspect: [[size, 2.0 * size * aspect]],
+    'pentagon':            lambda size, aspect: [size],
+    'hexagon':             lambda size, aspect: [size],
+    'octogon':             lambda size, aspect: [size],
+    'hexagram':            lambda size, aspect: [size * 0.6],
+    'star5':               lambda size, aspect: [size, 0.45 * aspect],
+    'vesica':              lambda size, aspect: [size, size * aspect],
+    'cutDisk':             lambda size, aspect: [size, -size * aspect],
+    'unevenCapsule':       lambda size, aspect: [size * aspect, size * aspect * 0.5, size],
+    'moon':                lambda size, aspect: [size * aspect, size, size * 0.75],
+}
+
+
+def shapeArgs(name: str, size: float, aspect: float = 1.0) -> List[Any]:
+    """The :func:`shapeSdf` argument list for one of :data:`SHAPE_PRESETS`."""
+    preset = SHAPE_PRESETS.get(name)
+    if preset is None:
+        raise ValueError(f'Unknown shape {name!r}. Known: {sorted(SHAPE_PRESETS)}.')
+    return preset(size, aspect)
+
+
+def sdfBounds(sdf: Callable, domain, resolution: int = 256) -> Tuple[torch.Tensor, torch.Tensor]:
+    """`(centre, halfExtent)` of what `sdf` encloses, measured on a grid.
+
+    The primitives are not all centred on their own origin -- `sdEquilateralTriangle`
+    sits on its incircle, `sdTriangleIsosceles` grows upwards from the origin,
+    `moon` and `cutDisk` are cut off-centre -- and a rotated shape is not
+    centred even when the unrotated one is. Rather than tabulate a bounding box
+    per primitive, measure it: one `resolution**dim` evaluation of the SDF,
+    which costs nothing next to sampling the particles from it.
+
+    Accurate to one grid cell, so it is for *placing* bodies (recentring,
+    "start them just touching"), not for anything that needs the exact surface.
+    """
+    device, dtype = domain.min.device, domain.min.dtype
+    axes = [torch.linspace(float(domain.min[i]), float(domain.max[i]), resolution,
+                           device=device, dtype=dtype)
+            for i in range(len(domain.min))]
+    grid = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1).reshape(-1, len(axes))
+    distance, _ = sdf(grid)
+    inside = grid[distance.detach() < 0]
+    if inside.numel() == 0:
+        raise ValueError('sdfBounds: the shape encloses no point of the domain -- '
+                         'it is either empty, or larger than / outside the domain.')
+    low, high = inside.min(dim=0).values, inside.max(dim=0).values
+    return (low + high) / 2, (high - low) / 2
+
+
+def centredShapeSdf(name: str, args: Sequence, centre, domain, rotation: float = 0.0,
+                    invert: bool = False) -> Tuple[Callable, torch.Tensor]:
+    """`(sdf, halfExtent)` for a shape whose *measured* centre lands on `centre`.
+
+    Placing by the primitive's own origin puts, say, a triangle visibly off the
+    mark it was given; this measures the shape where it lands
+    (:func:`sdfBounds`) and translates by the residual instead.
+    """
+    atOrigin = shapeSdf(name, args=args, rotation=rotation, invert=invert)
+    measured, halfExtent = sdfBounds(atOrigin, domain)
+    target = torch.as_tensor(centre).to(device=measured.device, dtype=measured.dtype)
+    return shapeSdf(name, args=args, rotation=rotation, invert=invert,
+                    offset=(target - measured)), halfExtent
+
+
+#: The five parameters a case declares to make one of its shapes selectable.
+#: `paramShapeSdf` reads them; every case that has an obstacle uses the same
+#: names, so `--obstacleShape star5` means the same thing in all of them.
+OBSTACLE_PARAMS = dict(
+    obstacleShape='circle',
+    obstacleSize=0.25,
+    obstacleAspect=1.0,
+    obstacleRotation=0.0,
+    obstacleOffset=[0.0, 0.0],
+)
+
+
+def paramShapeSdf(ctx: RunContext, prefix: str = 'obstacle') -> Callable:
+    """SDF for the shape described by `<prefix>Shape/Size/Aspect/Rotation/Offset`.
+
+    The placement is :func:`centredShapeSdf`'s: `Offset` is where the shape's
+    *measured* centre goes, so an off-centre primitive (a triangle, a `moon`)
+    lands where it was asked to rather than beside it.
+    """
+    name = ctx.param(f'{prefix}Shape')
+    args = shapeArgs(name, ctx.param(f'{prefix}Size'), ctx.param(f'{prefix}Aspect', 1.0))
+    sdf, _ = centredShapeSdf(name, args, ctx.param(f'{prefix}Offset', [0.0, 0.0]),
+                             ctx.config.domain,
+                             rotation=ctx.param(f'{prefix}Rotation', 0.0))
     return sdf
 
 
@@ -159,13 +293,21 @@ def buildRegionSystem(ctx: RunContext, regions: Sequence) -> Any:
 
 
 def fluidRegion(ctx: RunContext, sdf: Callable, **kwargs):
-    return buildRegion(ctx.config, ctx.schemeConfig, sdf, RegionType.Fluid,
-                       initialConditions={}, **kwargs)
+    """A fluid region. `initialConditions={'velocities': fn}` sets a field on it.
+
+    Per-region initial conditions are how a case gives *this* body a velocity
+    without having to tell it apart from the others afterwards by the sign of a
+    coordinate: `initializeState` evaluates each callable over that region's
+    own sampled positions. See `impact.py`.
+    """
+    kwargs.setdefault('initialConditions', {})
+    return buildRegion(ctx.config, ctx.schemeConfig, sdf, RegionType.Fluid, **kwargs)
 
 
 def boundaryRegion(ctx: RunContext, sdf: Callable, kind: BCType = BCType.freeSlip, **kwargs):
+    kwargs.setdefault('initialConditions', {})
     return buildRegion(ctx.config, ctx.schemeConfig, sdf, RegionType.Boundary,
-                       initialConditions={}, kind=kind, **kwargs)
+                       kind=kind, **kwargs)
 
 
 def setupTimestep(ctx: RunContext, system) -> None:

@@ -3,7 +3,11 @@
 The script form of this case was
 `examples/weaklyCompressible/10-moving-obstacle.ipynb`. A hexagonal rigid body
 spins in a periodic box while the domain-mean velocity is driven towards
-`U_target`.
+`U_target`. The hexagon is only the default: `--obstacleShape` takes any key of
+:data:`~warpSPH.cases.weaklyCompressible.SHAPE_PRESETS`, with
+`--obstacleAspect`, `--obstacleRotation` and `--obstacleOffset` placing it, so
+the wake behind a spinning star and behind a spinning circle (which sheds
+nothing until the flow separates) are the same run twice.
 
 The forcing acts on the *mean* velocity only, deliberately: forcing every
 particle towards the target would damp the wake fluctuations that are the whole
@@ -20,11 +24,11 @@ from ..configurations import BoundaryCondition, BoundaryConditionType
 from ..configurations.region import BCType
 from ..runner import Case, RunContext, caseMain, registerCase
 from .plotting import particlePlot
-from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DEFAULTS,
-                                 WEAKLY_COMPRESSIBLE_PARAMS, boundaryRegion,
-                                 buildRegionSystem, configureWeaklyCompressible,
-                                 domainFluidSdf, fluidRegion, paramExtraData,
-                                 setupTimestep, shapeSdf,
+from .weaklyCompressible import (OBSTACLE_PARAMS, VELOCITY_DENSITY_FIELDS,
+                                 WEAKLY_COMPRESSIBLE_DEFAULTS, WEAKLY_COMPRESSIBLE_PARAMS,
+                                 boundaryRegion, buildRegionSystem,
+                                 configureWeaklyCompressible, domainFluidSdf, fluidRegion,
+                                 paramExtraData, paramShapeSdf, setupTimestep,
                                  weaklyCompressibleDiagnostics)
 
 __all__ = ['movingObstacleCase']
@@ -35,8 +39,7 @@ def buildSystem(ctx: RunContext):
     ctx.scratch['fluidSdf'] = fluidSdf
     return buildRegionSystem(ctx, [
         fluidRegion(ctx, fluidSdf),
-        boundaryRegion(ctx, shapeSdf(ctx.param('obstacleShape'), ctx.param('obstacleSize')),
-                       kind=BCType.constant),
+        boundaryRegion(ctx, paramShapeSdf(ctx), kind=BCType.constant),
     ])
 
 
@@ -93,8 +96,9 @@ movingObstacleCase = registerCase(Case(
     ),
     params=dict(
         WEAKLY_COMPRESSIBLE_PARAMS,
-        obstacleShape='hexagon',
-        obstacleSize=0.25,
+        # Shape/size/aspect/rotation/offset; the hexagon is what the notebook
+        # used, any other key of `SHAPE_PRESETS` works.
+        **dict(OBSTACLE_PARAMS, obstacleShape='hexagon'),
         obstacleOmega=1.0,
         U_target=1.0,
         forcingTau=0.5,

@@ -86,6 +86,13 @@ class CaseSpec:
     #: particle plot goes to vispy because a matplotlib scatter of ~10^5
     #: points costs more per frame than the physics step it is drawing.
     plotBackend: Optional[str] = None
+    #: Forwarded verbatim to `warpSPHPlotting.visualize`'s `backendOptions`.
+    #: E.g. `{'jupyter_backend': 'image', 'app_backend': 'egl'}` to render
+    #: vispy fully offscreen (headless GL, no window/widget) and push frames
+    #: as plain Jupyter image updates -- for notebooks over a remote-SSH
+    #: connection where the `jupyter_rfb` widget's comm channel to the
+    #: browser does not come up, even though the kernel itself renders fine.
+    plotBackendOptions: Optional[Dict[str, Any]] = None
     store: bool = False
     #: 'states' writes one HDF5 file per stored step (the examples' pattern);
     #: 'trajectory' writes a single growing trajectory.h5 (the datagen pattern).
@@ -224,7 +231,7 @@ def buildArgumentParser(description: str = 'Run a warpSPH case.',
                         help='Write the fully resolved spec to this path and continue.')
 
     for f in fields(CaseSpec):
-        if f.name == 'params':
+        if f.name in ('params', 'plotBackendOptions'):
             continue
         shown = (defaults or {}).get(f.name, f.default)
         if f.name == 'scheme':

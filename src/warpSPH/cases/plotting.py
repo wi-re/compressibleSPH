@@ -74,6 +74,19 @@ class Field:
     #: Title-to-plot spacing: matplotlib title padding in points, vispy a
     #: fraction of domain height. `None` keeps the backend default.
     plotTitleGap: Optional[float] = None
+    #: How to draw the boundary particles: 'Passive' (grey crosses, excluded
+    #: from the colour normalisation), 'Visualize' (coloured by the quantity
+    #: like the fluid) or 'Hide'.
+    #:
+    #: `PlottingOptions` defaults to `Hide`, which leaves a walled case with no
+    #: indication of where its walls are -- the lid-driven cavity plots as a
+    #: square of fluid with nothing around it. `Passive` is the default here
+    #: instead: a case with no boundary particles is unaffected, and one with
+    #: them shows where they are without letting them set the colour range.
+    boundary: str = 'Passive'                # 'Passive' | 'Visualize' | 'Hide'
+    #: The same, for the fluid particles. Only worth changing to look at a
+    #: boundary in isolation.
+    fluid: str = 'Visualize'
 
     def tensor(self, state) -> torch.Tensor:
         return getattr(state.state, self.quantity)
@@ -81,7 +94,8 @@ class Field:
 
 def _plotOptions(field: Field, markerSize: float):
     from warpSPHPlotting import (CyclicColorMap, DivergingColorMap, GridVisualization,
-                                 Mapping, PlotScaling, PlottingOptions, UniformColorMap)
+                                 Mapping, PlotScaling, PlottingOptions, UniformColorMap,
+                                 VisualizeOptions)
 
     families = {'uniform': UniformColorMap, 'diverging': DivergingColorMap,
                 'cyclic': CyclicColorMap}
@@ -97,6 +111,8 @@ def _plotOptions(field: Field, markerSize: float):
         plotTitleGap=field.plotTitleGap,
         vMin=field.vMin,
         vMax=field.vMax,
+        fluidVisualization=getattr(VisualizeOptions, field.fluid),
+        boundaryVisualization=getattr(VisualizeOptions, field.boundary),
         gridVisualization=(GridVisualization(resolution=field.gridResolution)
                            if field.gridResolution else None),
     )
@@ -135,6 +151,7 @@ def buildFieldPlotter(ctx: RunContext, state, fields: Sequence[Field],
         figTitle=figureTitle(ctx, state),
         mosaic=''.join(keys),
         figsize=figsize,
+        backendOptions=getattr(ctx.spec, 'plotBackendOptions', None),
     )
     _export(ctx, plotter, 0, dpi)
     return plotter
