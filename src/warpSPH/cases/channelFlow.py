@@ -1,18 +1,24 @@
-"""Channel flow past an obstacle (2D), weakly compressible.
+"""Channel flow past a fixed obstacle (2D), weakly compressible.
 
-The script forms of these cases were
-`examples/weaklyCompressible/11-driven-square.ipynb` and `13-openFlow.ipynb`.
+The script form of this case was `examples/weaklyCompressible/13-openFlow.ipynb`.
 
-Both are the same construction the dam break already uses -- a `W x L` box, a
+It is the same construction the dam break already uses -- a `W x L` box, a
 boundary region cut from an obstacle SDF, and a freestream forcing band at the
-inflow -- assembled by the very same `caseUtils.weaklyCompressible` helpers.
-So rather than a second copy of that machinery, these two are the dam break's
-hooks under different defaults: no gravity, the box filled with fluid, and the
+inflow -- assembled by the very same `caseUtils.weaklyCompressible` helpers. So
+rather than a second copy of that machinery, this is the dam break's hooks
+under different defaults: no gravity, the box filled with fluid, and the
 freestream switched on.
 
-The notebooks reached the same place by hand, writing out the obstacle SDF, the
-Dirichlet band and the inflow ramp inline; `13-openFlow.ipynb` had already
-started importing `buildObstacleSDF` from the shared helpers.
+The notebook reached the same place by hand, writing out the obstacle SDF, the
+Dirichlet band and the inflow ramp inline; it had already started importing
+`buildObstacleSDF` from the shared helpers.
+
+`drivenSquare` (case 11, `examples/weaklyCompressible/11-driven-square.py`) used
+to live here too, built the same way with `band`/`semiPeriodic` numbers picked
+to approximate a driven square -- but a fixed obstacle in a driven channel is
+not what "driven square" describes, and it moved to its own module
+(`warpSPH.cases.drivenSquare`) rather than staying a `channelCase` under a
+misleading name.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ from .dambreak import (buildSystem, configureScheme, diagnostics, extraData,
 from ..runner import Case, caseMain, registerCase
 from .dambreak import dambreakCase
 
-__all__ = ['openFlowCase', 'drivenSquareCase', 'channelCase']
+__all__ = ['openFlowCase', 'channelCase']
 
 
 def channelCase(name: str, description: str, defaults, params) -> Case:
@@ -70,35 +76,6 @@ openFlowCase = channelCase(
         offsetX=0.0,
     ),
 )
-
-drivenSquareCase = channelCase(
-    'drivenSquare',
-    'Driven channel flow past a cylinder (2D), weakly compressible deltaSPH.',
-    defaults=dict(
-        caseName='11-drivenSquare',
-        nx=256,
-        L=2.0,
-        tLimit=10.0,
-    ),
-    params=dict(
-        W=8.0,
-        band=0,
-        # Fully flooded and gravity-free, so the only driver is the freestream.
-        fillRatio=1.0,
-        fluidWidth=1.0,
-        semiPeriodic=False,
-        disableGravity=True,
-        enableFreestream=True,
-        freeStreamVelocity=1.0,
-        forcingWidth=2.0 / 16.0,
-        obstacleActive=True,
-        obstacleType='circleMiddle',
-        maxExtent=0.25,
-        offsetX=0.0,
-        targetDt=0.00025,
-    ),
-)
-
 
 if __name__ == '__main__':
     caseMain(openFlowCase)

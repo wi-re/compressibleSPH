@@ -242,9 +242,12 @@ dambreakCase = registerCase(Case(
         # `datagen/weaklyCompressible/cases/dambreak.sh` passes an explicit
         # `--fluidWidth` (5/12, 1/4 or 1/12 against fillRatio 1/3, 1/2, 2/3),
         # so the default was never exercised. Same class of stale default as
-        # `obstacleType` below.
-        fillRatio=1.0 / 3.0,
-        fluidWidth=1.0 / 3.0,
+        # `obstacleType` below. (The first pass at this only moved
+        # `fluidWidth`, which left a 1.333 x 0.667 column -- wider than it is
+        # tall, i.e. the comment above and the values disagreed. Both are set
+        # here now.)
+        fillRatio=2.0 / 3.0,
+        fluidWidth=1.0 / 6.0,
         semiPeriodic=False,
         fullyPeriodic=False,
 

@@ -89,7 +89,13 @@ class Field:
     fluid: str = 'Visualize'
 
     def tensor(self, state) -> torch.Tensor:
-        return getattr(state.state, self.quantity)
+        value = getattr(state.state, self.quantity)
+        # Integer state fields (`UIDs`, `kinds`) are plotted as floats: the
+        # grid path interpolates the quantity with a warp kernel typed off the
+        # particle positions, and an int32 input does not match that kernel.
+        if not value.is_floating_point():
+            value = value.to(state.state.positions.dtype)
+        return value
 
 
 def _plotOptions(field: Field, markerSize: float):

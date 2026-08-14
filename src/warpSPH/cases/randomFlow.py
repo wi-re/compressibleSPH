@@ -27,10 +27,20 @@ from .weaklyCompressible import (OBSTACLE_PARAMS, VELOCITY_DENSITY_FIELDS,
                                  paramExtraData, paramShapeSdf, setupTimestep,
                                  weaklyCompressibleDiagnostics)
 
-__all__ = ['randomFlowCase', 'noiseVelocities']
+__all__ = ['randomFlowCase', 'noiseVelocities', 'BOUNDED_BAND']
+
+#: Particle layers of wall `--bounded` gets when `--band` is left at its
+#: (periodic) default of 0. The walls are cut from the *interior* domain, which
+#: `band` is what widens the simulated box beyond -- so at `band=0` the wall
+#: region encloses no volume and `--bounded` silently samples **zero** boundary
+#: particles, i.e. runs as the periodic variant. 5 is what the 07 notebook used
+#: and what `lidDrivenCavity` defaults to.
+BOUNDED_BAND = 5
 
 
 def configureScheme(ctx: RunContext) -> None:
+    if ctx.param('bounded') and not ctx.param('band'):
+        ctx.spec.params['band'] = BOUNDED_BAND
     configureWeaklyCompressible(ctx)
     # The surface-detection bandwidth is measured in particle spacings.
     ctx.schemeConfig.bandwith = ctx.spec.L / ctx.param('bandWidth') / ctx.config.dx

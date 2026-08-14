@@ -1,7 +1,7 @@
 # Weakly compressible examples: notebook-migration plan
 
-**In progress.** Slots 01, 02, 03, 04, 08, 09 and 10 are done (six notebooks,
-seven files); 05, 06, 07, 11, 12 and 13 are open. The `.py` wrappers were already
+**In progress.** Slots 01–12 are done (eleven notebooks, twelve files); 13 is
+open. The `.py` wrappers were already
 in the current style and all 10 case modules were already registered in
 `CASE_MODULES` — what this plan closes is the notebooks, which were all on the
 pre-`warpSPHBootstrap` shape: a 43-line boilerplate cell copied verbatim, the
@@ -92,10 +92,24 @@ Expanded so far:
   wide ellipse was drawn `2R x R`, which is not the area of the circle it came
   from; `analyticEnvelope` is area-conserving.
 
-Still worth expanding, before their slots are ported: `tgvWeaklyCompressible`
-(05 — the `nu` sweep is the case's own `effectiveViscosity`, so the sweep should
-be a loop over `run()`), `channelFlow` (11/13 — the inlet/outlet and the
-obstacle are hard-coded where `dambreak`'s are flags).
+- **`tgvWeaklyCompressible`** (05, 2026-08-14) — no new geometry; what it was
+  missing was the *viscosity* axis, which is the whole point of the case.
+  `viscosityScales(ctx, state)` returns `nu`/`alpha`/`Re` plus the
+  `alpha >= MIN_STABLE_ALPHA` floor and the Reynolds ceiling it implies, from
+  whichever knob the run was actually given; `analyticKineticEnergy(ctx)` is the
+  continuum `E_k(0)`. The notebook's sweep is now a `for` loop over `run()` plus
+  the existing `effectiveViscosity`, not a second step loop. Measured at nx=128,
+  t=1: `nu_eff/nu` sits at 0.48–0.52 while `alpha` stays above the floor and
+  climbs to 2.7 below it, which is the sweep's whole point in one number.
+- **`randomFlow`** (06/07, 2026-08-14) — `BOUNDED_BAND`, see the bug below.
+
+Still worth expanding, before its slots are ported: `channelFlow` (11/13 — the
+inlet/outlet and the obstacle are hard-coded where `dambreak`'s are flags).
+
+`alpha` is new in the **shared** `WEAKLY_COMPRESSIBLE_PARAMS` (default `0.01`,
+which is what `diffusionParams.inviscidAlpha` already defaulted to, so no case
+changes behaviour): every case in this family has an artificial viscosity and
+none of them could set it, which made `--inviscid` runs unsteerable.
 
 ## The notebook shape here
 
@@ -144,14 +158,14 @@ editable if the reader knows what each knob means.
 | 02 | `01-impact/impact_squares.ipynb` | `impact` | **done** — `--touching` replaces the hand-written `H/2 + dx` |
 | 03 | `03-rotating-square-patch.ipynb` | `squarePatch` | **done** — pilot; angular-momentum drift recorded at the hook point |
 | 04 | `04-oscillating-droplet.ipynb` | `droplet` | **done** — analytic envelope kept, constants exported from the case |
-| 05 | `05-taylor-green-vortex.ipynb` | `tgv-wc` | open — the viscosity-sweep notebook, **the one place the `nu` sweep belongs** |
-| 06 | `06-periodic-random-flow.ipynb` | `randomFlow` (`--no-bounded --obstacle`) | open — merge into `06-randomFlow/` |
-| 07 | `07-bounded-random-flow.ipynb` | `randomFlow` (`--bounded`) | open — becomes `06-randomFlow/randomFlow_bounded.ipynb` |
+| 05 | `05-taylor-green-vortex.ipynb` | `tgv-wc` | **done** — the viscosity-sweep notebook; the sweep is now a loop over `run()` |
+| 06 | `06-randomFlow/randomFlow_periodic.ipynb` | `randomFlow` (`--no-bounded --obstacle`) | **done** — merged with 07 into `06-randomFlow/`; divergence-of-the-seeded-field cell added |
+| 07 | `06-randomFlow/randomFlow_bounded.ipynb` | `randomFlow` (`--bounded`) | **done** — kept 07's kernel-sum density check; found the `band=0` wall bug below |
 | 08 | `08-kolmogorov-flow.ipynb` | `kolmogorov` | **done** — dead forcing-prototype cells dropped; mean-profile-vs-forcing panel added |
 | 09 | `09-lid-driven-cavity.ipynb` | `ldc` | **done** — renamed from `09-LDC.ipynb`; centreline profiles kept |
 | 10 | `10-moving-obstacle.ipynb` | `movingObstacle` | **done** — mean-velocity-vs-target panel at the hook point |
-| 11 | `11-driven-square.ipynb` | `channelFlow.drivenSquareCase` | open — unblocked, `DAMBREAK_FIELDS` is importable now |
-| 12 | `12-dambreak.ipynb` | `dambreak` | open — unblocked; keep the density-field cell |
+| 11 | `11-driven-square.ipynb` | `drivenSquare` | **done (2026-08-14), case redesigned** — see below; no longer a `channelFlow` hook |
+| 12 | `12-dambreak.ipynb` | `dambreak` | **done** — kept the recomputed-density cell, paired with `surfaceIndicators`; front position recorded at the hook point |
 | 13 | `13-openFlow.ipynb` | `channelFlow.openFlowCase` | open — 1704 lines, 57 cells, the worst one; do it last |
 
 `naca.ipynb` stays as it is: a standalone SDF-visualisation scratchpad with no
@@ -209,9 +223,34 @@ Two things surfaced while looking at the result, both fixed:
   Koshizuka & Oka 1:2 proportions with six column-widths of run-out.
   `examples/sweeps/dambreak_obstacle.yaml` sets `fillRatio` but not
   `fluidWidth`, so it inherits the fix.
+  **Half of that fix was missing until 2026-08-14**: the commit moved
+  `fluidWidth` to 1/3 but left `fillRatio` at 1/3, giving a 1.333 x 0.667
+  column -- wider than it is tall, and contradicting the comment sitting above
+  it, which described the 0.667 x 1.333 Koshizuka & Oka shape. Both values are
+  set now (`fillRatio=2/3, fluidWidth=1/6`); the dam-break physics tests assert
+  invariants rather than geometry and still pass.
 
 Verified with `warpsph-run dambreak --plot`, `run_sweep.py --cases dambreak
 drivenSquare openFlow` and the dam-break physics tests.
+
+## `--bounded` sampled no walls at all — closed 2026-08-14
+
+Same class as the dam break's stale `fluidWidth`: a default that no shipped
+invocation exercised. `randomFlow`'s walls are `domainBoundarySdf`, i.e.
+everything outside the **interior** domain — and `band` is what makes the
+simulated domain wider than that interior. At the shared default `band=0` the
+two domains coincide, the wall region encloses zero volume, and
+`--bounded` sampled **0 boundary particles**: it ran the periodic case.
+`07-bounded-random-flow.py`'s `PRESET` (`--plot --bounded --nx 256`) never
+passed a band, so the shipped bounded example was not bounded; only the old
+notebook, which set `band = 5` by hand, ever was.
+
+Fixed in the case rather than in the wrapper, so `warpsph-run randomFlow
+--bounded` is right too: `configureScheme` supplies `randomFlow.BOUNDED_BAND`
+(5, matching `lidDrivenCavity`) when `bounded` is set and `band` is still 0.
+Measured at nx=64: 0 → 2760 boundary particles. The bounded notebook's
+kernel-sum density cell is the check that would have caught it, and it now says
+so.
 
 ## What is genuinely notebook-shaped, and what to delete
 
@@ -249,7 +288,7 @@ that `--shape moon --rotation 40` did what you meant.
 - The `nu_tests` sweep cell where it was copy-pasted without a purpose: 06, 07,
   11, 12, 13 (67 lines each, identical, all ending in a
   `plotter.updateQuantities` call on a plotter from a different cell). It stays
-  in 05 only. (08, 09 and 10 are done; theirs are gone.)
+  in 05 only. (Done for 05–10; 11, 12 and 13 still carry theirs.)
 - The trailing run of empty cells every notebook ends with (4–5 each).
 - 13's `torch.profiler` cells, its commented-out alternate system builds, and
   the half-finished `# def ldcDirichlet` block pasted into 11/12/13.
@@ -258,20 +297,77 @@ that `--shape moon --rotation 40` did what you meant.
 
 ## Order of the remaining work
 
-1. **05** — port plus the viscosity calibration that stays, and the `run()`-loop
-   form of the sweep.
-2. **06+07 → `06-randomFlow/`**, the multi-variant pattern, following
-   `01-impact/`. The obstacle is now `OBSTACLE_PARAMS`, so both notebooks'
-   options tables gain those five rows.
-3. **11, 12** — first users of the converted dam-break plot path
-   (`from warpSPH.cases.dambreak import DAMBREAK_FIELDS`, or `dambreakFields(ctx)`
-   if the notebook should honour `--plotDensity`).
+1. ~~**05**~~ done 2026-08-14.
+2. ~~**06+07 → `06-randomFlow/`**~~ done 2026-08-14, following `01-impact/`.
+3. ~~**11**~~ done 2026-08-14, redesigned rather than ported — see below.
 4. **13** — last. Expect a rewrite rather than a port: 57 cells, most of them
    scratch, and `openFlowCase`'s defaults already encode the setup the notebook
    builds by hand.
 5. **Sweep-up:** delete `utils.py`, add `EXAMPLES_SUMMARY.md` for this directory
    (the compressible one is the template), and flip the `CLEANUP_PLAN.md` item
    to note this family done and only `examples/incompressible/` remaining.
+
+## `drivenSquare` was not a driven square — redesigned 2026-08-14
+
+Slot 11's old notebook (`flowPast4412`, a NACA-4412 import, walls, freestream
+Dirichlet forcing) had drifted into an airfoil-in-a-channel study, and the
+`channelFlow.drivenSquareCase` this plan pointed at just formalised that drift:
+a **fixed** cylinder in a driven channel (`band=0`, meaning — per the
+`randomFlow` bug above — *no channel walls either*, so "channel" was a
+free-floating slab with free-surface detection on and a fixed obstacle in a
+freestream). None of that is a driven square.
+
+Per-user direction: a driven square is a square that **oscillates back and
+forth**, in a domain sized with real margin around the swing (at least 2:1,
+domain-width-to-sweep). Redesigned as its own case,
+`warpSPH.cases.drivenSquare`, sharing `movingObstacle`'s machinery
+(`buildRegionSystem`/`fluidRegion`/`boundaryRegion(kind=constant)`) but driving
+`RigidBody.linearVelocity` instead of `.angularVelocity` — a mechanism that
+already existed (`rigidBody/integrate.py` integrates both every step) but
+nothing in this family used.
+
+Two design points, both because the motion is periodic rather than one-shot:
+
+- **The velocity is re-imposed every step**, `kidder.py`'s pattern for a
+  time-dependent boundary condition: a `postStep` hook recomputes
+  `d/dt[A sin(2*pi*t/T)]` from the current `t` every step, because
+  `linearVelocity` is what the rigid-body integrator actually reads each step
+  — a one-shot assignment in `initialConditions` (the first version of this
+  redesign, before oscillation was asked for) leaves the body translating in a
+  straight line forever, not oscillating.
+- **`configureScheme` widens the domain's x extent**, rather than reusing the
+  shared block's square box, so the body's total sweep
+  (`2 * (oscillationAmplitude + obstacleSize)`, exported as `sweptWidth(ctx)`)
+  always has `domainMarginRatio` (default 2, i.e. "at least 2:1") worth of
+  room — the body never approaches the periodic wrap in either direction, and
+  the wake gets space to develop before the next swing brings the body back
+  through it. `sampleRegularParticles`'s `shortEdge=True` derives `dx` from the
+  domain's y extent (`spec.L`, untouched) regardless of how wide x is widened,
+  so this only adds particles along x at the same spacing — no separate `nx`
+  bookkeeping needed.
+
+Default: a square (`obstacleShape='box'`, any `SHAPE_PRESETS` key),
+`oscillationAmplitude=0.5`, `oscillationPeriod=4.0`, oscillating through
+**still fluid in a periodic box** — no freestream. `--enableFreestream` (still
+`movingObstacle`'s mean-flow forcing, layered under the oscillation) is
+reachable but not the default, per direction: a real, separate experiment, not
+what the name asks for.
+
+`meanFlowForcingBC` moved out of `movingObstacle.py` into
+`cases/weaklyCompressible.py` in the same pass, now that two cases share it
+verbatim -- `movingObstacle.py` shrank by the width of the closure it used to
+carry, no behaviour change (confirmed: `run_sweep.py --cases movingObstacle`
+still passes).
+
+Verified: `run_sweep.py --cases drivenSquare openFlow movingObstacle` (3/3),
+full `run_tests.sh` still green, `configureScheme` prints `width/sweptWidth ==
+domainMarginRatio` exactly at the shipped defaults (domain x in
+`[-1.5, 1.5]`, sweep `1.5`, ratio `2.0`, margin `0.75` on each side),
+`channelFlow.openFlowCase` still builds after losing its sibling, and the
+notebook's own drift plot holds `centerOfMass` against the analytic
+`A sin(2*pi*t/T)` for the whole run (not periodically wrapped — only the
+neighbour search's *distances* wrap, so the raw coordinate is exact against the
+sine, not a sawtooth).
 
 ## Outputs and animations
 

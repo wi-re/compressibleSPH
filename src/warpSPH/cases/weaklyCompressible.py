@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import torch
 
+from ..configurations import BoundaryCondition, BoundaryConditionType
 from ..configurations.moduleConfigurations.gravity import GravityType
 from ..configurations.region import BCType, RegionType
 from ..initializers import initializeWeaklyCompressibleSimulation
@@ -32,9 +33,9 @@ __all__ = [
     'configureWeaklyCompressible', 'domainFluidSdf', 'domainBoundarySdf', 'shapeSdf',
     'SHAPE_PRESETS', 'shapeArgs', 'sdfBounds', 'centredShapeSdf',
     'OBSTACLE_PARAMS', 'paramShapeSdf',
-    'buildRegionSystem', 'fluidRegion', 'boundaryRegion',
+    'buildRegionSystem', 'fluidRegion', 'boundaryRegion', 'meanFlowForcingBC',
     'setupTimestep', 'weaklyCompressibleDiagnostics',
-    'VELOCITY_DENSITY_FIELDS', 'paramExtraData',
+    'VELOCITY_DENSITY_FIELDS', 'VELOCITY_UID_FIELDS', 'paramExtraData',
 ]
 
 
@@ -66,6 +67,13 @@ WEAKLY_COMPRESSIBLE_PARAMS = dict(
     freeSurface=False,
     inviscid=True,
     nu=0.0,
+    # The artificial-viscosity coefficient, i.e. the dissipation a run gets when
+    # `inviscid` leaves it as the only one. It is the other half of the `nu`
+    # knob rather than a separate mechanism -- the two are interconvertible
+    # through `alphaToNu`/`nuToAlpha` given the sound speed and the support
+    # radius -- and 0.01 is both the scheme default and the value below which
+    # runs stop being reliably stable.
+    alpha=0.01,
     markerSize=4,
 )
 
@@ -74,6 +82,16 @@ VELOCITY_DENSITY_FIELDS = [
     Field('velocities', 'velocities', colorMap='viridis', mapping='L2Norm'),
     Field('densities', 'densities', colorMap='RdBu', colorMapKind='diverging',
           flip=True, midPoint=1.0, vMin=0.99, vMax=1.01),
+]
+
+#: The same velocity panel, but coloured by particle UID instead of density --
+#: the UIDs are handed out in sampling order, so the second panel is a dye trace
+#: of where each particle started and reads as mixing rather than as a state
+#: variable. A cyclic map keeps neighbouring UIDs distinguishable everywhere.
+VELOCITY_UID_FIELDS = [
+    Field('velocities', 'velocities', colorMap='viridis', mapping='L2Norm'),
+    Field('UIDs', 'particle UID', colorMap='twilight', colorMapKind='cyclic',
+          midPoint=None),
 ]
 
 
@@ -99,6 +117,8 @@ def configureWeaklyCompressible(ctx: RunContext) -> None:
     schemeConfig = ctx.schemeConfig
     schemeConfig.surfaceDetectionConfig.active = ctx.param('freeSurface')
     schemeConfig.diffusionParams.inviscid = ctx.param('inviscid')
+    schemeConfig.diffusionParams.inviscidAlpha = ctx.param(
+        'alpha', schemeConfig.diffusionParams.inviscidAlpha)
     if not ctx.param('inviscid'):
         schemeConfig.diffusionParams.viscidNu = ctx.param('nu')
 
@@ -308,6 +328,30 @@ def boundaryRegion(ctx: RunContext, sdf: Callable, kind: BCType = BCType.freeSli
     kwargs.setdefault('initialConditions', {})
     return buildRegion(ctx.config, ctx.schemeConfig, sdf, RegionType.Boundary,
                        kind=kind, **kwargs)
+
+
+def meanFlowForcingBC(fluidSdf: Callable, target: float, tau: float) -> BoundaryCondition:
+    """Drive the domain-*mean* fluid velocity towards `(target, 0)` over `tau`.
+
+    Forcing every particle towards the target individually would damp the
+    fluctuations (a wake, a shed vortex) that are usually the point of the case
+    this is used in -- correcting only the mean leaves them alone. Shared by
+    `movingObstacle` (a spinning body in a driven current) and `drivenSquare`
+    (a translating body, optionally in one).
+    """
+
+    def meanFlowForcing(state, config, schemeConfig, positions, d, n, t, dt):
+        force = torch.zeros_like(state.positions)
+        fluid = state.kinds == 0
+        if torch.count_nonzero(fluid) == 0:
+            return force
+        mean = state.velocities[fluid].mean(dim=0)
+        force[fluid, 0] = state.masses[fluid] * (target - mean[0]) / tau
+        force[fluid, 1] = state.masses[fluid] * (-mean[1]) / tau
+        return force
+
+    return BoundaryCondition(type=BoundaryConditionType.dynamic, sdf=fluidSdf,
+                             forcingFunctions=[meanFlowForcing])
 
 
 def setupTimestep(ctx: RunContext, system) -> None:

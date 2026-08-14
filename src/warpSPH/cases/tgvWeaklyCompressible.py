@@ -12,6 +12,13 @@ Monaghan switch that turns viscosity off for particle pairs that are separating,
 so roughly half of the pairs at any instant contribute no dissipation. Disabling
 the switch recovers the analytic decay rate but costs stability elsewhere, which
 is why it stays on.
+
+That makes this case the family's viscosity calibration: it is the one setup
+whose dissipation has a closed-form answer, so it is where "what did I ask for"
+(`nu`, or `alpha` when `--inviscid`; :func:`viscosityScales` converts between
+them) can be held against "what did the scheme actually apply"
+(:func:`effectiveViscosity`). Sweeping `nu` over decades and fitting each run is
+the notebook's last section.
 """
 
 from __future__ import annotations
@@ -21,7 +28,7 @@ from typing import Dict
 import numpy as np
 import torch
 
-from ..modules import shuffleParticles
+from ..modules import alphaToNu, nuToAlpha, shuffleParticles
 from ..runner import Case, RunContext, caseMain, registerCase
 from ..sample.weaklyCompressible import setupBasicWeaklyCompressibleInitialState
 from .plotting import particlePlot
@@ -30,7 +37,15 @@ from .weaklyCompressible import (VELOCITY_DENSITY_FIELDS, WEAKLY_COMPRESSIBLE_DE
                                  configureWeaklyCompressible, paramExtraData,
                                  setupTimestep, weaklyCompressibleDiagnostics)
 
-__all__ = ['tgvWeaklyCompressibleCase', 'effectiveViscosity', 'analyticDecayRate']
+__all__ = ['tgvWeaklyCompressibleCase', 'effectiveViscosity', 'analyticDecayRate',
+           'analyticKineticEnergy', 'viscosityScales', 'wavenumber',
+           'MIN_STABLE_ALPHA']
+
+#: Empirically, an artificial viscosity below this stops being reliably stable.
+#: It is what makes "the largest Reynolds number this discretisation can carry"
+#: a computable number rather than a matter of taste -- see
+#: :func:`viscosityScales`.
+MIN_STABLE_ALPHA = 0.01
 
 
 def wavenumber(ctx: RunContext) -> float:
@@ -41,6 +56,55 @@ def wavenumber(ctx: RunContext) -> float:
 def analyticDecayRate(ctx: RunContext) -> float:
     """`4 nu k^2`, the exponential rate of the kinetic-energy decay."""
     return 4.0 * ctx.param('nu') * wavenumber(ctx) ** 2
+
+
+def analyticKineticEnergy(ctx: RunContext) -> float:
+    """`KE(0)` of the continuum vortex, `rho0 uMag^2 L^2 / 4`.
+
+    The mean of `u^2 + v^2` over a whole number of periods of the TGV field is
+    `uMag^2 / 2`, so the continuum answer needs no integration -- and comparing
+    it to what the sampled particles actually carry is the cheapest check that
+    the lattice, the masses and the shuffle all came out right.
+    """
+    return 0.25 * ctx.param('uMag') ** 2 * ctx.param('rho0') * ctx.spec.L ** 2
+
+
+def viscosityScales(ctx: RunContext, state) -> Dict[str, float]:
+    """The viscosity of the run as configured, in every form it has one.
+
+    `nu` and `alpha` are the same dissipation written two ways -- physical
+    kinematic viscosity and the deltaSPH artificial-viscosity coefficient --
+    related by `nu = alpha c0 h / (2(n+2))` (Sun et al. 2016 against Marrone et
+    al. 2012). Whichever one the case was given, the other follows once the
+    sound speed and the mean support radius exist, which is why this takes a
+    state rather than only the spec -- the built system before the run, or a
+    `RunResult.state` after it; anything carrying `.state.supports`.
+
+    Also returns the Reynolds number that implies, and the largest one this
+    discretisation can carry: `alpha` cannot usefully go below
+    :data:`MIN_STABLE_ALPHA`, and that floor is a viscosity floor, hence a
+    Reynolds ceiling.
+    """
+    dim = ctx.spec.dim
+    c0 = float(ctx.schemeConfig.fluid.fixedSoundSpeed)
+    h = float(state.state.supports.mean().detach().cpu())
+    # The velocity scale is uMag and the length scale is half the box: one
+    # vortex, not the periodic tile that holds four of them.
+    scale = ctx.param('uMag') * ctx.spec.L / 2
+
+    if ctx.param('inviscid'):
+        alpha = ctx.param('alpha')
+        nu = alphaToNu(alpha, c0, h, dim)
+    else:
+        nu = ctx.param('nu')
+        alpha = nuToAlpha(nu, c0, h, dim)
+    nuLimit = alphaToNu(MIN_STABLE_ALPHA, c0, h, dim)
+
+    return {
+        'nu': nu, 'alpha': alpha, 'c0': c0, 'h': h,
+        'Re': scale / nu if nu > 0 else float('inf'),
+        'nuLimit': nuLimit, 'ReLimit': scale / nuLimit,
+    }
 
 
 def effectiveViscosity(result) -> float:

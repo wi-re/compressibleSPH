@@ -18,9 +18,6 @@ from __future__ import annotations
 
 from typing import Dict
 
-import torch
-
-from ..configurations import BoundaryCondition, BoundaryConditionType
 from ..configurations.region import BCType
 from ..runner import Case, RunContext, caseMain, registerCase
 from .plotting import particlePlot
@@ -28,8 +25,8 @@ from .weaklyCompressible import (OBSTACLE_PARAMS, VELOCITY_DENSITY_FIELDS,
                                  WEAKLY_COMPRESSIBLE_DEFAULTS, WEAKLY_COMPRESSIBLE_PARAMS,
                                  boundaryRegion, buildRegionSystem,
                                  configureWeaklyCompressible, domainFluidSdf, fluidRegion,
-                                 paramExtraData, paramShapeSdf, setupTimestep,
-                                 weaklyCompressibleDiagnostics)
+                                 meanFlowForcingBC, paramExtraData, paramShapeSdf,
+                                 setupTimestep, weaklyCompressibleDiagnostics)
 
 __all__ = ['movingObstacleCase']
 
@@ -49,24 +46,8 @@ def initialConditions(ctx: RunContext, system) -> None:
     ctx.config.rigidBodies[0].angularVelocity = ctx.param('obstacleOmega')
     ctx.schemeConfig.rigidBodies = ctx.config.rigidBodies
 
-    target = ctx.param('U_target')
-    tau = ctx.param('forcingTau')
-
-    def meanFlowForcing(state, config, schemeConfig, positions, d, n, t, dt):
-        force = torch.zeros_like(state.positions)
-        fluid = state.kinds == 0
-        if torch.count_nonzero(fluid) == 0:
-            return force
-        mean = state.velocities[fluid].mean(dim=0)
-        force[fluid, 0] = state.masses[fluid] * (target - mean[0]) / tau
-        force[fluid, 1] = state.masses[fluid] * (-mean[1]) / tau
-        return force
-
-    ctx.schemeConfig.boundaryConditions = [BoundaryCondition(
-        type=BoundaryConditionType.dynamic,
-        sdf=ctx.scratch['fluidSdf'],
-        forcingFunctions=[meanFlowForcing],
-    )]
+    ctx.schemeConfig.boundaryConditions = [meanFlowForcingBC(
+        ctx.scratch['fluidSdf'], ctx.param('U_target'), ctx.param('forcingTau'))]
 
 
 setupPlot, updatePlot = particlePlot(VELOCITY_DENSITY_FIELDS)

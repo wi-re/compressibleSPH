@@ -109,9 +109,13 @@ see README for the current layout, not reconstructed here.
       `refreshFieldPlotter`, is new in `cases/plotting.py`, piloted on `08`).
       `14`/`15` merged into one `14-triplePoint/` directory the way `06`/`07`
       merged into `06-sedov/` earlier in this item.
-- [ ] **Notebook simplification, the rest.** The non-compressible families —
-      `examples/weaklyCompressible/` and `examples/incompressible/` — are still
-      on the old shape. **Read `PORTING_EXAMPLES.md` first** — the procedure,
+- [ ] **Notebook simplification, the rest.** `examples/weaklyCompressible/` is
+      11 of 13 slots done (see its own `MIGRATION_PLAN.md` for the per-slot
+      table; 11 and 13 remain, both `channelFlow`); `examples/incompressible/`
+      is untouched — and two of its three notebooks are the weakly compressible
+      cases under `--scheme divergenceFree`, so they follow 03 and 06 rather
+      than needing cases of their own.
+      **Read `PORTING_EXAMPLES.md` first** — the procedure,
       the notebook conventions that have a reason behind them, and (separately)
       how to take a case to 2D/3D, all written from doing Sod; the compressible
       pass above is a second worked example, particularly for any case that
@@ -121,10 +125,9 @@ see README for the current layout, not reconstructed here.
       - Apply the Sod pilot's pattern (real case code + generic helpers, visible
         step loop, explicit parameters cell) rather than collapsing to thin
         wrappers; keep genuinely notebook-shaped analysis/plotting as its own cells.
-      - Worst offenders: `13-openFlow.ipynb` (1178 LOC, 3.6 MB), `12-dambreak.ipynb`
-        (720 LOC), the three incompressible notebooks (~1950 combined).
-- [ ] `datagen/weaklyCompressible/bak/` — 5 stale `.py` backups (114 KB), superseded
-      by the Phase 2 runner conversion. Deletion candidate, not yet actioned.
+      - Worst offender left: `13-openFlow.ipynb` (1704 LOC, 57 cells). The three
+        incompressible notebooks (~2700 combined) are the other half.
+- [x] `datagen/weaklyCompressible/bak/` — gone; the directory no longer exists.
 
 ### Cross-repo (owned by warpSPHCore) — DONE (2026-08-12)
 

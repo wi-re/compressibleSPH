@@ -38,6 +38,7 @@ CASE_MODULES = (
     'kolmogorov',
     'lidDrivenCavity',
     'movingObstacle',
+    'drivenSquare',
     'dambreak',
     'channelFlow',
     # incompressible -- examples/incompressible/*.ipynb
