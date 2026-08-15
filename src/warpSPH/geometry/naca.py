@@ -1,3 +1,11 @@
+"""NACA 4- and 5-digit airfoil boundary generation and SDF evaluation.
+
+`eval_naca`/`eval_distance` build the closed airfoil polygon and compute a
+signed distance (plus gradient, via finite differences against a KD-tree of
+boundary points) for arbitrary query points, for use as a shape SDF alongside
+`geometry.sdf`.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
@@ -179,3 +187,6 @@ def eval_naca(naca_code, query_pts):
 def chord_length(naca_code):
     """Extract the chord length from a NACA code. For standard 4- and 5-digit codes, the chord length is typically 1.0."""
     return 1.0
+
+
+__all__ = ['generate_naca_airfoil', 'eval_distance', 'eval_naca']

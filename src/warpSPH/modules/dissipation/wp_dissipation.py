@@ -1,3 +1,13 @@
+"""SPH viscous-heating term (the du/dt production from artificial viscosity
+converting kinetic energy into heat): builds the momentum Pi_ij term via
+`dissipation.pi.computePi_actual` (`thermalConductivity=False`) and
+multiplies it by `ux_ij**2` and the kernel-gradient Laplacian, using the
+same query/reference neighbor loop and correction-term pattern as the other
+`modules/` operators. This is distinct from `wp_conductivity.py`, which
+diffuses internal-energy *differences* rather than producing heat from
+velocity divergence.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -8,6 +18,8 @@ from warpSPHCore import *
 
 from .pi import computePi_actual
 from ...configurations.moduleConfigurations.diffusionParameters import DiffusionParameters
+
+__all__ = ['computeThermalDissipationWarp']
 
 @wp.func
 def computeThermalDissipation_Func_i(

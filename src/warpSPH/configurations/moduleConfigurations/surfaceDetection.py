@@ -1,3 +1,17 @@
+"""`SurfaceDetectionConfig`, `SurfaceDetectionScheme`, `NormalSource`: free-surface
+detection settings, embedded as `.surfaceDetectionConfig` on
+`WeaklyCompressibleSPHConfig`/`IncompressibleSPHConfig` and on
+`ShiftProperties`-adjacent shifting logic; read by the `modules/surfaceDetection/`
+scheme implementations (`colorFieldDetection.py`, `barecascoDetection.py`,
+`maronneDetection.py`, `lambdaGrad.py`, etc.) via `modules/surfaceDetection/wrapper.py`.
+Note `buildDefaultSurfaceDetectionConfig()` picks different values than the
+dataclass's own field defaults (`active` True->False, `scheme` ColorField->
+Barecasco, `normalSource` ColorFieldGrad->LambdaGrad, `barecascoThreshold`
+1.5->pi/3) -- both sets of defaults are live depending on construction path.
+"""
+
+__all__ = ['SurfaceDetectionScheme', 'NormalSource', 'SurfaceDetectionConfig', 'buildDefaultSurfaceDetectionConfig']
+
 from dataclasses import dataclass, field
 from ...enumTypes import *
 from typing import Optional, Union, List

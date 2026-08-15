@@ -1,3 +1,15 @@
+"""`WeaklyCompressibleDiffusionParams`: viscosity (inviscid/viscid) and
+density-diffusion settings for delta-SPH, embedded as `.diffusionParams` on
+`WeaklyCompressibleSPHConfig`/`IncompressibleSPHConfig`. Distinct from the
+compressible-scheme `DiffusionParameters` `wp.struct` in `diffusionParameters.py`
+-- unrelated dataclass, different field set, sharing only the `diffusionParams`
+attribute name on the respective scheme configs. `densityDiffusionTerm` selects
+a `DensityDiffusionScheme` member (defined in `..enumTypes`, re-exported here
+via the `enumTypes import *`).
+"""
+
+__all__ = ['WeaklyCompressibleDiffusionParams', 'buildDefaultDiffusionParamsWeaklyCompressibleSPH', 'wcDiffusionParamsToDict', 'dictToWCDiffusionParams']
+
 from ...enumTypes import *
 from typing import Optional, Union, List, Dict, Any
 from dataclasses import dataclass, field

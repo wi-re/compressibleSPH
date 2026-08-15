@@ -1,3 +1,13 @@
+"""2D signed-distance primitives (circle, box, polygon, star, ... ported from
+Inigo Quilez's SDF formulas) as differentiable torch functions.
+
+Most take a single point `p` of shape `(2,)` and are batched by callers via
+`torch.vmap` (see `sdf.getSDF`); `sdCircle`, `sdBox`, `sdRoundedBox`,
+`sdOrientedBox`, `sdSegment`, `sdEquilateralTriangle`, `sdVesica`, and `sdEgg`
+already operate on a batched `p` of shape `(N, 2)` directly. `functionDict`
+maps shape names to these already-batched-or-vmappable callables.
+"""
+
 import torch
 import numpy as np
 
@@ -156,7 +166,10 @@ def sdRoundedCross(p, h):
   return torch.where(condition, k - torch.sqrt(torch.sum((p - torch.tensor([1.0, k], dtype = p.dtype, device = p.device))**2, dim=1)), torch.sqrt(torch.min(torch.sum((p - torch.tensor([0.0, h], dtype = p.dtype, device = p.device))**2, dim=1), torch.sum((p - torch.tensor([1.0, 0.0], dtype = p.dtype, device = p.device))**2, dim=1))))
 def sdEgg(p, ra, rb):
     k = torch.sqrt(torch.tensor(3.0, dtype = p.dtype, device = p.device))
-    p[:, 0] = torch.abs(p[:, 0])
+    # Out-of-place, same reasoning as sdMoon above: `p[:, 0] = ...` wrote through
+    # to the caller's tensor, so a second evaluation of the same points saw an
+    # already-folded x.
+    p = torch.stack([torch.abs(p[:, 0]), p[:, 1]], dim=1)
     r = ra - rb
     return torch.where(p[:, 1] < 0.0, torch.linalg.norm(p, dim=-1) - r,                        
                        torch.where(k * (p[:, 0] + r) < p[:, 1], torch.linalg.norm(torch.stack([p[:, 0], p[:, 1] - k * r], dim = 1), dim=-1),

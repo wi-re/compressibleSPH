@@ -1,6 +1,19 @@
+"""Lookup-table builder and linear-interpolation queries for the Owen adaptive-support scheme.
+
+``computeOwen`` builds a per-``(kernel, dim)`` table (via
+``wp_psi.generatePSILut_warp``) mapping neighbor count ``n_h`` to the psi/psiH/N_H
+statistics computed over a lattice, and exposes callable
+``fromPsiH``/``fromPsi`` lookups (always evaluated in float64, then cast back
+to the caller's dtype). ``interpolateLUT``/``linearInterpolateLUT`` do the
+underlying searchsorted-based linear interpolation and can look up any one of
+the four quantities (``n_h``, ``psi``, ``psiH``, ``n_H``) from any other.
+"""
+
 import torch
 from warpSPHCore import *
 from .wp_psi import generatePSILut_warp
+
+__all__ = ['computeOwen', 'interpolateLUT']
 
 
 def linearInterpolateLUT(LUT, x, xvalues):

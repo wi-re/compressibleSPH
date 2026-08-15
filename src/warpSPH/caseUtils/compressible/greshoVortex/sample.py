@@ -1,3 +1,11 @@
+"""Gresho-Chan rotating vortex initial state, used by `warpSPH.cases.greshoVortex`.
+
+Samples a regular lattice and imposes the piecewise-analytic radial pressure
+and angular-velocity profile of the vortex (three annuli, balanced so the
+continuum solution is exactly steady), then derives internal energy, pressure,
+and sound speed via `idealGasEOS` from the resulting density field.
+"""
+
 from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
@@ -5,6 +13,9 @@ from ....modules import *
 from warpSPHCore import *
 from ....modules.timestep.compressible import computeTimestep
 import math
+
+__all__ = ['sampleGreshoVortex']
+
 
 def sampleGreshoVortex(nx, config, schemeConfig, SimulationState, SimulationSystem):
     compressibleSystem = setupBasicCompressibleInitialState(nx, config, schemeConfig, SimulationState, SimulationSystem)

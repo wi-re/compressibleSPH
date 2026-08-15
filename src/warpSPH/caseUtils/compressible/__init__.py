@@ -1,3 +1,11 @@
+"""Compressible-solver case-family helpers.
+
+One subpackage per compressible test case (`greshoVortex`, `hydrostatic`,
+`kelvinHelmholtz`, `kidder`, `linearWave`, `noh`, `rayleighTaylor`, `sedov`,
+`sod`, `triplePoint`, `yeeVortex`); each supplies the IC/BC builders that the
+matching `warpSPH.cases.<name>` module calls into. Re-exports all of them.
+"""
+
 from .greshoVortex import *
 from .hydrostatic import *
 from .kelvinHelmholtz import *

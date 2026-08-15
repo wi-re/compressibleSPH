@@ -1,8 +1,24 @@
+"""Applies a `RigidBody`'s current transform to its owning particle state:
+moves the body's own and its ghost particles' positions via
+`transformation.getTransformationMatrix`, derives their rigid-body velocity
+from angular velocity about the center of mass (only written into
+`particleState.velocities` when the body's `kind` is `BCType.constant`), and
+rewrites the boundary/ghost offset pair to match the new geometry. Called
+every step from `systems/weaklyCompressible.py`/`systems/incompressible.py`'s
+`finalize`, right after `rigidBody.integrate.integrateRigidBody` advances the
+pose. Rebuilds the state via `type(particleState)` with the same keyword set
+`WeaklyCompressibleState` and `IncompressibleState` both declare, rather than
+mutating in place, so it works for either.
+"""
+
 from .transformation import getTransformationMatrix
 # from ..systems.weaklyCompressible import WeaklyCompressibleState
 from ..configurations.weaklyCompressible import RegionType, ParticleRegion, RigidBody, BoundaryConditionType, BCType
 import torch
 from typing import Any, Optional, Union
+
+__all__ = ['updateBodyParticlesWCSPH']
+
 
 def updateBodyParticlesWCSPH(particleState, rigidBody: RigidBody):
     T = getTransformationMatrix(rigidBody)

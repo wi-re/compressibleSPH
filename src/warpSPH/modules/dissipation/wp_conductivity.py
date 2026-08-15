@@ -1,3 +1,13 @@
+"""SPH thermal-conductivity term (the du/dt contribution from artificial
+thermal diffusion of internal energy): builds the Pi_ij term via
+`dissipation.pi.computePi_actual` (with `thermalConductivity=True`) and
+combines it with the internal-energy difference and the kernel-gradient
+Laplacian, using the same query/reference neighbor loop and gradient-
+renormalization/CRK/grad-h correction pattern as the other `modules/`
+operators. The final result is scaled by `conductivityParams.thermalConductivity`,
+a global on/off multiplier.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -8,6 +18,8 @@ from warpSPHCore import *
 
 from .pi import computePi_actual
 from ...configurations.moduleConfigurations.diffusionParameters import DiffusionParameters
+
+__all__ = ['computeConductivityWarp']
 
 @wp.func
 def computeConductivity_Func_i(

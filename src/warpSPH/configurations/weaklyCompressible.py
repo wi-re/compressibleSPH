@@ -1,3 +1,15 @@
+"""`WeaklyCompressibleSPHConfig`, the scheme config for delta-SPH / weakly
+compressible SPH (`schemes/deltaSPH.py`, `modules/timestep/weaklyCompressible.py`,
+`modules/mdbc/velocity.py`), registered in the delta-SPH `SchemeBundle` in
+`schemes/builder.py`. Same field set as `IncompressibleSPHConfig` minus
+`solverConfig` (no pressure solver here): fluid properties, adaptive support,
+diffusion, viscosity switch, boundary conditions, delta-SPH shifting,
+`regions`/`rigidBodies`, surface detection, and gravity. Unlike
+`IncompressibleSPHConfig`'s round-trip pair, `weaklyCompressibleConfigToDict`/
+`dictToWeaklyCompressibleConfig` do serialize `regions` and `rigidBodies`.
+"""
+
+__all__ = ['WeaklyCompressibleSPHConfig', 'weaklyCompressibleConfigToDict', 'dictToWeaklyCompressibleConfig']
 
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig

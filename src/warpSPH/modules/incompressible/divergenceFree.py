@@ -1,3 +1,18 @@
+"""IISPH divergence-free pressure solver: relaxed-Jacobi iteration that
+solves for a pressure field whose acceleration cancels the predicted
+velocity divergence (source term `-divergence`, not a density error).
+
+Each iteration computes the pressure acceleration (`computePressureAccelIISPH`,
+scatter mode), its induced position-drift residual (`computePressureShiftIISPH`),
+and updates `pressure += omega * residual / alpha` (`computeAlpha`'s IISPH
+diagonal term), re-centering the pressure field to zero mean each step since
+this is a pure-Neumann (gauge-free) problem. Iterates between
+`solverConfig.divergenceFreeSolver.{minIterations,maxIterations,tolerance,
+relaxationFactor}`, stopping early once past `minIterations` and below
+`tolerance`; does not clamp non-convergence (increasing-error iterations are
+only logged when `verbose`).
+"""
+
 from warpSPHCore import *
 import torch
 from warpSPH.systems import *
@@ -19,8 +34,10 @@ from .drift import computePressureShiftIISPH
 
 from typing import Any, Optional, Union
 
+__all__ = ['solveDivergenceFree']
 
-def solveDivergenceFree(        
+
+def solveDivergenceFree(
         particles: Any, 
         config: SimulationConfig, 
         schemeConfig: Any, 

@@ -1,3 +1,15 @@
+"""Kelvin-Helmholtz instability initial state, used by `warpSPH.cases.kelvinHelmholtz`.
+
+Builds the classic four-layer shear-layer setup on the unit square: density and
+streamwise velocity switch between `rho1`/`v1` (outer bands, `y<1/4` or
+`y>3/4`) and `rho2`/`v2` (inner band), smoothed across each interface with an
+`exp(.../delta)` ramp, plus a symmetric single-mode transverse velocity
+perturbation (`vy`) confined near `y=1/4` and `y=3/4` by Gaussians of width
+`sigma`. The commented-out smoothed-density assignments (`rho[regionN] = ...`)
+are dead code; density is actually set as a sharp step. Pressure is uniform
+at 2.5.
+"""
+
 from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
@@ -6,6 +18,9 @@ from warpSPHCore import *
 from ....modules.timestep.compressible import computeTimestep
 import math
 import numpy as np
+
+__all__ = ['sampleKHH']
+
 
 def vy(ri, sigma, freq, w0  ):
         thpt = 1.0/(2.0*sigma*sigma)

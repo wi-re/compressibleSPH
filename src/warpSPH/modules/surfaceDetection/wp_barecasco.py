@@ -1,3 +1,14 @@
+"""Warp kernel implementation of Barecasco-style surface detection. A first
+neighbor pass accumulates a per-particle "cover vector" (sum of unit
+`x_ij / (r_ij + 1e-14 * h_i)` directions over kernel-supported neighbors,
+the epsilon avoiding a zero-distance divide); a second pass then counts, per
+particle, how many neighbors have their direction within
+`barecascoThreshold / 2` of the (normalized) cover vector, or fall back to
+counting all neighbors when the cover vector's magnitude is `<= 0.5`. The
+caller (`barecascoDetection.py`) thresholds this count (`< 0.5`) to get a
+surface flag, and uses the normalized cover vector as the surface normal.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -9,6 +20,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import *
+
+__all__ = ['computeBarecascoSurfaceDetectionWarp']
 
 # @torch.jit.script
 # def detectFreeSurfaceBarecasco(

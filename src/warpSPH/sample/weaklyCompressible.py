@@ -1,3 +1,11 @@
+"""Shared weakly-compressible initial state: a uniform, at-rest regular
+lattice (zero pressure/velocity, unit density/soundspeed), wrapped straight
+into `SimulationState`/`SimulationSystem` with no support/density relaxation
+step (unlike `sample.compressible`'s counterpart). Re-exported at the
+top-level `warpSPH` package; used by the TGV cases (`cases/tgv.py`,
+`cases/tgvWeaklyCompressible.py`).
+"""
+
 import torch
 from ..modules.timestep.compressible import computeTimestep
 from .regular import sampleRegularParticles
@@ -5,6 +13,8 @@ from ..modules import *
 from ..configurations import CompressibleSPHConfig
 from ..enumTypes import *
 from warpSPHCore import *
+
+__all__ = ['setupBasicWeaklyCompressibleInitialState']
 
 def setupBasicWeaklyCompressibleInitialState(
         nx,

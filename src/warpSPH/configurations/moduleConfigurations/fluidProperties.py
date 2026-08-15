@@ -1,3 +1,14 @@
+"""`fluidProperties`: EOS type plus rest density / sound-speed parameters,
+embedded as `.fluid` on `WeaklyCompressibleSPHConfig` and `IncompressibleSPHConfig`
+and read by `initializers/weaklyCompressible.py` and the EOS modules. Note: this
+is a *different* dataclass from `modules.eos.props.fluidProperties` -- that one
+is a smaller, unrelated bundle used only by the currently-dead
+`modules/eos/gas.py` path; this is the one actually referenced as
+`schemeConfig.fluid` elsewhere in the codebase.
+"""
+
+__all__ = ['fluidProperties', 'buildDefaultFluidProperties']
+
 from ...enumTypes import *
 from typing import Optional, Union, List
 from dataclasses import dataclass, field

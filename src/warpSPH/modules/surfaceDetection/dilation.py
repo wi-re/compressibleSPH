@@ -1,3 +1,7 @@
+"""Expands a free-surface mask outward by repeatedly summing the mask value
+over kernel-supported neighbors (`dilateSurfaceMaskWarp`),
+`surfaceConfig.expansionIterations` times unless `overrideIterations` is given.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -15,6 +19,8 @@ from ...enumTypes import *
 from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
 
 from .wp_dilate import dilateSurfaceMaskWarp
+
+__all__ = ['dilateSurface']
 
 
 def dilateSurface(currentState: Any, freeSurfaceMask: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], overrideIterations: Optional[int] = None) -> torch.Tensor:

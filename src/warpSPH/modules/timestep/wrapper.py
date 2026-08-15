@@ -1,3 +1,10 @@
+"""computeTimestep dispatcher.
+
+Picks the weakly-compressible or (fully) compressible adaptive-timestep
+implementation based on `isinstance(system, WeaklyCompressibleSystem)`; this
+is the single entry point re-exported as `warpSPH.modules.timestep.computeTimestep`.
+"""
+
 from warpSPH.utils.support import volumeToSupport
 
 from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompressibleSystem, WeaklyCompressibleSystemUpdate
@@ -11,6 +18,8 @@ import warp as wp
 
 from .compressible import computeTimestep as computeTimestepCompressible
 from .weaklyCompressible import computeTimestep as computeTimestepWeaklyCompressible
+
+__all__ = ['computeTimestep']
 
 
 def computeTimestep(

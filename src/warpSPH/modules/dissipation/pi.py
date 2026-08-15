@@ -1,9 +1,22 @@
+"""Artificial-viscosity "Pi" term shared by the momentum-viscosity,
+thermal-conductivity and thermal-dissipation modules in this package.
+`computePi_actual` dispatches on `viscosityParams.viscosityTerm` (or
+`.thermalConductivityTerm` when `thermalConductivity=True`) to select one of
+several published formulations (Monaghan & Gingold 1983, Cleary 1998,
+Monaghan 1992/1997a/1997b, Dukowicz, Price 2008/2012, Wadsley 2008,
+DeltaSPH/Default). The returned value is multiplied by `rho_j` (see the
+inline note below), and a Monaghan switch zeroes the term for diverging
+particle pairs (`ux_ij > 0`) unless `thermalConductivity` is set.
+"""
+
 from warpSPHCore import *
 import warp as wp
 from ...configurations.moduleConfigurations.diffusionParameters import ViscosityTerms, DiffusionParameters
 from .util import compute_mu_ij, compute_bars
 from warp.types import vector, matrix
 from typing import Any
+
+__all__ = ['computePi_actual']
 
 # Note this function returns the term multiplied by rhoj!!
 # This is to enable the computation with mj/rhoj as the apparrent volume so the rhoj cancels out for those formulations. This is different from diffSPH which does not multiply by rhoj.

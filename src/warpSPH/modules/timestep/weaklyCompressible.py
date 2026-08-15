@@ -1,3 +1,19 @@
+"""Adaptive timestep for weakly-compressible / delta-SPH systems.
+
+Computes `dt` from up to three individually-togglable constraints (via
+`compParams.dt_*Constraint` flags): a viscous diffusion limit, a CFL acoustic
+limit (using the fixed sound speed), and an acceleration limit derived from
+the last system update's max acceleration -- following Sun et al.'s delta-SPH
+timestep procedure (cited in-code). Clamped to `[minDt, maxDt]` and to at
+most `config.dtGrowthFactor` times the previous `dt`. Returns the fixed `dt`
+unchanged when `config.adaptiveDt` is disabled.
+
+`setupWeaklyCompressibleTimestep` is a one-time setup helper (not a per-step
+timestep call): it back-solves the artificial EOS sound speed `c0` from a
+target `dt`/`dx`/target-neighbor-count, stores it on `schemeConfig`, and warns
+if the resulting Mach number would exceed 0.1.
+"""
+
 from warpSPH.utils.support import volumeToSupport
 
 from ...systems.weaklyCompressible import WeaklyCompressibleState, WeaklyCompressibleSystem, WeaklyCompressibleSystemUpdate
@@ -8,6 +24,8 @@ from warpSPHCore import *
 from ...modules.eos import idealGasEOS
 import torch
 import warp as wp
+
+__all__ = ['computeTimestep', 'setupWeaklyCompressibleTimestep']
 
 
 def computeTimestep(

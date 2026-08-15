@@ -1,3 +1,11 @@
+"""compSPH internal-energy rate (dudt).
+
+Computes the rate of change of specific internal energy from pressure work
+and Monaghan-type artificial-viscosity dissipation, summed over neighbors.
+Uses the same one-sided kernel gradient, gradient-renormalization, and
+grad-h/CRK correction options as `accel.py`, so the two must be kept in sync.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -7,7 +15,7 @@ from typing import Optional, Union, Tuple
 from warpSPHCore import *
 from ..dissipation import DiffusionParameters, computePi_actual
 
-
+__all__ = ['computeCompSPHdudtWarp']
 
 
 @wp.func

@@ -1,3 +1,10 @@
+"""Resolve a scheme name/enum member to its `SchemeBundle`: the state, config,
+and update classes plus step/export/import functions for one of the five
+registered SPH schemes (Monaghan, CompSPH, CRKSPH, deltaSPH,
+divergence-free/DFSPH). `_divergenceFree` imports `dfsph` lazily to avoid a
+circular import with `schemes/__init__.py`, which imports `dfsph` first.
+"""
+
 from dataclasses import dataclass
 from typing import Callable, Union
 

@@ -1,6 +1,16 @@
+"""Per-formulation helpers used by `pi.computePi_actual`: `compute_mu_ij`
+computes the velocity-divergence proxy mu_ij together with its
+formulation-specific scaling factor, and `compute_bars` selects whether the
+averaged ("bar") or one-sided (`i` or `j`, via `useJ`) density/soundspeed/
+smoothing-length is used. Both dispatch on the same `ViscosityTerms` enum as
+`pi.py`.
+"""
+
 from warpSPHCore import *
 import warp as wp
 from ...configurations.moduleConfigurations.diffusionParameters import ViscosityTerms
+
+__all__ = ['compute_mu_ij', 'compute_bars']
 
 
 @wp.func

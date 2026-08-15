@@ -1,9 +1,22 @@
+"""Ideal-gas equation of state: given any one of specific entropy `A`,
+internal energy `u`, or pressure `P` (plus density `rho` and adiabatic
+index `gamma`), derives the other two and the sound speed `c_s`.
+
+The chained `is None`/`is not None` checks make a single supplied quantity
+enough to fill in the rest despite the commented-out "at least two must be
+given" validation. `c_s` is computed from `abs(u)`/`abs(P)` so it stays
+real-valued even if the source quantity has gone negative, without warning
+the caller.
+"""
+
 import torch
 from typing import Optional, Tuple
 from torch.profiler import profile, record_function, ProfilerActivity
 
+__all__ = ['idealGasEOS']
 
-def idealGasEOS(A: Optional[torch.Tensor], u: Optional[torch.Tensor], P: Optional[torch.Tensor], 
+
+def idealGasEOS(A: Optional[torch.Tensor], u: Optional[torch.Tensor], P: Optional[torch.Tensor],
              rho: torch.Tensor, gamma: float):
     with record_function("EOS[IdealGas]"):
         given = (1 if A is not None else 0) + (1 if u is not None else 0) + (1 if P is not None else 0)

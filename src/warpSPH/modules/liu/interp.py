@@ -1,3 +1,18 @@
+"""Moving-least-squares (Liu & Liu) interpolation and boundary extrapolation.
+
+`interpolateLiuLiu` fits a local linear field (value + gradient) at each query
+point from `computeLiuMatricesWarp`'s moment matrix/vector and solves it with
+a pseudo-inverse, falling back to zero for points with fewer than
+`neighbor_threshold` neighbors. `liuExtend`/`liuMirror` reuse that fit to
+extrapolate a field across a signed-distance boundary: for points within two
+supports of (and behind) the boundary, they mirror the query position through
+the surface, evaluate the local fit there, and blend down to a Shepard
+(0th-order) estimate — or `defaultValue` when there are no neighbors at all.
+`liuMirror` differs from `liuExtend` only in dropping the gradient-based
+linear correction term, i.e. it is a pure reflection/Shepard extrapolation.
+Both recurse over trailing dimensions for multi-component fields.
+"""
+
 import torch
 from .wp_mat import computeLiuMatricesWarp
 
@@ -5,6 +20,8 @@ from warpSPHCore import *
 from typing import Any
 from ...configurations.simulationConfig import SimulationConfig
 from torch.profiler import record_function
+
+__all__ = ['interpolateLiuLiu', 'liuExtend', 'liuMirror']
 
 def interpolateLiuLiu(
     queryPositions: torch.Tensor,

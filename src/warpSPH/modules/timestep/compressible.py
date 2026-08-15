@@ -1,3 +1,16 @@
+"""Adaptive timestep for the (fully) compressible system.
+
+Computes the CFL-limited timestep from the minimum sound-crossing time over
+the current sound speeds (via the ideal-gas EOS) and smoothing lengths,
+clamped to `[config.minDt, config.maxDt]` and to at most
+`config.dtGrowthFactor` times the previous `dt`. Falls back to the
+caller-supplied fixed `dt` (raising if none given) when `config.adaptiveDt`
+is disabled. Returns a `torch.Tensor`, not a Python float, when adaptive --
+`c_s` depends on state, so keeping it a tensor preserves the gradient back to
+state for anyone differentiating through a rollout; float-converting is left
+to the caller (see runner.py's `_scalar`).
+"""
+
 from warpSPH.utils.support import volumeToSupport
 
 from ...systems.compressibleMonaghan import CompressibleState, CompressibleSystem
@@ -8,6 +21,8 @@ from warpSPHCore import *
 from ...modules.eos import idealGasEOS
 import torch
 import warp as wp
+
+__all__ = ['computeTimestep']
 
 def computeTimestep(
     system: CompressibleSystem,

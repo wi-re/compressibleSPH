@@ -1,3 +1,14 @@
+"""Aggregates every scheme's `dataclass` state/system(/update) triad into one
+`warpSPH.systems` namespace, built on `warpSPHIntegrators`'s `BaseState`/
+`BaseIntegrationSystem` framework. `baseState`'s `BaseParticleState`/
+`BaseSystemUpdate`/`BaseSystem` is the shared skeleton the field layout of
+every other module here extends. `systems/waveSystem.py`'s wave-equation
+triad is documented separately (not a fluid scheme). `systems/incompressible.py`
+(the divergence-free/DFSPH state) is deliberately not re-exported here --
+`schemes/dfsph.py` and `schemes/builder.py` import it directly from that
+submodule instead.
+"""
+
 from .baseState import BaseParticleState, BaseSystemUpdate, BaseSystem
 from .compressibleMonaghan import CompressibleState, CompressibleSystemUpdate, CompressibleSystem
 from .waveSystem import WaveSystemStatev3, WaveSystemUpdatev3, WaveSystemv3

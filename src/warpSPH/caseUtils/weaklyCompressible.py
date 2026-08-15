@@ -1,3 +1,14 @@
+"""Domain, obstacle, and forcing helpers for weakly-compressible cases.
+
+Builds the periodic/semi-periodic/fully-periodic domain and interior-domain
+pair (`buildDomain`), assembles fluid/boundary regions from SDFs including a
+library of preset obstacle shapes (`buildPresetObstacles`, `buildObstacleSDF`,
+`build_sdfs`, `buildRegions`), and provides optional post-init setup hooks for
+divergence-free noise seeding, a freestream inflow ramp, and Kolmogorov
+forcing (`sampleNoise`, `setupFreestream`, `setupKolmogorov`). All obstacle
+geometry here is 2D (SDFs take `[..., 2]` points).
+"""
+
 from __future__ import annotations
 
 import copy

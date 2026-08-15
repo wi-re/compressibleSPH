@@ -1,3 +1,10 @@
+"""Dispatch layer selecting an adaptive-support scheme per ``compParams.adaptiveSupportScheme``.
+
+Routes to the Owen (lookup-table) or Monaghan (Newton-iteration) solver, or
+returns the particle state's current density/support unchanged for
+``NoScheme``.
+"""
+
 from .optimalSupportOwen import evaluateOptimalSupportOwen
 from .optimalSupportMonaghan import evaluateOptimalSupportMonaghan
 from ...systems.baseState import BaseState
@@ -8,6 +15,8 @@ from warpSPHCore import *
 from typing import Optional, Union
 from ...enumTypes import AdaptiveSupportScheme
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['evaluateOptimalSupport']
 
 def evaluateOptimalSupport(
         particleState: BaseState,

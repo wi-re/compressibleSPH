@@ -1,4 +1,13 @@
+"""Signed-distance function for the Rayleigh-Taylor case's top/bottom
+Dirichlet buffer bands: a piecewise-safe ``min(y, L - y)``, positive inside
+the ``[0, L]`` domain and equal to the distance to the nearer of the two
+walls ``y=0``/``y=L``, negative in the bands themselves (``y<0`` or ``y>L``).
+`sample.py` uses it (and its gradient) as the `BoundaryCondition.sdf` for
+`rayleighTaylorBC`."""
+
 import torch
+
+__all__ = ['buffer_sdf', 'buffer_sdf_gradient']
 
 def buffer_sdf(positions, L):
     dist = torch.zeros_like(positions[:,0])

@@ -1,3 +1,11 @@
+"""SPH momentum-viscosity acceleration: builds the artificial-viscosity
+Pi_ij term via `dissipation.pi.computePi_actual` (`thermalConductivity=False`)
+and combines it with the kernel gradient to form the per-particle viscous
+acceleration contribution, using the same query/reference neighbor loop and
+gradient-renormalization/CRK/grad-h correction pattern as the other
+`modules/` operators.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -8,6 +16,8 @@ from warpSPHCore import *
 
 from .pi import computePi_actual
 from ...configurations.moduleConfigurations.diffusionParameters import DiffusionParameters
+
+__all__ = ['computeViscosityWarp']
 
 @wp.func
 def computeViscosity_Func_i(

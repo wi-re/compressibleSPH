@@ -1,3 +1,13 @@
+"""Kidder isentropic-capsule analytic solution, used by `warpSPH.cases.kidder`.
+
+Direct port of the SPHERAL reference solution: `KidderIsentropicCapsuleAnalyticSolution`
+gives the density/velocity/pressure/energy profile of an isentropic shell
+(planar/cylindrical/spherical, `nu` = 1/2/3) collapsing under a fixed pressure
+ratio between its inner and outer radius, up to the analytic collapse time
+`tau`. `trapezoidalIntegration` is a private helper used only to precompute
+the time-0 energy constants.
+"""
+
 def trapezoidalIntegration(func,       # Function to be evaluated.
                            a,          # Beginning point.
                            b,          # Ending point.
@@ -15,6 +25,9 @@ def trapezoidalIntegration(func,       # Function to be evaluated.
 
 import math
 import numpy as np
+
+__all__ = ['KidderIsentropicCapsuleAnalyticSolution']
+
 
 class KidderIsentropicCapsuleAnalyticSolution:
 

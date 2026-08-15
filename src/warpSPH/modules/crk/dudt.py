@@ -1,3 +1,13 @@
+"""CRKSPH internal-energy rate (dudt).
+
+Computes the rate of change of specific internal energy from the CRK
+pressure/pseudo-viscosity terms, deliberately kept algebraically parallel to
+`accel.py` (same velocity-gradient reconstruction, same van Leer/eta
+limiters, same one-sided kernel gradients) so the energy and momentum updates
+stay mutually consistent -- comments in the kernel gradient calls flag where
+this must match `accel.py`.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -10,6 +20,8 @@ from ..dissipation import DiffusionParameters, computePi_actual
 from ...configurations.crkSPH import CRKViscosity
 
 from .limiter import computeVanLeer, crkLimiter
+
+__all__ = ['computeCrkSPHdudtWarp']
 
 @wp.func
 def computeCrkSPHdudt_Func_i(

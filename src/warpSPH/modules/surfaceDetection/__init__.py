@@ -1,3 +1,8 @@
+"""Free-surface detection: color-field, color-field-gradient, Barecasco, and
+Maronne schemes, plus shared normal computation, mask dilation, and the
+scheme-dispatching wrapper used by the incompressible solvers.
+"""
+
 from .colorFieldDetection import detectFreeSurfaceColorField
 from .colorFieldGradientDetection import detectFreeSurfaceColorFieldGradient
 from .colorFieldCompute import computeColorField

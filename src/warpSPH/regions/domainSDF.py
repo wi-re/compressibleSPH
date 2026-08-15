@@ -1,4 +1,15 @@
+"""The box SDF for a simulation's outer `domain` (an axis-aligned min/max
+extent), used as the default boundary shape for regions and boundary
+conditions. Negative inside the box, positive outside, unless `invert=True`
+flips that sign (e.g. to sample particles filling the box's exterior).
+`sampleDomainSDF` wraps `domainSDF` to additionally return its gradient
+(surface normal direction) via autograd.
+"""
+
 import torch
+
+__all__ = ['domainSDF', 'sampleDomainSDF']
+
 
 def domainSDF(p, domain, invert = False):
     center = (domain.min + domain.max) / 2

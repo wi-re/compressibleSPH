@@ -1,8 +1,16 @@
+"""IISPH-style pressure acceleration: the symmetric SPH pressure gradient of
+`pressureValues` (typically the IISPH pressure or pressure-increment field),
+divided by density and negated to give an acceleration. Used by the
+incompressible (IISPH / divergence-free) solvers in `modules/incompressible/`.
+"""
+
 from warpSPHCore import *
 from ...systems.compressibleMonaghan import *
 from warpSPH.configurations import SimulationConfig
 
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['computePressureAccelIISPH']
 
 def computePressureAccelIISPH(
     state: CompressibleState,

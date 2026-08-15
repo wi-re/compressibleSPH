@@ -1,3 +1,9 @@
+"""Color field (Gather-mode unity interpolation) and its SPH gradient, the
+shared input to several free-surface detection schemes. Uses
+`SupportScheme.Gather` per a Cullen-Dehnen-style (CRK paper switch E.1)
+convention noted inline. Contains a commented-out `torch.jit.script`
+predecessor of `computeColorField`, left in place (tracked separately)."""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -11,6 +17,8 @@ from warpSPHCore import *
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
+
+__all__ = ['computeColorField']
 
 
 # @torch.jit.script

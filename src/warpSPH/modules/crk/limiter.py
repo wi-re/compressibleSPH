@@ -1,3 +1,15 @@
+"""CRKSPH slope limiters for the pseudo-viscosity term.
+
+`computeVanLeer` estimates a monotonicity ratio from each particle's
+reconstructed velocity gradient and applies a van Leer flux limiter; the
+zero-denominator branch must return early (before dividing) rather than
+patching a NaN afterward, since reverse-mode AD differentiates the
+un-guarded division itself (see the inline note referencing
+`scripts/gradcheck_crk.py`, CLEANUP_PLAN.md Phase 4.1 Tier 1). `crkLimiter`
+tapers the viscosity to zero for particle pairs closer than `eta_crit`
+smoothing lengths apart, via a Gaussian fall-off scaled by `eta_fold`.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +18,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeVanLeer', 'crkLimiter']
 
 @wp.func
 def limiterVL(x: scalar_t):

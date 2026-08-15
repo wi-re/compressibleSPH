@@ -1,3 +1,16 @@
+"""Public entry point for the delta-SPH density-diffusion term `drhodt_diss`:
+scales `computeDensityDiffusionDeltaSPH`'s raw (unscaled) divergence output
+by `delta * h / xi * c_s`, the standard delta-SPH prefactor, where `delta` is
+`schemeConfig.diffusionParams.densityDelta`, `h` is the per-particle support,
+`xi = sphKernel_xi(kernel, dim)` is the kernel's normalization constant, and
+`c_s` is `schemeConfig.fluid.fixedSoundSpeed`. Which density-diffusion
+formulation is evaluated (delta-SPH, non-renormalized, density-only, ...) is
+selected via `schemeConfig.diffusionParams.densityDiffusionTerm`
+(`DensityDiffusionScheme`) and forwarded to the underlying kernel; the caller
+(`schemes/deltaSPH.py`) is responsible for only supplying `gradRho`/`gradRhoL`
+when the selected scheme actually needs them.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -13,6 +26,8 @@ from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 
 from .wp_densityDelta import computeDensityDiffusionDeltaSPH
+
+__all__ = ['computeDensityDiffusion']
 
 def computeDensityDiffusion(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], gradRho: Optional[torch.Tensor], gradRhoL: Optional[torch.Tensor]) -> torch.Tensor:
     with record_function("[warpSPH] - (deltaSPH) - computeDensityDiffusion"):

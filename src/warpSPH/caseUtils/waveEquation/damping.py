@@ -1,3 +1,11 @@
+"""Per-particle damping fields for the wave-equation demo: an absorbing
+boundary layer or uniform global damping (`sampleDamping`, dispatched by the
+named `DampingProfiles` presets via `createDampingProfile` -- the one
+`gencase.genInitial` calls), plus a separate spectral (FFT-domain)
+high-frequency filter (`apply_spectral_filter`) for periodic domains, where
+edge damping does not apply.
+"""
+
 from enum import Enum
 import warnings
 from tqdm import TqdmExperimentalWarning
@@ -12,6 +20,8 @@ import torch
 
 from ...geometry.sdf import operatorDict, getSDF
 from ...math import getPeriodicPositions
+
+__all__ = ['DampingProfiles', 'createDampingProfile', 'apply_spectral_filter']
 
 
 def sampleDamping(particleState, config, dampingWidth=0.2, dampingStrength=5.0, profile='cosine', periodic_mode=False, global_damping=0.0):

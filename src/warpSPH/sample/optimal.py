@@ -1,9 +1,19 @@
+"""Adaptive/relaxed particle sampler: starts from a regular lattice
+(`sampleRegularParticles`) then repeatedly re-evaluates density and nudges
+positions with the raw delta-shift kernel-gradient term
+(`computeDeltaShiftWarp`) for `shiftIters` iterations, mimicking a "glass"
+(pre-relaxed) configuration. Used by `sample.bySamplingScheme.sampleParticles`
+for `SamplingScheme.optimal`, itself currently unreached by any case (see
+that module's docstring).
+"""
+
 from .regular import sampleRegularParticles
 import torch
 from warpSPHCore import *
 from warpSPHCore import *
 from .wp_deltaShift import computeDeltaShiftWarp
 
+__all__ = ['sampleOptimal']
 
 def sampleOptimal(nx, domain, targetNeighbors, kernel, jitter = 0.1, shiftIters = 128, shiftScheme = 'Delta'):
 

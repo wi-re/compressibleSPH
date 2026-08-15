@@ -1,3 +1,10 @@
+"""Physics kernel library: one subpackage per SPH subsystem (EOS, dissipation,
+shock capturing, adaptive support, mDBC boundaries, ...), each re-exporting its
+public compute functions here. This is the layer the `schemes/` step functions
+call into; `systems/`/`configurations/` define the state/config shapes these
+functions read and write.
+"""
+
 from .adaptiveSupport import *
 from .dissipation import *
 from .eos import *

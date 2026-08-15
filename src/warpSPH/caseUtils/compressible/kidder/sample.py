@@ -1,9 +1,23 @@
+"""Kidder 1D initial state, used by `warpSPH.cases.kidder`.
+
+Samples a regular 1D lattice on `[r_inner, r_outer]` (periodic domain sized
+`1.1 * r_outer`), evaluates `KidderIsentropicCapsuleAnalyticSolution` at
+`t=0` for density and pressure, and derives internal energy/pressure/sound
+speed via `idealGasEOS`. Velocity starts at zero even though the analytic
+solution is not static at `t=0`; the driven boundary bands from
+`buildKidderBCs` are what keep the shell converging once the case's
+`postStep` hook takes over. Large stretches of print/debug diagnostics are
+commented out.
+"""
+
 from .kidder import KidderIsentropicCapsuleAnalyticSolution
 from ....modules.timestep.compressible import computeTimestep
 from warpSPH import *
 from warpSPHCore import *
 import torch
 import numpy as np
+
+__all__ = ['buildKidder']
 
 
 def buildKidder(

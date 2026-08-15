@@ -1,8 +1,25 @@
+"""State/system pair for the CompSPH scheme (Owen's compatible-energy
+compressible formulation, `schemes/compSPH.py` and, sharing this state,
+`schemes/crkSPH.py`/`schemes/deltaSPH.py`). Extends the base particle fields
+with internal energy as the integrated quantity plus EOS outputs
+(pressure/soundspeed/entropy/total energy), the CullenDehnen2010
+shock-detector state (`divergence`, `alpha0s`/`alphas`), and the pairwise
+accel/energy-partition arrays (`ap_ij`/`av_ij`/`f_ij`) `compSPH_deltaU_multistep`
+consumes to keep energy exchange compatible between neighbors. There is no
+`CompSPHSystemUpdate` here -- callers build a `compressibleMonaghan.
+CompressibleSystemUpdate` instead (its commented-out draft below is dead).
+`CompSPHSystem.finalize` only runs the multistep energy correction when
+`schemeConfig.compatibleEnergy` is set.
+"""
+
 from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
 from typing import Optional
 from warpSPHCore import *
+
+__all__ = ['CompSPHState', 'CompSPHSystem']
+
 
 @dataclass
 class CompSPHState(BaseState):

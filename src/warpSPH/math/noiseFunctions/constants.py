@@ -1,3 +1,11 @@
+"""Gradient tables and stretch/squish/normalization constants for the
+OpenSimplex-style noise in `simplex2d.py`/`simplex3d.py`/`simplex4d.py`,
+consumed via `from .constants import *`. `STRETCH_CONSTANT1`/
+`SQUISH_CONSTANT1` are defined but unused (and there is no
+`NORM_CONSTANT1`) since `simplex1d._noise1` delegates to `_noise2` rather
+than implementing its own 1D lattice.
+"""
+
 import numpy as np
 
 # NOTE: this file is being excluded from having black run over it, as black will split up the gradient arrays into
@@ -61,3 +69,11 @@ SQUISH_CONSTANT4 = 0.309016994374947      # (Math.sqrt(4+1)-1)/4
 NORM_CONSTANT2 = 47
 NORM_CONSTANT3 = 103
 NORM_CONSTANT4 = 30
+
+__all__ = [
+    'GRADIENTS2', 'GRADIENTS3', 'GRADIENTS4',
+    'STRETCH_CONSTANT1', 'SQUISH_CONSTANT1',
+    'STRETCH_CONSTANT2', 'SQUISH_CONSTANT2', 'NORM_CONSTANT2',
+    'STRETCH_CONSTANT3', 'SQUISH_CONSTANT3', 'NORM_CONSTANT3',
+    'STRETCH_CONSTANT4', 'SQUISH_CONSTANT4', 'NORM_CONSTANT4',
+]

@@ -1,8 +1,15 @@
+"""Maronne-style free-surface detection: builds a trial point offset along
+each particle's normal and classifies neighbors into two geometric conditions
+(A: far and inside a normal-aligned tube; B: near and inside a tangential
+band) via `computeMaronneSurfaceDetection`; a particle with neither condition
+satisfied is flagged as surface. Note the leading comment block is a stale,
+unrelated (`ColorFieldGradient`) commented-out predecessor, left in place.
+"""
 
 # @torch.jit.script
 # def detectFreeSurfaceColorFieldGradient(
 #     particles : WeaklyCompressibleState,
-#     colorField : torch.Tensor, 
+#     colorField : torch.Tensor,
 #     colorGrad: torch.Tensor,
 #     xi :float,
 #     colorFieldGradientThreshold : float,
@@ -10,7 +17,7 @@
 #     supportScheme: SupportScheme = SupportScheme.Scatter
 #     ):
 #     with record_function("[SPH] - [Surface Detection] - Detect Free Surface (Color Field Gradient)"):
-        
+
 #         fs = torch.linalg.norm(colorGrad, dim = -1) > colorFieldGradientThreshold * particles.supports / xi
 #         return fs
 import warp as wp
@@ -30,6 +37,8 @@ from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetec
 
 from .maronneNormals import computeNormalsMaronne
 from .wp_maronne import computeMaronneSurfaceDetection
+
+__all__ = ['detectFreeSurfaceMaronne']
 
 
 

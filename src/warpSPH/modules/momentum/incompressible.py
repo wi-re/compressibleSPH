@@ -1,9 +1,19 @@
+"""Momentum equation source term for the incompressible solver.
+
+Computes `-rho0 * div(advectionVelocities)` using the scheme's fixed rest
+density (rather than the current per-particle density, unlike DFSPH's
+choice, per the inline comment) and an externally supplied advection
+velocity field, via a plain (non-renormalized) scatter-support divergence.
+"""
+
 from warpSPHCore import *
 from ...systems.baseState import *
 from warpSPH.configurations import SimulationConfig
 from typing import Any, Optional, Union
 
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['computeMomentumIncompressible']
 
 
 def computeMomentumIncompressible(

@@ -1,3 +1,10 @@
+"""Small standalone helpers with no scheme-specific dependencies: domain-box
+construction (`domain`), the support-radius re-exports (`support`, documented
+separately), a CUDA-aware `TimedBlock` profiling context manager (`timer`),
+and this module's own timestamp/verbose-print/debug-print utilities used
+throughout the case/runner/config layers.
+"""
+
 import datetime
 import inspect
 import re

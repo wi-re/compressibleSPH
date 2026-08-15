@@ -1,3 +1,9 @@
+"""IISPH pressure-induced position drift `dx_p = -sum_j (f_j - f_i)` (a
+divergence of the per-particle pressure accelerations), used as the
+predictor term in the divergence-free/incompressible Jacobi iterations to
+turn a trial pressure field into a displacement residual.
+"""
+
 from warpSPHCore import *
 
 from warpSPH.systems.compressibleMonaghan import CompressibleState
@@ -8,6 +14,7 @@ from typing import Any, Optional, Union
 
 from torch.profiler import profile, record_function, ProfilerActivity
 
+__all__ = ['computePressureShiftIISPH']
 
 
 

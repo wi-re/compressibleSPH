@@ -1,13 +1,27 @@
+"""Top-level Perlin (`generatePerlin`) and simplex (`generateSimplex`) noise
+grid generators, an octave-summed wrapper (`generateOctaveNoise`, this
+package's main entry point, re-exported through `warpSPH.math.noise`), and
+a Voronoi-style smooth-value sampler (`sampleVoronoi`). `generateSimplex` is
+only reached via `generateOctaveNoise(..., kind='simplex')` -- `'perlin'` is
+the default and the only kind used anywhere in this repo, so the simplex path
+was untested; it previously called `_init(seed)` (defined in `util.py`)
+without importing it, an unconditional `NameError` on every call (fixed
+2026-08-15 by adding the missing import).
+"""
+
 from .simplex1d import _noise1
 from .simplex2d import _noise2
 from .simplex3d import _noise3,_noise3periodic
 from .simplex4d import _noise4
 
 from .perlin import interpolant, perlinNoise1D, perlinNoise2D, perlinNoise3D
+from .util import _init
 
 import numpy as np
 from numba import prange
 import torch
+
+__all__ = ['generateOctaveNoise', 'sampleVoronoi']
 
 def generatePerlin(shape, res, tileable, dim = 2, interpolant  = interpolant , seed =42 , device = 'cpu', dtype = torch.float32):
     if dim == 1:

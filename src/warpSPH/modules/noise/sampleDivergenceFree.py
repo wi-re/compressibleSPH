@@ -1,9 +1,26 @@
+"""Builds a divergence-free 2D initial velocity field from a Perlin/Simplex noise potential (rotated gradient, `(dpsi/dy, -dpsi/dx)`), optionally SDF-ramped to zero at boundary regions.
+
+The noise potential is generated once on a grid (``generateNoiseInterpolator``)
+and interpolated onto particle positions via scipy's ``RegularGridInterpolator``,
+which is not autograd-aware -- the gradient of the sampled noise field
+w.r.t. particle position is unconditionally zero through this closure. That is
+fine for both current call sites (an initial condition here, and the per-step
+Kolmogorov forcing in ``caseUtils/weaklyCompressible.py``) since neither is
+meant to be differentiated through, but is not safe to assume for a future
+caller. ``generateRamp`` tapers the field to zero near boundary SDF regions
+over a bandwidth set by ``schemeConfig.bandwith``, using a quintic smoothstep.
+The resulting velocity is unit-normalized by its maximum magnitude and zeroed
+on non-fluid (``kinds != 0``) particles.
+"""
+
 from scipy.interpolate import RegularGridInterpolator
 from ..density.density import computeDensities
 from warpSPHCore import *
 import torch
 import numpy as np
 from ...math.noise import generateNoise
+
+__all__ = ['sampleDivergenceFreeNoise']
 
 
 def getSpacing(nx, domain: DomainDescription):

@@ -1,4 +1,16 @@
-# 
+"""mDBC boundary-particle density extrapolation.
+
+Computes densities for ghost/boundary particles (kind 2) by Liu-Liu
+(moving-least-squares) extrapolation of fluid density to each ghost point
+(see the linked ScienceDirect paper in-code), then converts that to a
+hydrostatic pressure correction along the ghost-offset normal, including a
+gravity term, clamped to at least rest density. One deviation from the cited
+paper's formula is called out inline (the ghost-normal normalization) as
+matching DualSPHysics rather than the paper. Falls back to a plain
+Shepard-interpolated density, then to rest density, when a ghost point has
+too few (<=1) or too few (<=9) fluid neighbors respectively. No-ops (returns
+`currentState.densities` unchanged) when there are no boundary particles.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -8,6 +20,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeMdbcDensity']
 
 
 

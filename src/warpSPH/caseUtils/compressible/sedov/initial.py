@@ -1,3 +1,14 @@
+"""Samples the initial state for `cases/sedov.py`'s Sedov-Taylor blast wave:
+a uniform (`rho0`) regular lattice at rest with zero pressure, relaxed to
+optimal supports/densities via `evaluateOptimalSupport`, then given a point
+energy deposit `E0` at the origin under one of three `initialization`
+schemes -- `'singular'`/`'quadrant'` place it exactly on the nearest one/
+``2**dim`` particles, `'hat'` does the same then spreads it with one
+normalized SPH interpolation pass. Works for `dim` 1, 2 or 3 via the shared
+`SimulationState`/`SimulationSystem` machinery; `nx` is nudged to odd
+(singular/hat) or even (quadrant) so the deposit lands symmetrically about
+the origin.
+"""
 
 from warpSPH.configurations.compressibleConfig import CompressibleSPHConfig
 from warpSPH.modules.timestep.compressible import computeTimestep
@@ -19,6 +30,8 @@ from  warpSPH.enumTypes import AdaptiveSupportScheme
 import warnings
 
 from warpSPH.sample import *
+
+__all__ = ['buildSedov']
 
 
 def buildSedov(

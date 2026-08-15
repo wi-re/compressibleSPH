@@ -1,3 +1,33 @@
+"""The delta-SPH (weakly-compressible) step: build adjacency, then density
+via `computeDensities` (only if unset) followed by an mDBC density
+correction (`computeMdbcDensity`). The call site's inline comment claims this
+is "skipped since no boundaries are present", which is stale as a comment --
+the call itself is unconditional -- but harmless in practice, since
+`computeMdbcDensity`/`computeBoundaryVelocities` both no-op internally
+(`if not torch.any(currentState.kinds == 1): return unchanged`) when there
+are no boundary-kind particles. `computeBoundaryVelocities` only overwrites
+the boundary-kind (`kinds == 1`) entries of `currentState.velocities` (fluid
+entries pass through unchanged); the in-place update is not reverted
+afterwards (the revert line is commented out), so those entries carry the
+BC-enforced velocity into the rest of the step and into the next one -- for
+`dxdt` specifically this has no observable effect, since non-fluid particles'
+`dxdt`/`dvdt`/`drhodt` are zeroed after `enforceUpdates` regardless (see
+below). After the weakly-compressible EOS and free-surface detection,
+`gradRho`/`gradRhoL` are computed only when
+`schemeConfig.diffusionParams.densityDiffusionTerm` actually needs them
+(`denormalized(Only)` vs `deltaSPH`/`deltaOnly`) and fed to
+`computeDensityDiffusion`; velocity diffusion, continuity `drhodt`,
+surface-aware pressure force, forcing, gravity, and the mDBC no-penetration
+shift (converted from a position correction to an acceleration via `/dt`)
+are summed into the final update. Non-fluid particles (`kinds != 0`) have
+their `dxdt`/`dvdt`/`drhodt` zeroed after `enforceUpdates`, so boundary/ghost
+motion comes entirely from the BC machinery, not integration. Large stretches
+of commented-out code (an alternate Shepard-corrected density path, per-term
+diagnostic prints, a `TimedBlock`/`performanceDict` profiling scaffold
+superseded by the active `record_function` markers) are left in place, not
+removed (tracked separately in CLEANUP_PLAN.md).
+"""
+
 from ..configurations import SimulationConfig, WeaklyCompressibleSPHConfig
 from ..systems import CompSPHSystem, WeaklyCompressibleSystemUpdate
 from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates

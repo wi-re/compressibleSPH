@@ -1,3 +1,15 @@
+"""IISPH diagonal coefficient `a_ii` (per-particle pressure-Laplacian
+normalization) used by both incompressible solvers to turn a divergence/
+density residual into a pressure update.
+
+`computeAlpha` returns the negated per-particle sum
+`areaI/mi * |sum_j V_j gradW_ij|^2 + areaI * sum_j (V_j^2/mj) |gradW_ij|^2`
+(apparent-area-weighted, gather support mode), matching the IISPH `a_ii`
+term; callers divide the pressure residual by this value each Jacobi
+iteration. Contains an unused, commented-out Barecasco free-surface detector
+left over from an earlier version of this file.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -10,6 +22,8 @@ from warpSPHCore import *
 
 from warpSPH.enumTypes import *
 from warpSPH.configurations.simulationConfig import SimulationConfig
+
+__all__ = ['computeAlpha']
 
 # @torch.jit.script
 # def detectFreeSurfaceBarecasco(

@@ -1,7 +1,15 @@
+"""Assemble a `ParticleRegion` from an SDF: sample particles inside it
+(`sampleParticles`) and, for 2D configs, extract its boundary contour
+(`find_contour`) for plotting. 3D configs get `contour=None`.
+"""
+
 from ..configurations.region import RegionType, ParticleRegion, BCType
 from .sample import sampleParticles
 from .contour import find_contour
 from typing import Optional
+
+__all__ = ['buildRegion']
+
 
 def buildRegion(
     config, schemeConfig,

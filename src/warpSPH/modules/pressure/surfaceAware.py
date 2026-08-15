@@ -1,3 +1,10 @@
+"""Case/scheme-facing wrapper around `wp_surfaceAware.computePressureSurfaceAwareWarp`:
+assembles the operation properties (`SupportScheme.SuperSymmetric`) and
+forwards the current pressures, the configured pressure-force formulation
+(`schemeConfig.pressureForceTerm`) and the surface-indicator mask consumed
+by the Antuono surface-aware term.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -12,6 +19,8 @@ from warpSPHCore import *
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from .wp_surfaceAware import computePressureSurfaceAwareWarp
+
+__all__ = ['computePressureForceSurfaceAware']
 
 def computePressureForceSurfaceAware(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     with record_function("[warpSPH] - computePressureForceSurfaceAware"):

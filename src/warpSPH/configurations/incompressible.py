@@ -1,3 +1,17 @@
+"""`IncompressibleSPHConfig`, the scheme config for the DFSPH divergence-free
+incompressible solver (`schemes/dfsph.py`, `modules/incompressible/{incompressible,
+divergenceFree}.py`), registered in the incompressible `SchemeBundle` in
+`schemes/builder.py`. Bundles fluid properties, adaptive support, diffusion,
+viscosity switch, boundary conditions, delta-SPH shifting, `regions`/
+`rigidBodies`, surface detection, gravity, and `solverConfig` (the relaxed-Jacobi
+pressure/divergence-free solver settings). Note: unlike its
+`WeaklyCompressibleSPHConfig` sibling, `incompressibleConfigToDict`/
+`dictToIncompressibleSPHConfig` do not round-trip `regions` or `rigidBodies` at
+all -- they're silently dropped on export and left at the dataclass default
+(empty list) on import.
+"""
+
+__all__ = ['IncompressibleSPHConfig', 'incompressibleConfigToDict', 'dictToIncompressibleSPHConfig']
 
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig

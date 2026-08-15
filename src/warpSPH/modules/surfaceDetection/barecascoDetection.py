@@ -1,3 +1,10 @@
+"""Barecasco-style free-surface detection: a particle is flagged as surface
+(`fsm < 0.5`) when its kernel-weighted neighbor directions leave a wide
+enough angular gap uncovered, as computed by
+`computeBarecascoSurfaceDetectionWarp`; the accompanying cover-vector direction
+doubles as the surface normal.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -16,6 +23,7 @@ from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetec
 from .maronneNormals import computeNormalsMaronne
 from .wp_barecasco import computeBarecascoSurfaceDetectionWarp
 
+__all__ = ['detectFreeSurfaceBarecasco']
 
 
 

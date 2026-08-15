@@ -1,9 +1,20 @@
+"""Momentum equation source term with grad-h / gradient-renormalization consistency.
+
+Computes `-rho * div(v)` (or `-rho/omega * div(v)` when a `GradHState` is
+supplied) using a consistent (renormalized) difference-form divergence over
+all-to-all, super-symmetric support -- the term used where schemes carrying
+grad-h corrections need the momentum equation kept consistent with the
+density estimate.
+"""
+
 from warpSPHCore import *
 from ...systems.baseState import *
 from warpSPH.configurations import SimulationConfig
 
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Any
+
+__all__ = ['computeMomentumConsistent_warp']
 
 def computeMomentumConsistent_warp(
     state: BaseParticleState,

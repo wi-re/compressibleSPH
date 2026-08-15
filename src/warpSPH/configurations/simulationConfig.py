@@ -1,3 +1,15 @@
+"""`SimulationConfig`, the scheme-independent half of a case's setup (device,
+dtype, domain, kernel, integration scheme, timestep bounds, support/gradient/
+laplacian scheme) -- paired with a scheme-specific `schemeConfig` everywhere a
+case builds a run (see `runner/`). Built via `buildConfig`, which returns a
+`(SimulationConfig, integrator)` tuple, not a bare config -- `runner/runner.py`
+unpacks it that way. `configurationToDict`/`dictToConfig` drive the field list
+from `dataclasses.fields` rather than a hardcoded list (see their own
+docstrings for why), and are used by `io/{dataset,importIO,export}.py`.
+"""
+
+__all__ = ['SimulationConfig', 'buildConfig', 'configurationToDict', 'dictToConfig']
+
 import torch
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass

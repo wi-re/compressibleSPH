@@ -1,3 +1,13 @@
+"""Equal-resolution sampler for `cases/triplePoint.py`'s three-region setup:
+one uniform lattice from `setupBasicCompressibleInitialState`, with each
+particle's density/pressure set from `splitX`/`splitY`-derived region masks
+(unlike `equalMass.py`, these masks do use the passed-in `splitX`/`splitY`)
+and masses set to ``cell area * region density`` -- so, unlike the equal-mass
+sampler, particle mass varies by up to the region density ratio. Densities
+and supports are then relaxed with `evaluateOptimalSupport` before the EOS
+state is derived via `idealGasEOS`.
+"""
+
 from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
@@ -7,6 +17,8 @@ from ....modules.timestep.compressible import computeTimestep
 import math
 import numpy as np
 from warpSPH import *
+
+__all__ = ['sampleTriplePointEqualResolution']
 
 
 def sampleTriplePointEqualResolution(

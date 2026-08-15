@@ -1,3 +1,15 @@
+"""1D Sod shock tube sampling for `cases/sod.py`: the left/right Riemann
+state container (`sodInitialState`) and `buildSod1D`, which lays out two
+independently-sampled periodic lattices (dense left half, coarser right half
+by `samplingRatio`) and derives the EOS state from the given pressures via
+`idealGasEOS`. When `smoothIC` is set, the internal energy is additionally
+ramped smoothly across the interface instead of taking the sharp step, to
+compensate for SPH's own smoothing of the density field near the
+discontinuity; that block carries a fair amount of commented-out debug/dead
+code from earlier iterations of the ramp, left untouched (separately tracked
+cleanup item), which the live smoothIC path does not depend on.
+"""
+
 from typing import NamedTuple
 
 from warpSPH.configurations import SimulationConfig
@@ -8,6 +20,9 @@ import torch
 from ....systems import *
 from ....modules import idealGasEOS, evaluateOptimalSupport
 # from optimalSupport import evaluateOptimalSupport
+
+__all__ = ['sodInitialState', 'buildSod1D']
+
 
 class sodInitialState(NamedTuple):
     p: float

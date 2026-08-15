@@ -1,3 +1,11 @@
+"""Warp kernel computing the grad-h correction term omega_i = 1 - sum_j (dh/drho) m_j (dW/dh)_ij.
+
+``computeOmegaWarp`` is the torch-facing entry point, used both as the
+Newton-iteration derivative in ``optimalSupportMonaghan`` and as the grad-h
+correction factor consumed directly by the compSPH/monaghan schemes
+(re-exported package-wide as ``computeOmega``).
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -7,6 +15,8 @@ from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
 from warpSPHCore import *
+
+__all__ = ['computeOmegaWarp']
 
 @wp.func
 def computeOmega_Func_i(

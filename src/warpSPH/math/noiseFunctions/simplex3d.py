@@ -1,9 +1,16 @@
+"""3D OpenSimplex noise: a plain variant (`_noise3`) and a tileable/periodic
+variant (`_noise3periodic`) that wraps lattice coordinates by an integer
+`wrap` factor along each axis, both numba-jitted.
+"""
+
 from .util import _extrapolate3, _extrapolate3periodic
 from .constants import STRETCH_CONSTANT3, SQUISH_CONSTANT3, NORM_CONSTANT3
 from math import floor
 from ctypes import c_int64
 from numba import njit, prange
- 
+
+__all__ = ['_noise3', '_noise3periodic']
+
 @njit(cache=True)
 def _noise3(x, y, z, perm, perm_grad_index3):
     # Place input coordinates on simplectic honeycomb.

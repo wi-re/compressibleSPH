@@ -1,3 +1,10 @@
+"""SPH density gradient (unrenormalized).
+
+Computes the naive (non-renormalized) SPH gradient of density via an
+all-to-all, super-symmetric difference-form gradient operation. See
+`gradRhoL.py` for the gradient-renormalization-corrected variant.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -11,6 +18,8 @@ from warpSPHCore import *
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
+
+__all__ = ['computeGradRho']
 
 
 def computeGradRho(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:

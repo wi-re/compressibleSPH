@@ -1,3 +1,18 @@
+"""The CRKSPH (Conservative Reproducing Kernel) step: adaptive support solve,
+`computeCRKFactors` for the CRK-corrected apparent volume/density/`crkState`,
+ideal-gas EOS, the Cullen-Hopkins viscosity switch, a CRK velocity gradient
+used both for `drhodt` (via its trace) and as an input to the CRK
+pressure/viscosity acceleration and dudt kernels, and the Monaghan-Price
+energy-balance term `f_ij`. Large stretches of an earlier
+`computeCompSPHAccelWarp`/grad-h formulation are commented out rather than
+removed (tracked separately in CLEANUP_PLAN.md); `gradHState` is
+unconditionally `None` (its adaptive-support branch is also commented out).
+It used to only be assigned *after* the `currentState.divergence is None`
+fallback branch that reads it -- an `UnboundLocalError` waiting to happen on
+any first call with unset `divergence` -- fixed 2026-08-15 by assigning it
+before that branch instead.
+"""
+
 from ..modules.adaptiveSupport import computeOmega, evaluateOptimalSupport
 from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates
 from ..modules.compSPH.accel import computeCompSPHAccelWarp
@@ -81,6 +96,10 @@ def crkSPH_step(
     #     domain = config.domain,
     #     adjacency = adjacency,
     # )
+    # gradHState is only ever actually set below (currently unconditionally None --
+    # see the commented-out adaptiveSupportCorrections branch further down); assigned
+    # here too so the first-call fallback below doesn't read it before it exists.
+    gradHState = None
     if currentState.divergence is None:
         print('Warning: divergence is None, computing for the first time')
         drhodt = computeMomentumConsistent(
@@ -157,7 +176,8 @@ def crkSPH_step(
     #         queryOmegas = omega
     #     )
     # else:
-    gradHState = None
+    #     gradHState = None
+    # (gradHState is set to None near the top of this function instead, see there)
 
     # currentState.alphas, switchState = computeViscositySwitchTerms(
     #     dt,

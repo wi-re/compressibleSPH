@@ -1,3 +1,10 @@
+"""Geometry-side particle/point-cloud data types: `ParticleSet` (a sampled
+region's positions/supports/masses/densities), `SamplingScheme` (the
+regular/jittered/glass/optimal/random enum consumed by
+`sample.bySamplingScheme`), and re-exports of `ParticleState`/`PointCloud`
+from `warpSPHCore.dataTypes`.
+"""
+
 from ..utils.domain import *
 import torch
 from ..utils.support import volumeToSupport
@@ -45,3 +52,6 @@ class SamplingScheme(Enum):
     glass = 3
     optimal = 4
     random = 5
+
+
+__all__ = ['ParticleState', 'ParticleSet', 'PointCloud', 'SamplingScheme']

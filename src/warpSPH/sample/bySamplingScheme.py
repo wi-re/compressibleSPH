@@ -1,7 +1,21 @@
+"""Dispatch initial particle sampling by `config.samplingScheme`
+(`geometry.SamplingScheme`), used only by `warpSPH.systems.waveSystem`'s
+wave-equation setup (not by any compressible/weakly-compressible case).
+
+`regular`/`jittered`/`random` all start from `sampleRegularParticles` and
+differ only in how much position noise is layered on afterwards; `optimal`
+relaxes a lattice via `sampleOptimal`; `glass` loads a pre-relaxed particle
+configuration from a local `position_samples_*.h5` file sized to the
+requested particle count. `config.samplingScheme` defaults to
+`SamplingScheme.regular` and no case in this repo overrides it, so the other
+branches are wired but currently unexercised.
+"""
 
 from ..configurations import SimulationConfig
 from ..geometry import *
 import h5py
+
+__all__ = ['sampleParticles']
 
 def sampleParticles(nx: int,config : SimulationConfig):
     # device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')

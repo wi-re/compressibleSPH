@@ -1,8 +1,21 @@
+"""Field-generation helpers for the wave-equation demo's per-particle grids
+(`u`/`v`/`c`/`damping`, plus the `uSourceGrid`/`cSourceGrid` source and
+obstacle id maps `shape_generation.py` populates): repeated-interpolation
+smoothing (`smoothValuesWarp`, used by `sample/waveSystem.py`'s
+`finalizeWaveSystemSetup` and `smoothState`), Perlin/uniform/normal noise
+blended into a grid (`addNoise`), wave-speed/source-magnitude population from
+id grids (`populateCGrid`, `populateUGrid`), and a standalone quick-config
+builder for exploratory use (`generateInitialVariables`).
+"""
+
 import torch
 import numpy as np
 from ...utils import *
 from typing import List, Union
 from warpSPHCore import *
+
+__all__ = ['smoothValuesWarp', 'smoothState', 'addNoise', 'populateCGrid',
+           'populateUGrid', 'generateInitialVariables']
 
 def smoothValuesWarp(quantity, particleState, nIters, neighbors, config):
     sampled  = quantity.clone()

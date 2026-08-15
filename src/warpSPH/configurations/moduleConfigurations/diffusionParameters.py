@@ -1,3 +1,17 @@
+"""`DiffusionParameters` (a `wp.struct` of artificial-viscosity / thermal-
+conductivity coefficients) and `ViscosityTerms` (which formulation each
+coefficient feeds, e.g. Monaghan1992, Price2012_98), embedded as
+`diffusionParams` on `CompressibleSPHConfig`/`CompSPHConfig`/`CRKSPHConfig` and
+read by the compressible dissipation modules. Each of the three scheme configs
+supplies its own `buildDefaultDiffusionParamsCompressibleSPH`/`CompSPH`/`CRKSPH`
+default-factory with slightly different tuned values (e.g. `C_q`/`Cu_q` are 0
+for the base compressible scheme's defaults here, but 1 or 2 for CompSPH/CRKSPH)
+-- only this module's `buildDefaultDiffusionParamsCompressibleSPH` lives here;
+the CompSPH/CRKSPH variants live in their own config files.
+"""
+
+__all__ = ['ViscosityTerms', 'DiffusionParameters', 'buildDefaultDiffusionParamsCompressibleSPH', 'diffusionParamsToDict', 'dictToDiffusionParams']
+
 from typing import Dict, Any
 from warpSPHCore import *
 from dataclasses import dataclass, field

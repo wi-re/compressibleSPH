@@ -1,3 +1,11 @@
+"""Warp kernel computing the per-particle Owen psi_0/psi_0_H statistics (kernel-value and kernel-gradient sums, h-rescaled and dim-th-rooted) used to drive the Owen adaptive-support lookup table.
+
+``computePsi0Warp`` is the torch-facing entry point; ``psi_0`` is the
+``1/dim``-th root of the accumulated (h-rescaled) kernel-value sum and
+``psi_0_H`` the same for the kernel-gradient-norm sum, matching the
+quantities the Owen lookup table (``owenLUT.py``) was built against.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +14,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computePsi0Warp']
 
 
 @wp.func

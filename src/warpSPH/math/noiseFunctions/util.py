@@ -1,9 +1,23 @@
+"""Shared internals for the OpenSimplex-style noise: the permutation-table
+generator (`_init`, seeded via a linear congruential hash) and per-dimension
+gradient extrapolation functions (`_extrapolate2/3/3periodic/4`) called by
+`simplex2d.py`/`simplex3d.py`/`simplex4d.py`. The trailing block of
+commented-out `_noiseNa` numba-parallel batch wrappers is dead code, kept
+for reference. `_init` uses `np.*` but relied on `from .constants import *`
+leaking `numpy` in as `np` (true only while `constants.py` had no `__all__`
+of its own); fixed 2026-08-15 by importing numpy directly here instead of
+depending on that leakage.
+"""
+
 # It all started with this gist, once upon a time:
 # https://gist.github.com/KdotJPG/b1270127455a94ac5d19
 
 from .constants import *
 from math import floor
 from ctypes import c_int64
+import numpy as np
+
+__all__ = ['_init', '_extrapolate2', '_extrapolate3', '_extrapolate3periodic', '_extrapolate4']
 
 try:
     from numba import njit, prange

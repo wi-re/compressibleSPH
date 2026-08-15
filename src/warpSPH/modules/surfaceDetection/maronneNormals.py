@@ -1,3 +1,8 @@
+"""Surface normal for the Maronne detection scheme: an SPH (naive-gradient,
+Scatter) estimate of the unit-field gradient, corrected by the
+renormalization matrix `L`, then negated and normalized.
+"""
+
 # @torch.jit.script
 # def computeNormalsMaronne(
 #     particles : WeaklyCompressibleState,
@@ -40,6 +45,8 @@ from warpSPHCore import *
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
+
+__all__ = ['computeNormalsMaronne']
 
 def computeNormalsMaronne(currentState: Any, L: torch.Tensor, config: SimulationConfig, schemeConfig: Any, surfaceConfig: SurfaceDetectionConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     ones = currentState.positions.new_ones(currentState.positions.shape[0])

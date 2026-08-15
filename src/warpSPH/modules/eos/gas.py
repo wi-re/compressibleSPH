@@ -1,8 +1,21 @@
+"""Ideal-gas EOS applied in place to a `CompressibleState`, with per-material
+dispatch and a choice of source quantity (`EOSSource`: internal energy,
+pressure, specific entropy, or sound speed).
+
+Not wired into `eos/__init__.py` or any scheme/case in this repo — every name
+here is reached only from within this file. `idealGas` mutates whichever of
+`internalEnergies`/`pressures`/`soundspeeds`/`entropies` attributes are
+present on `particles` (via `hasattr`), leaving absent ones untouched; for
+the per-material branch it does the same but restricted to
+`particles.materials == i` masks.
+"""
 
 from typing import Any, List, Union, Optional
 import torch
 from ...systems import CompressibleState
 from .props import fluidProperties, EOSSource
+
+__all__ = ['idealGas']
 
 def computeQuantitiesIdealGas(
     fluidProps: fluidProperties,

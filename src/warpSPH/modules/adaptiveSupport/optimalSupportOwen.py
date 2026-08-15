@@ -1,3 +1,19 @@
+"""Owen (1998)-style adaptive smoothing length: table-lookup mapping the local kernel-sum "psi" statistic to a target neighbor count.
+
+Each iteration rebuilds the Verlet neighbor list, evaluates the psi_0/psi_0_H
+statistics (``computePsi0Warp``), looks up the corresponding neighbor count
+``n_h`` from a per-``(kernel, dim)`` lookup table (``owenLUT.computeOwen``,
+cached in module-level ``PsiLUTs``), and blends toward the new support with a
+ratio-dependent relaxation factor ``a`` in ``computeNewSupport`` (``a =
+0.4*(1+s**-3)`` growing, ``0.4*(1+s**2)`` shrinking) rather than jumping
+straight to the target. Supports are clamped to ``[hMin*0.25, hMax*4.0]``
+each iteration; iteration stops early once the relative support change drops
+below ``compConfig.adaptiveSupportThreshold``. Note: this file's own
+``n_h_to_nH``/``nH_to_n_h`` are local re-implementations that shadow the
+otherwise-canonical versions in ``warpSPH.utils.support`` -- not re-exported
+here to avoid that ambiguity spreading further.
+"""
+
 from ...systems import CompressibleState
 from ...configurations import SimulationConfig, CompressibleSPHConfig
 import numpy as np
@@ -9,6 +25,8 @@ from .wp_psi0 import computePsi0Warp
 from .owenLUT import computeOwen, interpolateLUT
 
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['evaluateOptimalSupportOwen']
 
 #: Owen's psi lookup table, cached per ``(kernel, dim)``.
 #:

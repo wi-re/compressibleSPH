@@ -1,3 +1,12 @@
+"""Scheme-dispatching entry point: `computeNormals` resolves a surface normal
+via whichever `surfaceConfig.normalSource` is configured (color-field
+gradient, lambda-gradient, Maronne, or none for `Native`), and
+`detectFreeSurface` runs the configured `surfaceConfig.scheme`
+(ColorField/ColorFieldGrad/Barecasco/Maronne), then dilates the resulting
+mask `surfaceConfig.expansionIterations` times. Short-circuits to an
+all-false mask when `surfaceConfig.active` is False.
+"""
+
 from .colorFieldDetection import detectFreeSurfaceColorField
 from .colorFieldGradientDetection import detectFreeSurfaceColorFieldGradient
 from .colorFieldCompute import computeColorField
@@ -9,7 +18,6 @@ from .maronneNormals import computeNormalsMaronne
 
 from .barecascoDetection import detectFreeSurfaceBarecasco
 from .maronneDetection import detectFreeSurfaceMaronne
-
 
 import warp as wp
 from warp.types import vector, matrix
@@ -25,6 +33,8 @@ from warpSPHCore import *
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig, SurfaceDetectionScheme, NormalSource
+
+__all__ = ['detectFreeSurface']
 
 
 def computeNormals(

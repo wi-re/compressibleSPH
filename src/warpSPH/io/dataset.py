@@ -1,3 +1,13 @@
+"""`torch.utils.data.Dataset` wrapper over exported `.h5`/`.hdf5` trajectories.
+
+`SPHDataset` scans a folder of exported runs and yields history/current/future
+position-velocity-density slices plus static per-particle tensors and restored
+run metadata per valid frame index; `sample_to_state`/`sample_to_domain`/
+`SPHDataset.restore_state` rebuild a `WeaklyCompressibleState`/domain from a
+sample for downstream use (e.g. resuming a simulation or seeding a surrogate
+model). Used from the example notebooks, not from `runner`/`cases`.
+"""
+
 from __future__ import annotations
 
 import os

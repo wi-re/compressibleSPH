@@ -1,3 +1,15 @@
+"""compSPH pressure and artificial-viscosity acceleration.
+
+Computes the SPH momentum-equation acceleration `-P/rho^2 gradW` plus a
+Monaghan-type artificial viscosity term, symmetrizing the two one-sided kernel
+gradients (gather/scatter) into the "super-symmetric" form per E.2 of the
+CRKSPH paper. Optionally applies gradient renormalization, grad-h (omega)
+corrections, apparent-volume weighting, and CRK kernel correction. Also
+returns the per-pair pressure and viscosity contributions (`pressureAccel_ij`,
+`viscosityAccel_ij`), which `balance.py` consumes to partition thermal energy
+between interacting pairs.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -7,6 +19,8 @@ from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
 from ..dissipation import DiffusionParameters, computePi_actual
+
+__all__ = ['computeCompSPHAccelWarp']
 
 
 @wp.func

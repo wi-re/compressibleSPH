@@ -1,3 +1,13 @@
+"""The step-function orchestration layer: one module per SPH scheme, each
+wiring `modules/` compute functions into a single per-step function with the
+signature `(system, dt, config, schemeConfig, verbose) -> update, adjacency,
+...`. `builder.buildScheme` maps a scheme name/enum member to the matching
+`SchemeBundle` (state/config/update classes plus this step function); nothing
+here should be called by name without going through it. `waveEquation.py`
+(`f_wave_equation`) is the exception: a non-fluid demo scheme with no
+registered case, not reachable via `buildScheme`.
+"""
+
 from .monaghan import compressibleSPH_Monaghan
 from .compSPH import compSPH_step
 from .crkSPH import crkSPH_step

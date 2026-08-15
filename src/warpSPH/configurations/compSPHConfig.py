@@ -1,3 +1,14 @@
+"""`CompSPHConfig`, the scheme config for the CompSPH scheme (`schemes/compSPH.py`,
+`modules/compSPH/multistep.py`, `modules/boundaryConditions/bcs.py`): a
+`CompressibleSPHConfig` subclass adding `energyScheme`/`compatibleEnergy` and
+CompSPH-tuned `diffusionParams` defaults (via `buildDefaultDiffusionParamsCompSPH`,
+distinct from the base class's own defaults). Registered, along with its
+`compSPHConfigToDict`/`dictToCompSPHConfig` round-trip pair, in the CompSPH
+`SchemeBundle` in `schemes/builder.py`.
+"""
+
+__all__ = ['CompSPHConfig', 'compSPHConfigToDict', 'dictToCompSPHConfig']
+
 from .moduleConfigurations.diffusionParameters import DiffusionParameters, ViscosityTerms
 # from ..system import CompressibleSystem, CompressibleSystemUpdate
 # from ..config import SimulationConfig

@@ -1,3 +1,12 @@
+"""The analytic self-similar Sedov-Taylor blast-wave solution, used by
+`cases/sedov.py` both to derive the run's stopping time (`goalTime`, via
+`SedovSolution.shockState`) and to draw the reference shock front/state on the
+profile plots. `radius`/`beta` are the closed-form beta-fit estimate of the
+shock radius the case overlays alongside the full solve for comparison; `nu`
+throughout this module is the spatial dimension (1, 2 or 3), not a viscosity.
+`velocity` is unused elsewhere in this repo.
+"""
+
 #-------------------------------------------------------------------------------
 # Provide the analytic solution to the Sedov blastwave problems.
 #
@@ -5,6 +14,8 @@
 #-------------------------------------------------------------------------------
 from math import *
 import bisect
+
+__all__ = ['SedovSolution', 'radius', 'beta']
 
 def sgn(x):
     if x < 0:

@@ -1,3 +1,15 @@
+"""Warp kernels assembling the moving-least-squares moment system used by the
+`liu` interpolation routines.
+
+For each query point, accumulates a `(dim+1)`-vector `[<q>, <grad q>]` and the
+corresponding `(dim+1) x (dim+1)` moment matrix (kernel-weighted 0th/1st-order
+terms: `[1, x]` interpolation and covariance blocks) over its neighbors, plus
+a Shepard normalization sum and a raw neighbor count (particles within one
+support radius). `computeLiuMatricesWarp` is the public entry point;
+`interpolateLiuLiu` in `interp.py` inverts the resulting matrix to solve for
+the local linear fit.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -5,6 +17,8 @@ import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
+
+__all__ = ['computeLiuMatricesWarp']
 
 @wp.func
 def computeLiuMatrices_Func_i(

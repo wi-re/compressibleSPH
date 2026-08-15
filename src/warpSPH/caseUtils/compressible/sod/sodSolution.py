@@ -1,6 +1,16 @@
+"""Analytic exact Riemann solution for the Sod shock tube, used as the
+reference overlay in `sodUtil.py`'s profile plots. `solve` is the entry
+point (left/right (p, rho, u) states in, positions/regions/value arrays out);
+everything else here -- the shock-tube pressure-matching equation, the region
+state solver, wave-position finder and the piecewise sampler -- exists only
+to build that answer.
+"""
+
 import numpy as np
 import scipy
 import scipy.optimize
+
+__all__ = ['solve']
 
 
 def sound_speed(gamma, pressure, density, dustFrac=0.):

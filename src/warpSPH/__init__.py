@@ -1,3 +1,12 @@
+"""warpSPH: a GPU-accelerated, differentiable SPH solver for delta-SPH/mDBC
+research, built on NVIDIA Warp and PyTorch.
+
+This file is the public-API aggregation point: it extends `__all__` by
+re-exporting every subpackage's own `__all__` (`math`, `configurations`,
+`systems`, `schemes`, `modules`, `utils`, `sample`, `geometry`,
+`initializers`, `rigidBody`, `regions`, `io`), plus a hand-picked set of
+enum types and case-setup helpers named individually below.
+"""
 
 __version__ = "0.5.0"
 

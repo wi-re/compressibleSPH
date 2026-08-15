@@ -1,5 +1,19 @@
+"""Weakly-compressible pressure closures (Tait-family and related) and the
+`weaklyCompressibleEOS` dispatcher that reads `schemeConfig.fluid.eosType`
+to pick one.
+
+All closures return zero pressure at `rho == rho0`. `weaklyCompressibleEOS`
+reads density straight off `particleState.densities`, unclamped, on purpose:
+a commented-out `torch.clamp(..., min=0.8)` above it is a deliberately
+disabled guard, per the user (2026-08-15) — non-physical densities are meant
+to blow up rather than be silently masked, so they get caught instead of
+hidden.
+"""
+
 from ...enumTypes import *
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['weaklyCompressibleEOS']
 
 def stiffTaitEOS(rho, rho0: float, c_s: float, polytropicExponent: float):
 
@@ -27,7 +41,7 @@ def weaklyCompressibleEOS(particleState, schemeConfig):
         kappa = schemeConfig.fluid.kappa
         polytropicExponent = schemeConfig.fluid.polytropicExponent
 
-        rho = torch.clamp(particleState.densities, min=0.8)  # Avoid negative densities
+        # rho = torch.clamp(particleState.densities, min=0.8)  # rough attempt at clamping against instabilities; left disabled on purpose -- non-physical densities should blow up rather than be silently masked, so they get caught instead. This is where you'd clamp it if that's ever actually wanted.
         rho = particleState.densities
         
         if eosType == EquationOfState.stiffTait:

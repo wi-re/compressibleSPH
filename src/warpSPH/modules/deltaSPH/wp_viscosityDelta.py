@@ -1,3 +1,22 @@
+"""Per-particle velocity-dissipation kernel for delta-SPH, plus
+`alphaToNu`/`nuToAlpha` conversions between its two dissipation
+parameterizations.
+
+`inviscid=True` (the default) gives a Monaghan-style artificial-viscosity
+term with coefficient `alpha * c_s * h_i / kernelXi`; `inviscid=False` gives
+a Morris-style physical-viscosity Laplacian term with coefficient
+`2*(dim+2) * nu`. Both are gated by the same "approach only" switch
+`mu_ij = dot(vel_ij, x_ij) / (|x_ij|^2 + eps*h_i^2)`, clamped to `<= 0` so the
+term only acts when neighbors are approaching (`mu_ij > 0` — receding — is
+zeroed); the contribution is `apparentVolume * mu_ij * factor * gradW_ij /
+mean(rho_i, rho_j)`. A `1e-14 * h_i^2` epsilon guards the `mu_ij` denominator
+at zero separation. Contains a commented-out alternative symmetrization
+factor for the physical-viscosity branch, left disabled.
+`alphaToNu`/`nuToAlpha` convert between the two coefficients (`alpha` given
+`c_s`, `h`, `n=dim`, and vice versa) so a case can be configured in either
+unit system.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +25,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeVelocityDiffusionDeltaSPH', 'nuToAlpha', 'alphaToNu']
 
 
 from ...enumTypes import *

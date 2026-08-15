@@ -1,3 +1,11 @@
+"""Sub-config dataclasses/enums shared across the scheme configs in
+`warpSPH.configurations` (e.g. `DiffusionParameters`, `ShiftProperties`,
+`SurfaceDetectionConfig`) -- each embedded as a field on one or more of
+`CompressibleSPHConfig`, `CompSPHConfig`, `CRKSPHConfig`,
+`WeaklyCompressibleSPHConfig`, `IncompressibleSPHConfig`. Re-exported wholesale
+from `warpSPH.configurations` (`__all__` there extends this module's).
+"""
+
 __all__ = []
 
 from .boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition, BCType

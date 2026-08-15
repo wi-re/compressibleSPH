@@ -1,3 +1,8 @@
+"""Free-surface flag from the color field: a particle is marked surface when
+its color field is below the neighborhood-mean color field AND its neighbor
+count is below `targetNeighbors * surfaceConfig.colorFieldThreshold`. Recomputes
+`computeColorField` internally when not passed in.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -18,6 +23,8 @@ from ..util.wp_sum import warpSum
 from ..util.wp_numNeighbors import countNeighborsWarp
 
 from .colorFieldCompute import computeColorField
+
+__all__ = ['detectFreeSurfaceColorField']
 
 # @torch.jit.script
 def detectFreeSurfaceColorField(

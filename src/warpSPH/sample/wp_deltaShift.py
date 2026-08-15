@@ -1,3 +1,15 @@
+"""Warp kernel computing the raw (unscaled) delta-SPH particle-shifting term:
+`sum_j [m_j / (rho_i + rho_j)] * [1 + R*(w_ij/W_0)^n] * gradW_ij` (Lind et al./
+Sun et al.-style anti-clustering correction), evaluated per-particle over an
+adjacency list or a compact hash grid. `computeDeltaShiftWarp` is the Python
+entry point; `modules.shifting.delta.computeDeltaShift` (which re-exports it)
+applies the actual `-CFL * Ma * 2 * h^2` position-delta scaling externally --
+by design this kernel does not apply it, so its `CFL`/`computeMach`/`c_max`/
+`dx` arguments are accepted but do not affect the returned value (only `rho0`
+feeds the output, via the reference spacing `dx_2`). Also used directly by
+`sample.optimal.sampleOptimal` to relax a lattice into a glass-like layout.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +18,8 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 from warpSPHCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
+
+__all__ = ['computeDeltaShiftWarp']
 
 
 @wp.func

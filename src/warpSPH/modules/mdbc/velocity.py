@@ -1,5 +1,13 @@
+"""mDBC boundary-particle velocity conditions.
 
-    # 
+Computes ghost/boundary-particle velocities by dispatching, per boundary
+material, to one of several `BCType` policies read from region config: zero,
+constant (unchanged), no-slip (mirrored fluid velocity), free-slip
+(tangential-only reflection), or "extended" (MLS extrapolation via
+`interpolateLiuLiu`). Each non-extended policy interpolates fluid velocities
+to ghost points via a Shepard-normalized SPH gather. No-ops (returns
+`currentState.velocities` unchanged) when there are no boundary particles.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -9,6 +17,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeBoundaryVelocities']
 
 
 

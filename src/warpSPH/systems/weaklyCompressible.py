@@ -1,3 +1,16 @@
+"""State/update/system triad for the weakly-compressible delta-SPH schemes
+(`schemes/deltaSPH.py`, `schemes/dfsph.py`'s WCSPH path): density is
+integrated via `drhodt`, with free-surface fields (`surfaceIndicators`/
+`surfaceNormals`/`surfaceLambdas`) and the boundary-ghost bookkeeping
+(`ghostIndices`/`ghostOffsets`) that mDBC and `rigidBody/` read and write.
+`finalize` applies delta-SPH particle shifting, then integrates every rigid
+body's pose and reprojects its particles (`rigidBody.integrate`/
+`rigidBody.update`) each step. Its density update computes a Padé-pole-clamped
+`epsilon` (kept well clear of the Padé(1,1) approximant's pole at +-2) but no
+longer uses it -- the update itself switched to an unclamped exponential form,
+so `epsilon` is now dead.
+"""
+
 from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
@@ -10,6 +23,9 @@ from ..rigidBody.update import updateBodyParticlesWCSPH
 from ..modules.shifting.delta import computeDeltaShift
 from ..modules.shifting.wrapper import solveShifting
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['WeaklyCompressibleState', 'WeaklyCompressibleSystemUpdate', 'WeaklyCompressibleSystem']
+
 
 @dataclass
 class WeaklyCompressibleState(BaseState):

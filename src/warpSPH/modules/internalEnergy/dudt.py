@@ -1,8 +1,15 @@
+"""Internal-energy time derivative du/dt = -(p/rho) * div(v), Monaghan-style,
+via an SPH divergence of velocity. Divides by the grad-h `queryOmegas`
+correction when `gradH` is supplied.
+"""
+
 from warpSPHCore import *
 from ...systems.compressibleMonaghan import *
 from warpSPH.configurations import SimulationConfig
 
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['compute_dudt_warp']
 
 def compute_dudt_warp(
     state: CompressibleState,

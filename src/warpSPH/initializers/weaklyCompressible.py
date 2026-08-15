@@ -1,3 +1,14 @@
+"""Builds the initial particle state and `SimulationSystem` for the weakly
+compressible (and incompressible, via the shared `SimulationState` branch)
+solver from a list of sampled regions: concatenates each region's particles
+into a combined `WeaklyCompressibleState`/`IncompressibleState`, applies
+per-region `initialConditions`, adds boundary ghost particles, and builds any
+rigid bodies. `initializeSimulation` is the entry point re-exported (as
+`initializeWeaklyCompressibleSimulation`) by `initializers/__init__.py`;
+`initializeWeaklyCompressibleState` is an older, narrower variant not called
+from anywhere else in the package.
+"""
+
 import warnings
 import torch
 from ..configurations import *
@@ -263,3 +274,6 @@ def initializeSimulation(regions, config, schemeConfig, SimulationSystem, Simula
     )
         
     return compressibleSystem#, config, rigidBodies
+
+
+__all__ = ['initializeSimulation']

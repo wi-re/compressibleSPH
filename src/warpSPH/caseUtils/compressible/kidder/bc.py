@@ -1,3 +1,14 @@
+"""Driven boundary bands for the Kidder case, used by `warpSPH.cases.kidder`.
+
+`buildKidderBCs` builds a dynamic `BoundaryCondition` that pins velocity,
+density, and internal energy on the first/last `band` particles (the inner
+and outer shell) to `KidderIsentropicCapsuleAnalyticSolution` at every step,
+via `buffer_sdf`/`buffer_sdf_gradient` selecting those particles by index
+rather than by an actual signed distance. The module-level `kidderSolution`
+name is unused (each call closes over its own `kidderSolution` argument
+instead); `kidderAcceleration` is defined but not wired into any BC function.
+"""
+
 import torch
 kidderSolution = None
 
@@ -64,6 +75,9 @@ def buffer_sdf_gradient(position, band):
 
 from warpSPH.modules.boundaryConditions import *
 from warpSPH.configurations import *
+
+__all__ = ['buildKidderBCs']
+
 
 def buildKidderBCs(schemeConfig, kidderSolution, band):
     kidderBC = BoundaryCondition(

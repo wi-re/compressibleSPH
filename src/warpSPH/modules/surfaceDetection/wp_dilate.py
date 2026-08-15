@@ -1,3 +1,10 @@
+"""Warp kernel implementation of one dilation pass over a free-surface mask:
+for each particle, sums `freeSurfaceMask[j]` over kernel-supported neighbors
+(`w_ij > 0`), no gradient/renormalization terms applied despite the
+correction-data plumbing being threaded through. `dilateSurfaceMaskWarp` is
+the torch-facing wrapper called (usually repeatedly) by `dilation.py`.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -9,6 +16,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import *
+
+__all__ = ['dilateSurfaceMaskWarp']
 
 @wp.func
 def dilateSurfaceMask_Func_i(

@@ -1,3 +1,14 @@
+"""compSPH pairwise energy-partition factor.
+
+Computes `f_ij`, the fraction of pair-wise thermal work assigned to particle
+`i` (vs. `j`) for each interacting pair, consuming the pressure/viscosity
+accelerations produced by `accel.py`. Selectable via `EnergyScheme`:
+`equalWork` (fixed 0.5), `PdV` (pressure-work weighted, noted in-code as not
+working with the current multistep code), `diminishing`, `monotonic`,
+`hybrid` (blend of the two), and `CRK` (entropy-ratio based, per CRKSPH).
+Several branches use small epsilons (`1.0e-14`) to guard divisions.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,7 +17,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
-
+__all__ = ['computeCompSPHBalanceTermWarp']
 
 
 @wp.func 

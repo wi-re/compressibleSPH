@@ -1,3 +1,15 @@
+"""`ViscositySwitchConfig`: Cullen-Dehnen-style viscosity-switch tuning
+(alpha bounds, beta parameters, divergence scheme), embedded as
+`.viscositySwitchParams` on `CompressibleSPHConfig`/`CompSPHConfig`/
+`CRKSPHConfig`/`WeaklyCompressibleSPHConfig`/`IncompressibleSPHConfig` and read
+by `modules/shockCapturing/CullenDehnen2010.py`. Note: `limitXi` is declared
+twice below (default `False` at the top, default `True` further down) --
+dataclass field redefinition means only the second (`True`, "limit the xi
+parameter in the Cullen-Dehnen switch") is actually live; the first is dead.
+"""
+
+__all__ = ['ViscositySwitchConfig', 'viscositySwitchConfigToDict', 'dictToViscositySwitchConfig']
+
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from ...enumTypes import *

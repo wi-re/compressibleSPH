@@ -1,3 +1,10 @@
+"""Dispatch layer selecting a viscosity switch scheme (Cullen-Dehnen, Hopkins, or none) per ``schemeConfig.viscositySwitchParams.scheme``.
+
+``computeViscositySwitchTerms`` computes the per-step alpha/switch state;
+``updateViscositySwitch`` advances it over ``dt``. The ``NoneSwitch`` branch
+is a no-op that passes ``particleState.alphas``/``alpha0s`` straight through
+with ``None`` switch state.
+"""
 
 from ...enumTypes import ViscositySwitch
 
@@ -10,6 +17,8 @@ from warpSPHCore import *
 from .switchState import ViscositySwitchState
 from .CullenDehnen2010 import computeCullenTerms, computeCullenUpdate
 from .CullenHopkins import computeHopkinsTerms, computeHopkinsUpdate
+
+__all__ = ['computeViscositySwitchTerms', 'updateViscositySwitch']
 
 def computeViscositySwitchTerms(
         dt: float,

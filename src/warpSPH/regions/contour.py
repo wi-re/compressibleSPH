@@ -1,6 +1,17 @@
+"""Extract a region's boundary as 2D polylines, for plotting. Evaluates `sdf`
+on a regular grid spanning `config.domain` and runs marching squares
+(`skimage.measure.find_contours`) at the given `level`; 2D only. Grid
+resolution is derived from `nGrid` divided along the domain's shorter
+(`minOrMax='min'`) or longer (`'max'`) side, so the two axes can get
+different point counts.
+"""
+
 from typing import Optional
 from skimage import measure
 import torch
+
+__all__ = ['find_contour']
+
 
 def find_contour(config, schemeConfig, sdf, nGrid, level = 0, minOrMax = 'min'):
     minExtent = config.domain.min.cpu()

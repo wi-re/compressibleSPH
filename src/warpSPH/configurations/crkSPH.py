@@ -1,3 +1,16 @@
+"""Two config surfaces for the CRK-SPH scheme (`schemes/crkSPH.py`,
+`schemes/builder.py`'s CRK `SchemeBundle`, `modules/crk/{accel,dudt}.py`):
+`CRKViscosity` (a `wp.struct` of CRK-limiter / van-Leer-limiter tunables) and
+`CRKSPHConfig`, a `CompressibleSPHConfig` subclass that adds `crkViscosityParams`
+plus CRK-tuned `diffusionParams` defaults. Note: `schemes/crkSPH.py`'s
+`crkSPH_step` type-hints its `schemeConfig` parameter as `CompSPHConfig`, but
+`schemes/builder.py` actually passes it a `CRKSPHConfig` (accessing
+`.crkViscosityParams`, which `CompSPHConfig` lacks) -- a stale type hint,
+harmless since Python doesn't enforce it, but confusing to a reader who trusts it.
+"""
+
+__all__ = ['CRKViscosity', 'CRKSPHConfig', 'crkSPHConfigToDict', 'dictToCRKSPHConfig']
+
 from dataclasses import dataclass
 import warp as wp
 import torch

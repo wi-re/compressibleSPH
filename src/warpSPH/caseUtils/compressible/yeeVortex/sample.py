@@ -1,3 +1,16 @@
+"""Yee isentropic vortex initial state, used by `warpSPH.cases.yeeVortex`.
+
+Samples particles on concentric shells (`sampleShellv2`, `nr` rings) rather
+than a lattice, imposes the Yee vortex's Gaussian velocity/temperature
+perturbation (amplitude `beta`, centered at `(xc, yc)`) analytically, then
+iteratively refines density/support/mass via `evaluateOptimalSupport` and CRK
+renormalization before deriving pressure/energy through `idealGasEOS`. The
+outermost `buffer_rings` shells are flagged (`indices`) and returned along
+with a dynamic `BoundaryCondition` (`yeeBC`) that holds them at their `t=0`
+state -- selecting particles by shell index rather than an actual SDF, mirroring
+the pattern in `kidder/bc.py`. Contains extensive commented-out
+diagnostic/plotting code.
+"""
 
 from ....sample import *
 import torch
@@ -8,6 +21,8 @@ from ....modules.timestep.compressible import computeTimestep
 import math
 import numpy as np
 from warpSPH import *
+
+__all__ = ['sampleYeeVortex']
 
 
 def sampleYeeVortex(nr, nx, buffer_rings, config, schemeConfig, extraData, SimulationState, SimulationSystem):

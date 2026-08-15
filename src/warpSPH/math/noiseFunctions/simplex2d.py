@@ -1,8 +1,14 @@
+"""2D OpenSimplex noise (`_noise2`), numba-jitted. Also backs 1D noise via
+`simplex1d._noise1` (called with `y=0`).
+"""
+
 from .util import _extrapolate2
 from .constants import STRETCH_CONSTANT2, SQUISH_CONSTANT2, NORM_CONSTANT2
 from math import floor
 from ctypes import c_int64
 from numba import njit, prange
+
+__all__ = ['_noise2']
 
 @njit(cache=True)
 def _noise2(x, y, perm):

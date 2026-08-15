@@ -1,3 +1,11 @@
+"""SDF combinators and transforms (union/intersection/difference and their
+smooth variants, translate/rotate/scale/twist/bend/taper/shear/mirror/flip,
+shell/round/blend/select): each takes one or two SDF callables `a(p)`/`b(p)`
+and returns a new SDF callable, so shapes compose by closing over each other.
+`operatorDict` maps operator names to these constructors for config-driven
+composition (see `geometry.sdf.getSDF`'s sibling shape lookup).
+"""
+
 import torch
 import numpy as np
 

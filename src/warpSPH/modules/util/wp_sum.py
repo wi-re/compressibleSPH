@@ -1,3 +1,11 @@
+"""Generic per-particle neighbor reduction: `warpSum` sums `queryValues[j]`
+(any warp dtype) over every reference particle `j` within kernel support of
+`i` — an unweighted sum gated by `w_ij > 0`, not a kernel-weighted average;
+`sumOverNeighbors` is a convenience wrapper that builds the operation
+properties (`SupportScheme.SuperSymmetric`, all-to-all, via
+`WarpOperation.Divergence`) from a `SimulationConfig`.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -9,6 +17,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import *
+
+__all__ = ['warpSum', 'sumOverNeighbors']
 
 @wp.func
 def warpSum_Func_i(

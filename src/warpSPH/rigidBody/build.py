@@ -1,6 +1,18 @@
+"""Assembles a `RigidBody` snapshot from a particle state's fluid/ghost
+particles for one boundary material ID: center of mass, moment of inertia
+about it, and per-particle positions/boundary distances/normals stored
+relative to that center of mass. Called once per rigid body during
+initialization (`initializers/weaklyCompressible.py`) to seed each body before
+its pose is integrated; `angularVelocity`/`linearVelocity` always start at
+zero here regardless of any velocity the particles were sampled with -- a case
+sets the prescribed rate afterward (e.g. `cases/movingObstacle.py`).
+"""
 
 import torch
 from ..configurations.weaklyCompressible import RegionType, ParticleRegion, RigidBody
+
+__all__ = ['buildRigidBody']
+
 
 def buildRigidBody(particleState, regions, bodyId):
     particleIndices = torch.logical_and(particleState.kinds == 1, particleState.materials == bodyId)

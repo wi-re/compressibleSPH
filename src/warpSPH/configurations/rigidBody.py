@@ -1,3 +1,16 @@
+"""`RigidBody`, the per-body state for the mDBC rigid-body coupling: center of
+mass, orientation, velocities, mass/inertia, and boundary/ghost particle arrays,
+read and mutated throughout `rigidBody/` (`build.py`, `update.py`, `integrate.py`,
+`transformation.py`, `ghostParticles.py`) and stored on
+`WeaklyCompressibleSPHConfig.rigidBodies`/`IncompressibleSPHConfig.rigidBodies`.
+`toDict`/`fromDict` only round-trip the body-level scalars (COM, orientation,
+velocities, mass, inertia, `sdf`, `bodyID`, `kind`) -- the per-particle
+boundary/ghost array fields are commented out and so are dropped on
+serialize/deserialize; that dead code is left in place here.
+"""
+
+__all__ = ['RigidBody']
+
 from .moduleConfigurations.boundaryConditions import BoundaryCondition, BoundaryConditionType, boundaryConditionToDict, dictToBoundaryCondition, BCType
 import numpy as np
 import torch

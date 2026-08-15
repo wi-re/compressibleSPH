@@ -1,3 +1,18 @@
+"""`RegionType` and `ParticleRegion`: the declarative fluid/boundary/inlet/outlet
+region descriptor built by `regions/region.py`'s `buildRegion` and stored on
+`WeaklyCompressibleSPHConfig.regions`/`IncompressibleSPHConfig.regions`; read
+throughout `regions/`, `rigidBody/`, `modules/mdbc`, `modules/noise`, and
+`initializers/weaklyCompressible.py`. Also re-exports `BCType` (defined in
+`moduleConfigurations.boundaryConditions`) since several `cases/*.py` modules
+import it from here rather than its defining module. Note: `parseInitialConditions`
+(below) builds its output dict but has no `return` statement, so it always
+yields `None`; its sibling helpers `parseParticleSet`/`unparseParticleSet` are
+defined but never called anywhere -- `ParticleRegion.toDict`/`fromDict` always
+pass `particles=None` with those calls commented out.
+"""
+
+__all__ = ['RegionType', 'ParticleRegion', 'BCType']
+
 from dataclasses import dataclass
 from enum import Enum
 from .moduleConfigurations.boundaryConditions import BoundaryConditionType, BoundaryCondition, BCType

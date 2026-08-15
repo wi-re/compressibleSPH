@@ -1,3 +1,22 @@
+"""mDBC no-penetration velocity shift.
+
+Computes a per-fluid-particle corrective velocity shift that discourages
+penetration through nearby mDBC boundary/ghost surfaces: for each fluid-ghost
+pair within a distance/normal-offset threshold and closing on the boundary
+(three per-axis conditions on distance, normal offset, and sign of the
+relative-velocity/normal dot product), it accumulates a `-factor * dv * norm
+* norm` correction term along the ghost's outward normal and averages it over
+qualifying neighbor directions. `computeMdbcNoPenShift` is the public
+entry point (`BoundaryToFluid` direction); it returns zeros when there are no
+boundary particles.
+
+The first ~185 lines of this file are dead, commented-out code from an
+earlier `mDBCPenetrationCheck` implementation and are not executed; the live
+code begins at `computeMdbcNoPenShift_Func_i` below (separate, already-tracked
+cleanup item -- see CLEANUP_PLAN.md -- to remove them).
+"""
+
+__all__ = ['computeMdbcNoPenShift']
 
 # def mDBCPenetrationCheck(particles: Union[CompressibleState, WeaklyCompressibleState],
 #         kernel: SPHKernel,

@@ -1,8 +1,24 @@
+"""Hopkins' modified form of the Cullen & Dehnen (2010) viscosity switch (as used in CRKSPH / ATHENA).
+
+Reuses ``computeR``/``computeXi``/``computeShearTensor`` from
+``CullenDehnen2010``/``common`` but replaces its target-alpha and time-update
+steps: ``computeHopkinsTerms`` derives an instantaneous alpha from the shear
+tensor's limiter term, and ``computeHopkinsUpdate`` relaxes the stored
+``alpha0`` toward a second-order-divergence-derived target with an
+exponential decay set by ``beta_d`` and the signal velocity (rather than
+Cullen & Dehnen's fixed-length-scale integration). A discrepancy between the
+CRKSPH and Hopkins papers' offset terms in the alpha-target denominator is
+called out in an inline comment; this file follows the Hopkins form.
+"""
+
 from .common import *
 from .switchState import *
 
 from warpSPHCore import *
 from .CullenDehnen2010 import *
+
+__all__ = ['computeHopkinsTerms', 'computeHopkinsUpdate']
+
 
 def computeHopkinsTerms(
         dt: float,

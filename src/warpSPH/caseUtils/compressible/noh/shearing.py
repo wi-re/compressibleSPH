@@ -1,6 +1,18 @@
+"""Shearing Noh implosion initial state, used by `warpSPH.cases.shearingNoh`.
+
+Layers a transverse shear onto the Noh setup: the x-velocity is a sign step at
+`x=0` (converging left/right halves, as in the plain Noh case) while the
+y-velocity is a `cos(2*pi*x)` wave of amplitude `vs`, so the converging shock
+is crossed by a periodic shear it is not aligned with. Density/pressure come
+from `setupBasicCompressibleInitialState` unchanged.
+"""
+
 from ....sample.compressible import setupBasicCompressibleInitialState
 import torch
 import math
+
+__all__ = ['sampleShearingNoh']
+
 
 def sampleShearingNoh(vs, nx, config, schemeConfig, extraData, SimulationState, SimulationSystem):
 

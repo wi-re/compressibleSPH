@@ -1,4 +1,13 @@
+"""compSPH multistep internal-energy update.
 
+Combines the per-Butcher-stage pairwise pressure/viscosity accelerations and
+energy-partition factors (`f_ij`, from `balance.py`) recorded across a
+Runge-Kutta step into a single internal-energy increment: builds a half-step
+velocity from the weighted stage accelerations, then scatter-sums each pair's
+partitioned thermal work back to particles. `EnergyScheme.PdV` uses a
+different weighting (half viscosity, unweighted pressure) than the other
+schemes.
+"""
 
 import torch
 
@@ -14,6 +23,9 @@ from ...math.scatter import scatter_sum
 
 
 from typing import Tuple
+
+__all__ = ['compSPH_deltaU_multistep']
+
 def compSPH_deltaU_multistep(
         dt : float,
         initialState: Any, #CompSPHState,

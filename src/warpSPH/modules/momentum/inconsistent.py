@@ -1,3 +1,10 @@
+"""Momentum equation source term, plain (non-renormalized) SPH divergence.
+
+Computes `-rho * div(v)` using the standard "inconsistent" (not
+gradient-renormalized) SPH divergence estimator, all-to-all with
+super-symmetric support.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +13,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeMomentum']
 
 
 

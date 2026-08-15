@@ -27,52 +27,276 @@ see README for the current layout, not reconstructed here.
 
 ### Legibility (Phase 3 / 3b backlog — no correctness stakes)
 
-- [ ] **Module documentation.** Added as a tracked item 2026-08-15 — it had
-      never been one, so the plans read as though the only remaining legibility
-      work was `__all__` and dead comments. Measured 2026-08-15:
+- [x] **Module documentation — entire `src/warpSPH/` tree (done 2026-08-15).**
+      Added as a tracked item 2026-08-15 — it had never been one, so the plans
+      read as though the only remaining legibility work was `__all__` and dead
+      comments. Originally scoped to `modules/`, `configurations/`, `regions/`,
+      `schemes/`, `caseUtils/`; extended same-day, per the user, to cover
+      everything else once those five landed clean. Measured 2026-08-15
+      before/after:
 
-      | scope | documented | share |
+      | scope | before | after |
       |---|---|---|
-      | modules | 53/277 | 19% |
-      | public functions | 113/797 | 14% |
-      | classes | 11/82 | 13% |
-
-      The distribution matters more than the total, because it is not uniform
-      neglect — it tracks exactly what the cleanup sweep covered:
+      | module docstrings | 53/277 (19%) | **277/277 (100%)** |
+      | `__all__` coverage | 106/277 (38%) | **271/277 (97%)** |
 
       | directory | module docstrings | share |
       |---|---|---|
       | `cases/` | 30/30 | 100% |
       | `runner/` | 8/8 | 100% |
-      | `schemes/` | 1/8 | 12% |
-      | `math/` | 1/12 | 8% |
-      | `caseUtils/` | 3/42 | 7% |
-      | `configurations/` | 1/20 | 5% |
-      | `regions/` | 0/9 | 0% |
-      | `modules/` | **1/104** | **1%** |
+      | everything else in `src/warpSPH/` | 239/239 | **100%** |
 
-      `cases/` and `runner/` are at 100% because Phases 2/2b/3 worked through
-      them; the physics layer was never in scope for those phases. So this is
-      the *last* layer, not a neglected one — and `cases/`+`runner/` are the
-      worked pattern to copy: say what the module is for and what bites, not
-      what the code already says.
+      `cases/` and `runner/` were already at 100% from Phases 2/2b/3; this
+      item covers every remaining file the cleanup sweep skipped because the
+      physics/config/case-setup/math/geometry/io/rigid-body/state layers were
+      never in scope for those phases. The 6 files still missing `__all__`
+      (`caseUtils/waveEquation/__init__.py`, `configurations/waveEquationConfig.py`,
+      `math/noiseFunctions/__init__.py`, `modules/sps/__init__.py`,
+      `sample/waveSystem.py`, `systems/waveSystem.py`) were already documented
+      before this pass and out of scope — not revisited.
 
-      **Do this together with the `__all__` item below.** They are the same pass
-      over the same files — `modules/`, `configurations/`, `regions/`,
-      `schemes/`, `caseUtils/` — and working out a module's real exports is most
-      of the work of describing it. Splitting them means reading `modules/`
-      twice. Unlike `__all__`, this one does not decompose well into
-      "opportunistically as modules get touched": a directory at 1% needs a
-      deliberate pass to become navigable at all.
+      Done via thirteen parallel passes split by subpackage — `modules/` first
+      (surfaceDetection+boundaryConditions+sps+internalEnergy;
+      shockCapturing+adaptiveSupport+noise; dissipation+pressure+gravity+util;
+      liu+incompressible+eos+deltaSPH+shifting;
+      compSPH+crk+mdbc+momentum+timestep+density), then `configurations/`;
+      `regions/`+`schemes/`; `caseUtils/` in two batches (the compressible
+      case-family directories, then the rest + `waveEquation/`); then a second
+      round covering the rest of the tree: `math/`+top-level package files;
+      `geometry/`+`initializers/`+`io/`; `rigidBody/`+`systems/`+`utils/`; and
+      `sample/`. Each file got a module docstring plus a grounded `__all__`
+      (cross-checked against the owning `__init__.py`'s imports plus a
+      repo-wide grep for cross-file usage, not guessed). Every touched file
+      verified with `python -m py_compile`; full-repo verification after all
+      thirteen passes landed: `python -m py_compile` over every file in `src/`,
+      `python scripts/check_imports.py` (276 modules, 1613 first-party imports,
+      all resolve), `scripts/run_tests.sh` (89/89 tests), and
+      `scripts/run_sweep.py` (27/27 cases) all green, no import or logic
+      breakage — run twice, once after the first five directories and again
+      after the full-tree extension.
 
-      Scope honestly: this is a project, comparable to the notebook migration
-      below, not a chore to slot into another change.
-- [ ] **`__all__` coverage.** 106/277 files (38%) define one (re-measured
-      2026-08-15; was 94/274 on 2026-08-12); the rest still star-export
-      everything they import. `schemes/` (converted to explicit imports,
-      `__all__` added) is the worked pattern for the rest. Do opportunistically
-      as modules get touched — *except* when the module-documentation pass above
-      is picked up, which should sweep both at once over the same files.
+      Real (non-documentation) findings that surfaced while reading the code
+      closely enough to write accurate docstrings:
+      - `modules/eos/gas.py` (`idealGas`, `computeQuantitiesIdealGas`,
+        `props.py`'s `fluidProperties`/`EOSSource`) is dead: not imported by
+        `eos/__init__.py` or any scheme/case. The live ideal-gas path is
+        `idealGas.py` → `idealGasEOS`. Its own `fluidProperties` dataclass is
+        also a separate, smaller type from
+        `configurations.moduleConfigurations.fluidProperties.fluidProperties`
+        (the one actually used as `schemeConfig.fluid`) — a name collision
+        that could confuse a future reader more than the dead code itself.
+      - `modules/eos/weaklyCompressible.py:43-44` (resolved 2026-08-15): a
+        `torch.clamp(..., min=0.8)` line was computed and then immediately
+        overwritten by the next line, so it never took effect. Per the user,
+        this is intentional and should stay that way — the clamp was "a very
+        rough attempt to circumvent some instabilities"; non-physical
+        densities are supposed to blow up rather than be silently masked, so
+        they can actually be caught. Line commented out (not deleted) with a
+        note that this is where a clamp would go if one were ever wanted,
+        instead of leaving a dead-but-computed line that misleadingly implied
+        an active guard.
+      - **`schemes/crkSPH.py`'s `gradHState` `UnboundLocalError` (fixed
+        2026-08-15).** `gradHState` was read (as an argument to
+        `computeMomentumConsistent`) inside the `if currentState.divergence is
+        None:` first-call fallback branch, but only ever assigned *after* that
+        branch (`gradHState = None`, its adaptive-support branch also
+        commented out). Any call where `divergence` starts unset — a fresh
+        state's first CRK step — would raise `UnboundLocalError`. Likely why
+        the Phase-4.2 `computeCompSPHBalanceTermWarp` segfault investigation
+        (below) found CRK needed "a fully set-up state": that workaround
+        incidentally avoids ever hitting this branch, but the crash was still
+        live for any caller that doesn't pre-populate `divergence`. Fixed per
+        the user: `gradHState = None` hoisted above the branch that reads it.
+      - `schemes/deltaSPH.py`'s mDBC density/velocity calls look unconditional
+        at the call site (one inline comment claiming a skip is stale), but
+        both `computeMdbcDensity`/`computeBoundaryVelocities` no-op internally
+        when there are no boundary-kind particles, so this is stale
+        documentation, not a functional bug — corrected in the module
+        docstring rather than left overstated.
+      - `configurations/region.py`'s `parseInitialConditions` builds
+        `outDict` but has no `return` statement, always yielding `None`; its
+        siblings `parseParticleSet`/`unparseParticleSet` are defined but never
+        called (`ParticleRegion.toDict`/`fromDict` hardcode `particles=None`
+        with those calls commented out).
+      - `configurations/moduleConfigurations/viscositySwitchParameters.py`:
+        `ViscositySwitchConfig.limitXi` is declared twice in the dataclass
+        (default `False`, then `True`) — only the second is live; confirmed
+        via `modules/shockCapturing/CullenDehnen2010.py:196` that `True` is
+        what's actually consumed.
+      - `configurations/incompressible.py`'s `incompressibleConfigToDict`/
+        `dictToIncompressibleSPHConfig` silently drop `regions`/`rigidBodies`
+        on round-trip, unlike the otherwise-parallel `weaklyCompressible*`
+        functions.
+      - `schemes/crkSPH.py`'s `crkSPH_step` type-hints `schemeConfig:
+        CompSPHConfig`, but `schemes/builder.py` actually passes a
+        `CRKSPHConfig` (which has `.crkViscosityParams`, absent from
+        `CompSPHConfig`) — harmless since Python doesn't enforce hints, but a
+        stale/misleading annotation.
+      - `caseUtils/compressible/triplePoint/equalMass.py`'s
+        `sampleTriplePointEqualMass` takes `splitX`/`splitY` for the initial
+        lattice layout, but its post-hoc region-density assignment re-derives
+        the three region masks from hardcoded thresholds instead of the
+        passed-in values — happens to match `cases/triplePoint.py`'s current
+        defaults exactly, would silently disagree if a caller passed different
+        splits.
+
+      **More findings from the full-tree extension (2026-08-15), most
+      relevant first:**
+      - **`systems/weaklyCompressible.py:224-228` — the Padé pole-clamp fix
+        (see [[project_delta_sph_instability_fixes]]-equivalent note above,
+        "delta-SPH instability fixes") is currently dead.** `epsilon` is still
+        computed and clamped to `[-1.5, 1.5]` ("Pade approximant has a pole at
+        +-2, stay well clear of it"), but the Padé(1,1) density update that
+        would consume it is commented out (`# self.state.densities =
+        initialRho * (2 - epsilon) / (2+epsilon)`) and replaced by an
+        unclamped exponential update, `initialRho * torch.exp(dt * drhodtMid /
+        midRho)`, "to avoid negative densities" per its own inline comment.
+        This looks like a deliberate, reasonable design change (exponential
+        updates can't go negative; Padé(1,1) can, pole or not) rather than a
+        bug, but it means the clamp this repo's history credits with fixing a
+        past instability is not what's actually running now — worth
+        confirming with the user whether the exponential form is the current
+        intended behavior or a regression, and whether `epsilon`/its clamp
+        should be deleted as dead code or restored to active use.
+      - `modules/eos/gas.py`-class dead code, recurring: `initializers/
+        weaklyCompressible.py:9-115`'s `initializeWeaklyCompressibleState` is
+        never called from any case/runner/config path; the live path is
+        `initializeState`/`initializeSimulation` (same file, line 131+).
+      - `geometry/sdfFunctionality/implicitFunctions.py`: `sdEgg` mutated its
+        input tensor in place (`p[:, 0] = torch.abs(p[:, 0])`) — the exact bug
+        class already found and fixed in `sdMoon` in the same file (with an
+        explanatory comment there), apparently missed when that fix was
+        applied. **Fixed 2026-08-15**, mirroring `sdMoon`'s out-of-place
+        pattern; verified a repeated call on the same tensor now returns
+        identical results and leaves the input tensor unmodified.
+      - `geometry/sdfFunctionality/implicitFunctions.py`: `sdRoundedCross` is
+        a complete, correctly out-of-place implementation but is missing from
+        `functionDict` and `__all__`, unlike every sibling shape function —
+        unreachable through the public `getSDF` API. Looks like an omission,
+        not intentional exclusion. Not fixed (adding it to the registry is a
+        one-line change but changes public surface area, left for the user).
+      - `math/noiseFunctions/generator.py:37` — `generateSimplex` called
+        `_init(seed)` (defined in `util.py`) without importing it anywhere in
+        the module: an unconditional `NameError` on every call, reachable via
+        the public `generateOctaveNoise(..., kind='simplex')`/`generateNoise`
+        (`'perlin'` is the default and the only kind used anywhere in this
+        repo, which is why this was never caught). **Fixed 2026-08-15** by
+        importing `_init` directly.
+      - Fixing the above surfaced a second, deeper bug in the same dead code
+        path: `math/noiseFunctions/util.py`'s `_init` uses `np.*` without
+        importing `numpy` itself — it only "worked" by `np` leaking through
+        `from .constants import *`, which had no `__all__` before this pass.
+        **This pass's own `__all__` addition to `constants.py` (correctly
+        scoped to real constants, excluding `np`) would have turned this into
+        a live regression** if left as found. **Fixed 2026-08-15** by
+        importing `numpy` directly in `util.py` instead of relying on
+        wildcard-import leakage. Flagging the general risk: this repo has
+        many `from .x import *` chains: `__all__` tightened elsewhere in this
+        pass in files with *no* test/sweep coverage could have similar
+        latent leakage dependents that neither `check_imports.py` nor
+        `run_tests.sh`/`run_sweep.py` would catch, since none of them exercise
+        every function in every module. `generateSimplex` was only caught
+        because it was independently smoke-tested during this fix; verify
+        this way, not assumed.
+      - `math/noiseFunctions/generator.py`: after the fix above,
+        `generateSimplex(..., dim=1)` returns a raw tuple while `dim=2`/`dim=3`
+        return tensors — an inconsistent return type across dimensions, found
+        while smoke-testing the import fix. Not investigated further (simplex
+        noise is not used anywhere in this repo currently) or fixed.
+      - `caseUtils/waveEquation/sample.py:73`: `addNoise(..., noiseType=
+        'perlin')` (the default) calls `sampleVoronoi`, whose only import in
+        that file is commented out — a guaranteed `NameError` on the default
+        path. Consistent with the wave-equation subsystem's already-documented
+        "not runnable as it stands" status (see "Won't fix / rejected" below);
+        not fixed.
+      - `sample/optimal.py:22-28`: `sampleOptimal` computes a jittered lattice
+        then immediately overwrites `positions` with fully uniform random
+        values, discarding the jitter entirely — the `jitter` parameter has no
+        effect. Latent: `SamplingScheme.optimal`/`glass`/`jittered`/`random`
+        are never selected by any case in this repo (default is `regular`).
+      - `sample/optimal.py:68-88` + `sample/wp_deltaShift.py`: `sampleOptimal`
+        adds `computeDeltaShiftWarp`'s raw return value straight onto particle
+        positions, but that function's contract (per `modules/shifting/
+        delta.py`, the live runtime shifting path) is to return an *unscaled*
+        term the caller must scale by `-CFL * Ma * 2 * h^2` — which
+        `modules/shifting/delta.py` does and `sampleOptimal` doesn't, even
+        though it passes `CFL`/`computeMach`/`c_max` as if they mattered.
+        Compounding it, those three args are computed into a local
+        `shiftScaling` inside the warp kernel that is never applied to the
+        output — dead on both sides of the call. Same latency caveat as above
+        (unreachable via any current case).
+      - `sample/shell.py:15-16` and `:42-45` — **unlike the two `sample/`
+        findings above, this one is live**: `shell.py` is used by
+        `caseUtils/compressible/sedov/initial.py` and
+        `caseUtils/compressible/yeeVortex/sample.py`, both exercised in the
+        27/27 sweep. Two computed-then-discarded values: `dr_init =
+        torch.sqrt(dx**2 / np.pi)` is immediately overwritten by `dr_init =
+        dx/2` on the next line (same pattern as the already-resolved
+        `weaklyCompressible.py` EOS clamp), and `dTheta = 2*np.pi/n_hat` is
+        used only as `theta += random.random() * dTheta * 0` — the trailing
+        `* 0` silently makes the intended per-shell angular jitter a no-op.
+        Neither crashes (the sweep passes either way), but both mean the
+        shell sampler's actual initial-condition quality (radial spacing,
+        angular jitter) is not what its own code implies it should be for
+        `sedov`/`yeeVortex`'s spherical/radial ICs.
+      - `systems/compSPH.py:63-71`: `apply_velocity_update` has an
+        unreachable `return updated` after its real `return`, referencing an
+        undefined name `updated` — harmless (dead code, never executes), but
+        the commented-out logic above it suggests a "passive particles skip
+        acceleration" path was started and abandoned mid-edit.
+      - The `passive` field on every `*SystemUpdate` (`compressibleMonaghan.py`,
+        `incompressible.py`, `weaklyCompressible.py`) is populated as an
+        all-`False` mask by every scheme (`crkSPH.py`, `dfsph.py`, `compSPH.py`,
+        `deltaSPH.py`) but never read anywhere except the dead code above —
+        declared, filled in, never consumed.
+      - `rigidBody/integrate.py`: `integrateRigidBody(rigidBody, dudt, dwdt,
+        dt)` is always called with `dudt=dwdt=0` (from `systems/
+        weaklyCompressible.py:225`/`systems/incompressible.py:284`). The
+        function's signature implies force/torque-driven dynamics, but in
+        practice a rigid body only ever moves at whatever
+        `angularVelocity`/`linearVelocity` a case set once (e.g.
+        `cases/movingObstacle.py`) — there is no live two-way fluid-drives-body
+        coupling path despite the API shape suggesting one.
+      - `rigidBody/ghostParticles.py:32-33`: `clampedDist = sdfValues` is
+        computed then immediately overwritten by the next line — same
+        computed-then-clobbered pattern as above.
+      - `utils/timer.py`'s `TimedBlock.__exit__` never actually sets
+        `cuda_ms` (the `elapsed_time`/`synchronize()` calls are commented
+        out). Low-stakes: every current use site is itself commented-out
+        profiling scaffolding in `schemes/deltaSPH.py`/`dfsph.py` that
+        computes `cuda_ms` externally instead.
+      - `systems/compSPH.py`/`compressibleMonaghan.py`: `entropies` is tagged
+        `'soundSpeed'` (duplicating `soundspeeds`' own tag) and `pressures` is
+        tagged `'damping'` — looks like copy-paste. Confirmed inert: the
+        tag-lookup functions (`find_tagged_field`/`get_tagged_attr` from
+        `warpSPHIntegrators`) are never called anywhere in this repo.
+      - `configurations/region.py`, `moduleConfigurations/
+        viscositySwitchParameters.py`, `configurations/incompressible.py`,
+        `schemes/crkSPH.py`'s stale type hint, and
+        `caseUtils/compressible/triplePoint/equalMass.py`'s ignored
+        `splitX`/`splitY` were already listed above (found during the first
+        five-directory pass, still open).
+
+      None of the findings above beyond the ones marked "fixed"/"resolved"
+      have been acted on — recorded for a future decision, not silently
+      changed. This is deliberately a documentation pass, not a bug-fix pass;
+      per the user (2026-08-15), keep recording what surfaces along the way
+      rather than fixing it inline, except where a fix is small, isolated, and
+      unambiguous enough to not need a design decision (the ones marked
+      "fixed" above all clear that bar: an in-place-mutation matching an
+      already-applied sibling fix, and two missing imports — one of them this
+      pass's own regression, caught before it could land).
+
+      This item and the `__all__` item below were done together, as planned —
+      working out a module's real exports was most of the work of describing
+      it, and splitting them would have meant reading each file twice.
+- [x] **`__all__` coverage.** 106/277 files (38%) → **271/277 (97%)**, done
+      together with the module-documentation item above (re-measured
+      2026-08-15; was 94/274 on 2026-08-12 before that). The 6 remaining files
+      without one were already documented before this pass and out of scope
+      (listed in the module-documentation item above) — do opportunistically
+      if those get touched, the way `schemes/` (converted to explicit imports)
+      was the worked pattern before this pass.
 - [ ] **Dead commented-out code** in `schemes/crkSPH.py`,
       `modules/mdbc/wp_nopenshift.py`, `shockCapturing/CullenDehnen2010.py`,
       `schemes/dfsph.py`, `caseUtils/compressible/sod/sod.py`,

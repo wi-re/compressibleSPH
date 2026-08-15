@@ -1,8 +1,22 @@
+"""Plain regular-lattice particle sampler: `buildPointCloud` lays out an
+axis-aligned grid spanning `domain` (cell size picked from the domain's
+shortest, or longest if `shortEdge=False`, side so every dimension gets a
+whole number of cells, honoring per-axis periodicity), and
+`sampleRegularParticles` wraps it into a `ParticleSet` with uniform unit
+density and per-particle mass equal to the cell volume/area. `jitter > 0`
+adds uniform positional noise scaled by the cell spacing; `band` pads
+`ns`/the coordinate range with extra layers on each side (used for ghost
+regions). This is the sampler almost every case and other `sample/` module
+builds on.
+"""
+
 from ..utils.domain import DomainDescription
 from ..geometry import PointCloud, ParticleSet
 from ..utils.support import volumeToSupport
 
 import torch
+
+__all__ = ['sampleRegularParticles']
 
 def buildPointCloud(nx, domain: DomainDescription = None, targetNeighbors = 16, jitter = 0.0, band = 0, shortEdge = True):
     periodicity = domain.periodic

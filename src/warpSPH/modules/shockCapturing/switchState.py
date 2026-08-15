@@ -1,6 +1,16 @@
+"""Per-step diagnostic/state bundle shared by the Cullen-Dehnen and Hopkins viscosity switches.
+
+Every field besides ``alpha0s``/``alphas`` is optional because the two
+switches (and the ``NoneSwitch`` no-op) populate a different subset -- e.g.
+plain Cullen-Dehnen leaves ``Shear``/``Rot`` as ``None`` since it derives its
+limiter from the divergence trace rather than the full shear tensor.
+"""
+
 from dataclasses import dataclass
 from typing import Optional
 import torch
+
+__all__ = ['ViscositySwitchState']
 
 @dataclass(slots = True)
 class ViscositySwitchState:

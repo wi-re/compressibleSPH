@@ -1,5 +1,14 @@
+"""Classic gradient-noise (Perlin) generators for 1D/2D/3D grids
+(`perlinNoise1D`/`perlinNoise2D`/`perlinNoise3D`), consumed by
+`generator.generatePerlin`. `perlinNoise1D` is implemented as a 2D call
+sliced down to one row; `perlinNoise2D` returns noise pre-scaled by
+`sqrt(2)`, `perlinNoise3D` does not.
+"""
+
 import torch
 import numpy as np
+
+__all__ = ['interpolant', 'perlinNoise1D', 'perlinNoise2D', 'perlinNoise3D']
 
 def interpolant(t):
     return t*t*t*(t*(t*6 - 15) + 10)

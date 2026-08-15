@@ -1,3 +1,24 @@
+"""Per-particle delta-SPH density-diffusion kernel: for each neighbor pair,
+builds a Fick's-law-style flux `psi_ij` from the inter-particle density
+difference and (depending on `densityScheme`) a renormalized or
+unrenormalized density gradient, then accumulates `apparentVolume *
+dot(psi_ij, gradW_ij)` as an unscaled divergence — the delta/c_s/h prefactor
+is applied by the caller (`densityDiffusion.py`).
+
+`densityScheme` (a `DensityDiffusionScheme` int) selects the flux:
+- `deltaSPH`: `psi_ij = (gradRhoL_i + gradRhoL_j) - 2*(rho_j-rho_i)*n_ij/r_ij`
+  — renormalized gradients combined with the density-difference term.
+- `denormalized`: the same combination but with the unrenormalized `gradRho`.
+- `densityOnly`: just `-2*(rho_j-rho_i)*n_ij/r_ij` (no gradient term).
+- `deltaOnly` / `denormalizedOnly`: just the renormalized/unrenormalized
+  gradient sum (no density-difference term).
+All branches guard the `x_ij` normalization and the density-difference
+term's `1/r_ij` with a `1e-14 * h_i` epsilon to avoid division by zero at
+zero separation. `computeDensityDiffusionDeltaSPH` is the public torch/warp
+bridge; `_Func_i`/`_Func_Adjacency`/`_Kernel` are its warp-side
+implementation and are not meant to be called directly.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +27,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeDensityDiffusionDeltaSPH']
 
 
 from ...enumTypes import *

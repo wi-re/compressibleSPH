@@ -1,3 +1,13 @@
+"""`gravityConfiguration` and `GravityType`: gravity settings embedded as
+`.gravityConfig` on `WeaklyCompressibleSPHConfig`/`IncompressibleSPHConfig`, read
+by `modules/gravity/{directional,pointGravity,potentialField,wrapper}.py` and
+`modules/mdbc/{velocity,density2025}.py`. `GravityType.PotentialField` is wired
+(see `modules/gravity/potentialField.py`); `direction`/`origin` default to plain
+Python lists but `gravityConfigurationToDict` also accepts tensors for them.
+"""
+
+__all__ = ['GravityType', 'gravityConfiguration', 'buildDefaultGravityConfiguration', 'gravityConfigurationToDict', 'dictToGravityConfiguration']
+
 from ...enumTypes import *
 from typing import Optional, Union, List
 from dataclasses import dataclass, field

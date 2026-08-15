@@ -1,10 +1,17 @@
+"""4D OpenSimplex noise (`_noise4`), numba-jitted. Used by
+`generator.generateSimplex`'s tileable 2D path, which projects the 2D
+sample grid onto a 4D torus via sin/cos of the periodic coordinates.
+"""
+
 from .util import _extrapolate4
 from .constants import STRETCH_CONSTANT4, SQUISH_CONSTANT4, NORM_CONSTANT4
 from math import floor
 from ctypes import c_int64
 from numba import njit, prange
 
-@njit(cache=True) 
+__all__ = ['_noise4']
+
+@njit(cache=True)
 def _noise4(x, y, z, w, perm):
     # Place input coordinates on simplectic honeycomb.
     stretch_offset = (x + y + z + w) * STRETCH_CONSTANT4

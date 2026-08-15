@@ -1,3 +1,10 @@
+"""Per-boundary-condition dispatch: for each `bc` in
+`compParams.boundaryConditions`, evaluate `bc.sdf` on periodic-wrapped
+positions and apply the matching Dirichlet/forcing/update function only to
+particles inside the SDF (`d < 0`). Works against either a `system.state`
+(state-holding system) or a bare state object depending on
+`hasattr(system, 'state')`.
+"""
 
 from warpSPHCore import *
 from ...math import getPeriodicPositions
@@ -12,6 +19,8 @@ from ...configurations import SimulationConfig, CompressibleSPHConfig
 from typing import Any
 
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['enforceDirichlet', 'computeForcing', 'enforceUpdates']
 
 def enforceDirichlet(
     system: Any,

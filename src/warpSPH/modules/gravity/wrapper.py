@@ -1,3 +1,11 @@
+"""Public dispatcher for the gravity subpackage: returns zeros when
+`schemeConfig.gravityConfig.active` is False, otherwise routes to
+`directional.computeDirectionalGravity`, `pointGravity.computePointGravity`,
+or `potentialField.computePotentialFieldGravity` based on
+`schemeConfig.gravityConfig.type` (raises `ValueError` for any other
+`GravityType`).
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -16,6 +24,8 @@ from ...configurations.moduleConfigurations.gravity import GravityType, gravityC
 from .directional import computeDirectionalGravity
 from .pointGravity import computePointGravity
 from .potentialField import computePotentialFieldGravity
+
+__all__ = ['computeGravity']
 
 def computeGravity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     with record_function("[warpSPH] - computeGravity"):

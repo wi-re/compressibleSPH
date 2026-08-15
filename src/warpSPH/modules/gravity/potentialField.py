@@ -1,3 +1,10 @@
+"""Harmonic potential-field gravity: acceleration `-magnitude**2 * (x -
+origin)` (a linear restoring force toward `origin`, i.e. a quadratic
+potential well), computed via a normalize-then-rescale-by-distance detour
+with a `1e-7` epsilon guarding points at the origin; periodic images of
+position are used via `getPeriodicPositions`.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -13,6 +20,8 @@ from warpSPH.configurations.simulationConfig import SimulationConfig
 from warpSPH.math import getPeriodicPositions
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.gravity import GravityType, gravityConfiguration
+
+__all__ = ['computePotentialFieldGravity']
 
 
 def computePotentialFieldGravity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:

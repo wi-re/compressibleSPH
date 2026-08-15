@@ -1,3 +1,10 @@
+"""The classic Monaghan (1992-style) compressible SPH step: adaptive support
+solve, super-symmetric adjacency, Gather-mode density, ideal-gas EOS, optional
+grad-h corrections (`GradHState`), symmetric pressure force, Monaghan dudt,
+and separate artificial-viscosity/conductivity/thermal-dissipation terms
+added on top.
+"""
+
 # from warpSPH.modules import evaluateOptimalSupport, idealGasEOS, computeOmega
 # from warpSPHCore import SupportScheme
 # from warpSPH.modules import computePressureForceSymmetric, computeDudtMonaghan, computeMomentumConsistent

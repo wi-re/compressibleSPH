@@ -1,3 +1,14 @@
+"""`ShiftProperties`, `ShiftingScheme`, `ShiftingProjectionScheme`: delta-SPH
+particle-shifting settings, embedded as `.shiftProperties` on
+`WeaklyCompressibleSPHConfig`/`IncompressibleSPHConfig` and read by
+`modules/shifting/wrapper.py`. Note `buildDefaultShiftProperties()` overrides
+several of the dataclass's own field defaults (`computeMach` False->True,
+`projectionScheme` `dot`->`mat`) -- both are live values used depending on
+whether a caller constructs `ShiftProperties()` directly or via the builder.
+"""
+
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftProperties', 'buildDefaultShiftProperties']
+
 from ...enumTypes import *
 from typing import Optional, Union, List
 from dataclasses import dataclass, field

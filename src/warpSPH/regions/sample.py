@@ -1,7 +1,17 @@
+"""Sample a region's fluid particles: lay a regular lattice over `config`'s
+domain (`sampleRegularParticles`) at resolution `nx`, evaluate `sdf` on it,
+and keep only the particles inside it (`sdfDist < 0`). With `filter=False`
+the sdf-derived mask/distances are discarded and replaced with trivial
+all-True/all-`inf` values, so the full lattice is returned unfiltered.
+"""
+
 from ..sample import sampleRegularParticles
 import torch
 from ..geometry import ParticleSet
 import numpy as np
+
+__all__ = ['sampleParticles']
+
 
 def sampleParticles(config, schemeConfig, sdf, nx, filter = True, shortEdge = True):
     particlesA = sampleRegularParticles(nx, config.domain, config.targetNeighbors, 0.0, 0, shortEdge = shortEdge)

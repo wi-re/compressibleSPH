@@ -1,3 +1,11 @@
+"""Gradient-renormalized SPH density gradient.
+
+Computes the density gradient corrected by a gradient-renormalization matrix
+`L` (derived from the local particle-distribution covariance via
+`computeRenormalizationMatrices`, computed on demand if not supplied) --
+used by delta-SPH's density diffusion term, where an uncorrected gradient
+estimate is too noisy near boundaries/free surfaces.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -12,6 +20,8 @@ from warpSPHCore import *
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
+
+__all__ = ['computeGradRhoL']
 
 
 def computeCovariance(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:

@@ -1,9 +1,22 @@
+"""delta^+ particle shifting (Sun et al. 2017 scaling, per in-code comments):
+iterates a raw kernel-gradient shift term (`computeDeltaShiftWarp`, imported
+from `warpSPH.sample.wp_deltaShift`) and rescales it to a position delta of
+`-CFL * Ma * 2 * h^2`, where `Ma = v_max / c0` is a per-call Mach number
+estimate (density, position and velocities are restored to their pre-call
+values afterwards; only the accumulated position `delta` is returned to the
+caller). An equivalent shifting-*velocity* form (Michel 2022 scaling) is
+present in a comment but not used. `v_max` falls back to `c_max = 0.1` when
+the finite velocity magnitudes are all ~zero, to avoid a zero shift.
+"""
+
 # 17. If finalize, compute shifting and update positions and velocities
 
 from warpSPHCore import *
 import torch
 
 from warpSPH.sample.wp_deltaShift import computeDeltaShiftWarp
+
+__all__ = ['computeDeltaShift', 'computeDeltaShiftWarp']
 
     # for i in tqdm(range(shiftIters), leave = False):
 def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, iters = -1):

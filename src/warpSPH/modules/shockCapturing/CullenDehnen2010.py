@@ -1,8 +1,26 @@
+"""Cullen & Dehnen (2010) time-dependent artificial-viscosity switch.
+
+Evaluates the per-particle limiter ``R``/``Xi`` (eq. 17-18) from the velocity
+divergence and its sign-weighted SPH interpolation, derives a shear-based
+target alpha via the CRKSPH-style ``xi`` kernel-support normalization, and
+integrates it toward that target with a fixed decay length ``l = 0.05`` (eq.
+16). ``computeCullenTerms`` performs both the target-alpha computation and its
+time integration in one call (the original paper's convention); the trailing
+``correctVelocityGradient`` branches of ``computeSecondOrderV`` apply the
+CRKSPH gradient-renormalization matrix ``M_inv`` when configured. Several
+alternate/commented-out formulations (a naive second-order divergence
+estimate, an unused ``computeXi`` limiting workaround) are left in place from
+prior experimentation; only the active code paths are wired into the schemes.
+"""
+
 from .common import *
 from .switchState import *
 
 from warpSPHCore import *
 
+
+
+__all__ = ['computeSecondOrderV', 'computeR', 'computeXi', 'compute_vsig', 'computeCullenTerms', 'computeCullenUpdate']
 
 
 def computeSecondOrderV(

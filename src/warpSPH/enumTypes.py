@@ -1,5 +1,24 @@
+"""Central enum registry for warpSPH: the scheme/kernel/BC/viscosity-switch
+selectors used throughout `configurations/`, `modules/`, `schemes/`, and
+`runner/` to pick a numerical formulation. Values are the strings/ints
+stored in casefile YAML and parsed back into these enums by
+`io.parsers`.
+"""
+
 from enum import Enum
-import torch    
+import torch
+
+__all__ = [
+    'EnergyScheme',
+    'AdaptiveSupportScheme',
+    'ViscositySwitch',
+    'CompressibleSPHScheme',
+    'WeaklyCompressibleSPHScheme',
+    'IncompressibleSPHScheme',
+    'EquationOfState',
+    'DensityDiffusionScheme',
+    'PressureForceScheme',
+]
 
 # @torch.jit.script
 class EnergyScheme(Enum):

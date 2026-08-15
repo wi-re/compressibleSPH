@@ -1,3 +1,14 @@
+"""Pressure-force operator supporting several pressure-symmetrization
+formulations selected via `enumTypes.PressureForceScheme`
+(`conservative`, `nonConservative`, an Antuono-style surface-aware blend,
+one-sided `i`/`j`, and `symmetric`). The Antuono formulation switches to the
+symmetric form whenever either pressure is non-negative or the query
+particle is flagged as a free-surface particle (`querySurfaceMask`), and
+falls back to the antisymmetric ("conservative") form only in the
+negative-pressure, non-surface case, to avoid the tensile instability.
+Output is the negated pressure-gradient term divided by density.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -8,6 +19,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import PressureForceScheme
+
+__all__ = ['computePressureSurfaceAwareWarp']
 
 @wp.func
 def computePressureSurfaceAware_Func_i(

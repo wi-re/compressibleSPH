@@ -1,3 +1,19 @@
+"""IISPH constant-density pressure solver: relaxed-Jacobi iteration that
+solves for a pressure field driving the predicted density back to
+`schemeConfig.fluid.restDensity` (source term `rho0 - rhoStar`, the
+density-error formulation, as opposed to `divergenceFree.py`'s divergence
+formulation).
+
+Each iteration computes the pressure acceleration (`computePressureAccelIISPH`,
+scatter mode), its position-drift residual (`dt**2 * computePressureShiftIISPH`),
+and updates `pressure += omega * residual / alpha` (`dt**2 * computeAlpha`'s
+IISPH diagonal term), clamping pressures to be non-negative each step.
+`rhoStar` is clamped to a minimum of 0.9 and `alpha` to a maximum of -1e-6 to
+avoid division blow-up. Iterates between `solverConfig.pressureSolver.
+{minIterations,maxIterations,tolerance,relaxationFactor}`, stopping early once
+past `minIterations` and below `tolerance`.
+"""
+
 from warpSPHCore import *
 import torch
 from warpSPH.systems import *
@@ -17,8 +33,10 @@ from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
 
+__all__ = ['solveIncompressible']
 
-def solveIncompressible(        
+
+def solveIncompressible(
     
         particles: Any, 
         config: SimulationConfig, 

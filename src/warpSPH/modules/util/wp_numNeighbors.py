@@ -1,3 +1,13 @@
+"""Per-particle neighbor count: `countNeighborsWarp` counts, for each query
+particle, the number of reference particles with a nonzero kernel value
+(i.e. within kernel support) under the given `OperationProperties`/
+correction terms; `countNeighbors` is a convenience wrapper that builds
+those properties (`SupportScheme.SuperSymmetric`, all-to-all, naive
+gradient mode) from a `SimulationConfig`. The neighbor loop reuses the
+generic `WarpOperation.Gradient` kernel-launch plumbing even though no
+gradient is actually computed.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -9,6 +19,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import *
+
+__all__ = ['countNeighborsWarp', 'countNeighbors']
 
 @wp.func
 def countNeighbors_Func_i(

@@ -1,3 +1,18 @@
+"""`BoundaryCondition` and its supporting enums (`BCType`, `BoundaryConditionType`,
+`VectorProjectionType`): a declarative per-boundary spec of an SDF plus
+per-quantity Dirichlet/update/forcing callables, applied by
+`modules/boundaryConditions/bcs.py` and populated by case builders (e.g.
+`cases/lidDrivenCavity.py`, `cases/kolmogorov.py`, `caseUtils/weaklyCompressible.py`).
+Callables are pickled via `dill` (falling back to stdlib `pickle` on decode for
+configs written before the `dill` switch) so a boundary condition survives a
+TOML/HDF5 round-trip through `boundaryConditionToDict`/`dictToBoundaryCondition`.
+"""
+
+__all__ = [
+    'BCType', 'BoundaryConditionType', 'VectorProjectionType', 'BoundaryCondition',
+    'boundaryConditionToDict', 'dictToBoundaryCondition',
+]
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, List, Tuple, Dict, Any

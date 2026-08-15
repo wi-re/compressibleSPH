@@ -1,3 +1,17 @@
+"""Builds the Rayleigh-Taylor initial state for `cases/rayleighTaylor.py`:
+heavy fluid (`rho_t`) over light (`rho_b`) in a tall periodic-in-x box, with a
+smooth logistic density interface at ``y = 0.5`` (see `bcs.py`), a
+hydrostatic pressure profile balancing the constant gravity `g`, and a small
+seeded vertical velocity perturbation (a product of cosines in `x` and `y`,
+nonzero only in the band ``0.3 <= y <= 0.7``) that seeds the instability.
+Registers two `BoundaryCondition`s on `schemeConfig` -- `rayleighTaylorBC`,
+which pins the top/bottom buffer bands to the unperturbed profile via
+`bcs.py`'s Dirichlet functions, and `gravityBC`, which applies `forcing.py`'s
+constant downward acceleration everywhere -- then relaxes supports/densities
+with `evaluateOptimalSupport` and derives the EOS state from the analytic
+pressure via `idealGasEOS`.
+"""
+
 from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
@@ -11,6 +25,8 @@ from warpSPH import *
 from .bcs import *
 from .forcing import *
 from .sdf import *
+
+__all__ = ['sampleRayleighTaylor']
 
 
 def sampleRayleighTaylor(rho_b, rho_t, delta, g, L, dx, aspect, nx, config, schemeConfig, SimulationState, SimulationSystem):

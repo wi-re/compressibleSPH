@@ -1,3 +1,10 @@
+"""Point-source gravity: acceleration of constant magnitude
+(`schemeConfig.gravityConfig.magnitude`) directed from each particle's
+(periodic-image-aware) position toward a fixed `origin`; not distance-scaled
+(no inverse-square falloff), with a `1e-8` epsilon guarding the
+normalization near the origin.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -14,6 +21,7 @@ from warpSPH.math import getPeriodicPositions
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.gravity import GravityType, gravityConfiguration
 
+__all__ = ['computePointGravity']
 
 
 def computePointGravity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:

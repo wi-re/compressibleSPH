@@ -1,7 +1,23 @@
+"""De-correlates a regular initial particle lattice by jittering fluid particles and relaxing them with repeated delta-SPH shifting steps.
+
+Positions are first perturbed by Gaussian noise scaled by each particle's own
+support (``jitterAmount`` fraction), then pushed through ``shiftIters``
+rounds of ``computeDeltaShift`` (each shift scaled by a fixed factor of 10)
+to spread out the resulting clumping/voids before the density field is used.
+Only fluid particles (``kinds == 0``) are moved; boundary/ghost particles are
+excluded from both the jitter and the shift update. Density is restored to
+its pre-call value on return, and the original positions are restored on
+``state`` -- the shuffled positions are returned as a fresh tensor rather
+than mutating ``state`` in place. An earlier version of this function is left
+commented out above the active one.
+"""
+
 import torch
 from warpSPHCore import *
 
 from ..shifting.delta import computeDeltaShift
+
+__all__ = ['shuffleParticles']
 
 # def shuffleParticles(state, config, schemeConfig, shiftIters, jitterAmount = 0.01):
 #     priorPositions = state.positions.clone()

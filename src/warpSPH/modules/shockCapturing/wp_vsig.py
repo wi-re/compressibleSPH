@@ -1,3 +1,17 @@
+"""Warp kernel for the Monaghan-style signal velocity v_sig = max_j(c_bar_ij - mu_ij, mu_ij <= 0) used by the viscosity switches.
+
+Split into a forward-only argmax pass (``computeVsig_Func_i_argmax`` /
+``computeVsig_Func_Adjacency_argmax``) that finds the winning neighbor index
+via a loop-carried ``wp.max``-style reassignment, followed by a single
+re-evaluation of the actual v_sig formula for just that index
+(``computeVsig_valueAt``), done outside any loop. This two-pass split exists
+because warp-lang 1.15.0's reverse-mode AD silently zeroes the adjoint of a
+value produced by loop-carried max reassignment (see git history: "vsig
+computation doesnt work due to the loop max function") -- the argmax pass is
+safe because only the winning *index* (an int, never differentiated by Warp)
+crosses out of it. ``computeVsigWarp`` is the torch-facing entry point.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -5,6 +19,8 @@ import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
+
+__all__ = ['computeVsigWarp']
 
 
 @wp.func

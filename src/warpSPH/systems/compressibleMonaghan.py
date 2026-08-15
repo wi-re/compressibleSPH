@@ -1,8 +1,24 @@
+"""State/update/system triad for the artificial-viscosity ('Monaghan')
+compressible scheme (`schemes/monaghan.py`), carrying internal energy as the
+integrated quantity plus the EOS outputs and CullenDehnen2010 shock-detector
+fields every energy-based compressible scheme needs. `CompressibleSystemUpdate`
+is reused as the generic update container across schemes beyond this one --
+`schemes/compSPH.py` and `schemes/crkSPH.py` build one too, since `compSPH.py`
+(this package) defines no update class of its own. Its `passive` field is
+populated (as an all-`False` mask) by every scheme that constructs one, but is
+never read back anywhere; the one call site that would have used it
+(`compSPH.CompSPHSystem.apply_velocity_update`) is unreachable dead code after
+an earlier `return`.
+"""
+
 from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
 from typing import Optional
 from warpSPHCore import *
+
+__all__ = ['CompressibleState', 'CompressibleSystemUpdate', 'CompressibleSystem']
+
 
 @dataclass
 class CompressibleState(BaseState):

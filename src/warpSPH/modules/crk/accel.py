@@ -1,3 +1,15 @@
+"""CRKSPH pressure and artificial-viscosity acceleration.
+
+Computes the CRK-corrected SPH momentum-equation acceleration: a
+volume-weighted pressure force plus a Riemann-like pseudo-viscosity `Q_i,
+Q_j` built from velocity-gradient-reconstructed pair velocities
+(`v_dot_i`/`v_dot_j`), optionally slope-limited via the van Leer
+(`enableVanLeerLimiter`) and eta-based (`enableCRKLimiter`) limiters from
+`limiter.py` (each individually forceable on/off via
+`crkViscosityParams.forceVanLeerOn/Off`). Also returns the per-pair
+pressure/viscosity contributions consumed elsewhere for diagnostics.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -10,6 +22,8 @@ from ...configurations.crkSPH import CRKViscosity
 from ..dissipation import DiffusionParameters, computePi_actual
 
 from .limiter import computeVanLeer, crkLimiter
+
+__all__ = ['computeCrkSPHAccelWarp']
 
 @wp.func
 def computeCrkSPHAccel_Func_i(

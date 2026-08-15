@@ -1,3 +1,15 @@
+"""Linear acoustic wave initial state and reference plot, used by `warpSPH.cases.linearWave`.
+
+`sampleLinearWave` samples a regular 1D lattice with a sinusoidal pressure
+perturbation of amplitude `A` and wavelength `lamda` on top of rest density
+`rho0`, then iteratively (`nIters`) re-corrects particle mass against the
+target density profile via `evaluateOptimalSupport` before setting velocity
+from the linearized acoustic relation `v = c_s * delta_i` and deriving
+energy/entropy through `idealGasEOS`. `plotState` overlays the current
+density/pressure against that same analytic traveling-wave profile advected
+at `c_s`.
+"""
+
 from ....modules.timestep.compressible import computeTimestep
 
 # final import blocks that are generic
@@ -12,6 +24,8 @@ from warpSPHCore import *
 # This library
 from warpSPH import *
 import torch
+
+__all__ = ['sampleLinearWave', 'plotState']
 
 
 def sampleLinearWave(

@@ -1,8 +1,22 @@
+"""Builds the Owen (1998) psi/psiH/N_H lookup table by evaluating kernel sums on a lattice, for a range of target neighbor counts.
+
+``computePsi`` evaluates, for each sampled ``n_h`` in ``[n_min, n_max]``
+(``nLUT`` uniform samples), a kernel-weighted sum over an idealized regular
+lattice with spacing set so it has that neighbor count (a static +/-20-cell
+window in each active dimension), giving the ``psi_0``/``psi_0_H`` statistics
+and the reference neighbor volume ratio ``N_H``. ``generatePSILut_warp``
+drives this for dimensions 1-3 in one call and always computes in
+``torch.float64`` (independent of the caller's configured precision) since
+the table is built once and reused.
+"""
+
 import math
 from warpSPHCore import *
 import warp as wp
 from warpSPHCore import safe_sqrt, scalar_t
 from warpSPHCore.kernels.eval_kernel import eval_k, eval_dkdq, eval_C_d
+
+__all__ = ['generatePSILut_warp']
 
 @wp.kernel
 def computePsi(

@@ -1,3 +1,12 @@
+"""Public entry point for the delta-SPH momentum-dissipation term `dvdt_diss`:
+a thin wrapper that runs `computeVelocityDiffusionDeltaSPH` as a Laplacian
+operation over `currentState.velocities` and forwards the viscosity
+selection straight from `schemeConfig.diffusionParams` (`inviscid`, its
+artificial-viscosity `inviscidAlpha`, `fixedSoundSpeed`, and the physical
+kinematic viscosity `viscidNu`) — see `wp_viscosityDelta.py` for which of the
+two forms is actually applied.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -14,6 +23,8 @@ from warpSPH.modules.deltaSPH.wp_viscosityDelta import computeVelocityDiffusionD
 from ...enumTypes import *
 
 from .wp_densityDelta import computeDensityDiffusionDeltaSPH
+
+__all__ = ['computeVelocityDiffusion']
 
 def computeVelocityDiffusion(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
     with record_function("[warpSPH] - (deltaSPH) - computeVelocityDiffusion"):

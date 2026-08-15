@@ -1,7 +1,20 @@
+"""Builds the mirrored boundary-ghost-particle layer that mDBC needs: for each
+`RegionType.Boundary` region, projects its fluid-kind particles across the
+region's SDF by a support-clamped distance, appends the mirrored ghost
+particles to every per-particle array, and records each boundary particle's
+ghost index/offset (and the reverse, on the new ghost particle) on the
+returned state. Assumes one region per boundary material ID, assigned in
+region order starting at 0 (`boundaryMaterial`); called once during
+initialization, from `initializers/weaklyCompressible.py`.
+"""
+
 import torch
 # from ..systems.weaklyCompressible import WeaklyCompressibleState
 from ..configurations.weaklyCompressible import RegionType, ParticleRegion
 from typing import Any, Optional, Union
+
+__all__ = ['addBoundaryGhostParticles']
+
 
 def addBoundaryGhostParticles(regions, particleState : Any):
     device = particleState.positions.device

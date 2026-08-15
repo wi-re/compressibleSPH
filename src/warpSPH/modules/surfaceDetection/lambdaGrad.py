@@ -1,5 +1,11 @@
 
 
+"""Normal-source alternative based on the renormalization-matrix eigenvalues
+(`lambda`, the minimum absolute eigenvalue of the renormalization matrix, a
+common local-consistency indicator that drops near boundaries and free
+surfaces): computes its SPH gradient and, from that, a unit surface normal.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -16,6 +22,8 @@ from ...enumTypes import *
 from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetectionConfig
 
 from .wp_dilate import dilateSurfaceMaskWarp
+
+__all__ = ['computeLambdaGrad', 'computeNormalsLambdaGrad']
 
 
 def computeLambdaGrad(

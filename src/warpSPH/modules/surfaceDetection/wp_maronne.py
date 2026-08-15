@@ -1,3 +1,18 @@
+"""Warp kernel implementation of the Maronne surface-detection geometry test.
+For each particle, projects a trial point `T = x_i + n_i * h_i / xi` along
+its normal (`xi` = `sphKernel_xi`, the kernel's characteristic support
+ratio) and, per neighbor within `r_ij < h_j`, checks two conditions: (A) the
+neighbor is far (`r_ij >= sqrt(2) * h_j / xi`) and inside the tube around
+`T`; (B) the neighbor is near and inside a tangential band around `T`
+(tangent built by a 2D perpendicular or 3D cross-product-style rotation of
+`n_i`); a neighbor only counts toward A/B if the particle's normal is
+non-degenerate (`|n_i| > 0.5`). `computeMaronneSurfaceDetection` (the
+torch-facing wrapper) sums the per-neighbor A/B hits and thresholds the
+total at `< 0.5` to produce the free-surface flag (so particles with no
+qualifying neighbor, including ones with a degenerate normal, come out
+flagged as surface).
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -9,6 +24,8 @@ from warpSPHCore import *
 
 
 from ...enumTypes import *
+
+__all__ = ['computeMaronneSurfaceDetection']
 
 # @torch.jit.script
 # def detectFreeSurfaceMaronne(

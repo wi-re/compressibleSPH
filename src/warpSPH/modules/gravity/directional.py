@@ -1,3 +1,8 @@
+"""Uniform directional gravity: returns a constant acceleration vector
+(`schemeConfig.gravityConfig.direction * magnitude`) broadcast to every
+particle; ignores particle positions entirely.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -12,6 +17,8 @@ from warpSPHCore import *
 from warpSPH.configurations.simulationConfig import SimulationConfig
 from ...enumTypes import *
 from ...configurations.moduleConfigurations.gravity import GravityType, gravityConfiguration
+
+__all__ = ['computeDirectionalGravity']
 
 
 def computeDirectionalGravity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:

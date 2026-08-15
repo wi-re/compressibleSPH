@@ -1,3 +1,15 @@
+"""Shared compressible-scheme initial state: a uniform, at-rest regular
+lattice (zero pressure/velocity, unit density) relaxed to optimal
+supports/densities via `evaluateOptimalSupport`, with pressure/energy/entropy
+/soundspeed derived through `idealGasEOS`. Re-exported at the top-level
+`warpSPH` package; used directly or as the common starting point by most
+compressible cases (Sod-like/noh/hydrostatic/Kelvin-Helmholtz/Rayleigh-Taylor
+/Gresho/triple-point/Yee-vortex -- see `caseUtils/compressible/*`).
+`sampleShockRegions1D` builds on it for 1D multi-region shock tubes (e.g.
+Woodward-Colella): it overwrites pressure/density on `abs(x)`-band masks and
+re-derives the internal energy/timestep from the patched state.
+"""
+
 import torch
 from ..modules.timestep.compressible import computeTimestep
 from .regular import sampleRegularParticles
@@ -5,6 +17,8 @@ from ..modules import *
 from ..configurations import CompressibleSPHConfig
 from ..enumTypes import *
 from warpSPHCore import *
+
+__all__ = ['setupBasicCompressibleInitialState', 'sampleShockRegions1D']
 
 def setupBasicCompressibleInitialState(
         nx,

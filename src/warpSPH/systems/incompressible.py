@@ -1,3 +1,15 @@
+"""State/update/system triad for the divergence-free incompressible scheme
+(DFSPH, `schemes/dfsph.py`): unlike the weakly-compressible schemes, density
+is itself an integrated quantity here (`drhodt`), corrected in `finalize` by a
+pressure-Poisson solve (`modules.incompressible.solveIncompressible`) plus the
+same delta-SPH-style particle shifting and rigid-body pose update
+(`rigidBody.integrate`/`rigidBody.update`) that `weaklyCompressible.py` uses.
+Field layout otherwise mirrors `WeaklyCompressibleState` closely enough that
+`rigidBody.update.updateBodyParticlesWCSPH` rebuilds either interchangeably
+via `type(particleState)`. Not re-exported from `systems/__init__.py` --
+`schemes/dfsph.py` and `schemes/builder.py` import it directly.
+"""
+
 from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
@@ -11,6 +23,9 @@ from ..rigidBody.update import updateBodyParticlesWCSPH
 from ..modules.shifting.delta import computeDeltaShift
 from ..modules.shifting.wrapper import solveShifting
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['IncompressibleState', 'IncompressibleSystemUpdate', 'IncompressibleSystem']
+
 
 @dataclass
 class IncompressibleState(BaseState):

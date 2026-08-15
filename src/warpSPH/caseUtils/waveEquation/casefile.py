@@ -1,3 +1,16 @@
+"""TOML casefile loading for the wave-equation demo: parses a declarative
+description of sources/obstacles/physics into the dataclasses `configurations`
+defines (`SimulationConfig`, `WaveCaseConfig`, `WaveShapeSpec`, ...), so one
+casefile can describe a family of runs (see `WaveCaseConfig`'s
+``randomize*``/``*Range`` fields). `build_configs_from_casefile` is the entry
+point; it is the first of the five stages the module docstring of
+`sample/waveSystem.py` and `CLEANUP_PLAN.md` describe as the (currently
+unwired -- no runner drives all five, and no TOML casefile ships in this repo)
+wave-equation pipeline. `argparse_defaults_from_casefile` maps the same TOML
+sections onto the CLI flag names a future runner would use; nothing in this
+repo currently calls it.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,6 +28,8 @@ try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
+
+__all__ = ['load_casefile', 'argparse_defaults_from_casefile', 'build_configs_from_casefile']
 
 
 def load_casefile(casefile: str) -> Dict[str, Any]:

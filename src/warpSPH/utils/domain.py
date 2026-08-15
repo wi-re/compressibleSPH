@@ -1,7 +1,16 @@
+"""`buildDomainDescription`, the one constructor used across cases/configs to
+turn a domain side length into a centered-at-origin `warpSPHCore.
+DomainDescription` (min/max/periodic/dim tensors). `DomainDescription` itself
+now lives in `warpSPHCore` -- the commented-out dataclass below is the
+pre-move local definition, kept as a record rather than deleted.
+"""
+
 import torch
 from dataclasses import dataclass
 import numpy as np
 from warpSPHCore import DomainDescription
+
+__all__ = ['DomainDescription', 'buildDomainDescription']
 
 # @torch.jit.script
 # @dataclass(slots=True)

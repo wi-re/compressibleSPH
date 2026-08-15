@@ -1,9 +1,27 @@
+"""SDF-based shape sampling for the wave-equation demo's sources and
+obstacles: per-shape mask samplers (`sample_sphere`, `sample_box`, ...,
+dispatched by kind through `sample_shape_structured`) built on
+`geometry.sdf`'s primitives, plus `populate_source_obstacle_grids_structured`,
+which walks a `WaveCaseConfig`'s `sources`/`obstacles` (as parsed by
+`casefile.py`) and paints their masks into the id grids `gencase.genInitial`
+expects. `sample_box` is what `gencase.generateDomainBox` reuses for the
+default domain-boundary box. `sampleShapeStructured`/
+`populateSourceObstacleGridsStructured` are the snake_case-to-camelCase
+compatibility aliases kept for existing notebook code.
+"""
+
 import torch
 from typing import Dict, List, Tuple
 
 from ...configurations import WaveCaseConfig, WaveShapeSpec
 from ...math import getPeriodicPositions
 from ...geometry.sdf import getSDF
+
+__all__ = ['sample_sphere', 'sample_box', 'sample_horizontal_line', 'sample_vertical_line',
+           'sample_vesica', 'sample_triangle', 'sample_equilateral_triangle',
+           'normalize_shape_kind', 'sample_shape_structured',
+           'populate_source_obstacle_grids_structured', 'sampleShapeStructured',
+           'populateSourceObstacleGridsStructured']
 
 
 def translate(points, offset):

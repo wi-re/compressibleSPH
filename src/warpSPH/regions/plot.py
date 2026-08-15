@@ -1,4 +1,13 @@
+"""Debug/diagnostic plotting of a scene's regions onto a matplotlib axis:
+each region's contour as a coloured line (colour/style keyed off
+`RegionType`/`BoundaryConditionType`) and, optionally, its particles as a
+scatter.
+"""
+
 from ..configurations.region import RegionType, ParticleRegion, BoundaryCondition, BoundaryConditionType
+
+__all__ = ['plotRegions']
+
 
 def plotRegions(regions, axis, plotFluid = True, plotParticles = True):
     for region in regions:

@@ -1,3 +1,9 @@
+"""Math helpers subpackage: periodic-boundary position wrapping
+(`getPeriodicPositions`), the Perlin/simplex noise generator (`noise.py`,
+`noiseFunctions/`), and a portable scatter-reduction helper (`scatter.py`)
+vendored from PyTorch Geometric so warpSPH doesn't depend on it.
+"""
+
 import torch
 
 def getPeriodicPositions(x, domain):

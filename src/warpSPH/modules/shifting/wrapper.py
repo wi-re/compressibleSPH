@@ -1,3 +1,20 @@
+"""Multi-iteration shifting driver: rebuilds the neighborhood, optionally
+recomputes density and free-surface state, applies one `computeDeltaShift`
+step per iteration, and (if `schemeConfig.surfaceDetectionConfig.active`)
+projects the shift near the free surface before adding it to
+`systemState.positions`.
+
+Free-surface projection (`schemeConfig.shiftProperties.projectionScheme`,
+`ShiftingProjectionScheme`) has three modes: `dot` removes the shift's normal
+component and scales the tangential remainder by `surfaceScaling` for
+surface particles; `mat` instead projects through a `(I - n n^T)` matrix and
+scales by `lMin**2`; the fallback zeroes the shift outright for surface/
+near-surface particles. All three additionally zero the shift wherever
+`lMin < 0.4` (a fixed threshold, not currently exposed via config) and for
+non-fluid particles (`kinds != 0`). Normals/`lMin` are recomputed from
+`detectFreeSurface` each iteration unless `shiftProperties.reuseNormals` and
+a prior surface state is already cached on `systemState`.
+"""
 
 import warp as wp
 from warp.types import vector, matrix
@@ -24,6 +41,7 @@ from ..util import *
 
 from ...configurations.moduleConfigurations.shifting import ShiftProperties, ShiftingProjectionScheme
 
+__all__ = ['solveShifting']
 
 
 def solveShifting(

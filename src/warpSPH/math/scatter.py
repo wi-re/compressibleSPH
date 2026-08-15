@@ -1,5 +1,13 @@
+"""Scatter-add reduction (`scatter_sum`) and its shape-broadcasting helper
+(`broadcast`), vendored from PyTorch Geometric so warpSPH does not need it
+as a dependency. Used to accumulate per-pair contributions back onto
+per-particle tensors (e.g. `modules/compSPH/multistep.py`'s energy update).
+"""
+
 import torch
 from typing import Optional, Union
+
+__all__ = ['scatter_sum', 'broadcast']
 
 # ------ Beginning of scatter functionality ------ #
 # Scatter summation functionality based on pytorch geometric scatter functionality

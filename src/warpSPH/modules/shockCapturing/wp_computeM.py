@@ -1,3 +1,15 @@
+"""Warp kernel computing the CRKSPH gradient-correction matrix M = sum_j m_j (x_ij (x) grad W_ij).
+
+``computeMWarp`` is the torch-facing entry point (dispatched through
+``warpWrapper2``/``launch_kernel`` like the other ``wp_*.py`` modules); the
+underlying ``@wp.func``/``@wp.kernel`` helpers accumulate the dyadic product
+over each particle's neighbor list, honoring gradient renormalization, grad-h,
+volume, and CRK correction flags from ``correctionData`` when enabled. The
+caller (``common.computeM``) negates this kernel's raw output and typically
+inverts the result (``torch.linalg.pinv``) to get the actual correction
+matrix ``M_inv``.
+"""
+
 import warp as wp
 from warp.types import vector, matrix
 from typing import Any
@@ -6,6 +18,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
 
+__all__ = ['computeMWarp']
 
 
 

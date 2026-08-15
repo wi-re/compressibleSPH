@@ -1,3 +1,13 @@
+"""Shared building blocks for the viscosity switches: CRKSPH gradient-correction matrix, shear/rotation tensor, and a plain divergence estimator.
+
+``computeM`` is the CRKSPH gradient-renormalization matrix (its caller inverts
+it with ``torch.linalg.pinv`` to get ``M_inv``); ``computeShearTensor``
+returns the velocity-gradient divergence, trace-free symmetric (shear) and
+antisymmetric (rotation) parts, optionally corrected by that matrix.
+``computeDivergence`` picks between a naive SPH divergence and the
+Cullen-corrected one via ``schemeConfig.viscositySwitchParams.divergenceScheme``.
+"""
+
 from warpSPHCore import *
 from ...systems.compressibleMonaghan import CompressibleState
 from ...configurations import *
@@ -5,6 +15,8 @@ from typing import Union, Tuple, Dict, Optional
 # from ...enumTypes import SupportScheme
 import torch
 from .wp_computeM import computeMWarp
+
+__all__ = ['computeM', 'computeShearTensor', 'computeDivergence']
 
 # Correction Term from CRKSPH
 def computeM(

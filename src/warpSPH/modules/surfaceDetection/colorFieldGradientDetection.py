@@ -1,3 +1,8 @@
+"""Free-surface flag from the norm of the color-field gradient: a particle is
+surface when `|grad(colorField)| > colorFieldGradThreshold * supports / xi`,
+where `xi` is the kernel's characteristic support ratio
+(`sphKernel_xi`). Recomputes `computeColorField` internally when not passed in.
+"""
 
 # @torch.jit.script
 # def detectFreeSurfaceColorFieldGradient(
@@ -30,6 +35,8 @@ from ...configurations.moduleConfigurations.surfaceDetection import SurfaceDetec
 
 
 from .colorFieldCompute import computeColorField
+
+__all__ = ['detectFreeSurfaceColorFieldGradient']
 
 
 

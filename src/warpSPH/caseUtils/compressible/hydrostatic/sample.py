@@ -1,8 +1,21 @@
+"""Hydrostatic-equilibrium initial state, used by `warpSPH.cases.hydrostatic`.
+
+Samples a regular lattice, assigns `rho_high` to a dense square in the domain
+center (`|x|, |y| < L/4`) and `rho_low` elsewhere, then re-derives an optimal
+support/density via `evaluateOptimalSupport` and CRK renormalization before
+setting a uniform initial pressure of 1 through `idealGasEOS`. Velocities are
+left at whatever `setupBasicCompressibleInitialState` set (zero), which is the
+point of the test: the exact solution never moves.
+"""
+
 from ....sample import *
 import torch
 from ....sample.compressible import setupBasicCompressibleInitialState
 from ....modules import *
 from warpSPHCore import *
+
+__all__ = ['buildHydrostaticInitialState']
+
 
 def buildHydrostaticInitialState(rho_low, rho_high, nx, config, schemeConfig, SimulationState, SimulationSystem):
     compressibleSystem = setupBasicCompressibleInitialState(nx, config, schemeConfig, SimulationState, SimulationSystem)

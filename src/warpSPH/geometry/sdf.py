@@ -1,3 +1,10 @@
+"""Core SDF shape-building API: `getSDF` looks up a named primitive
+(`sdfFunctions`) and wraps it (via `torch.vmap` where the primitive itself
+isn't already batched) into a batched-position callable, and `sampleSDF`/
+`sampleSDFNumeric` evaluate a shape's signed distance and (unit) surface
+normal at a batch of points, either through autograd or central differences.
+"""
+
 import torch
 import numpy as np
 from .sdfFunctionality import *

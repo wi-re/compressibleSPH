@@ -1,7 +1,22 @@
+"""Spherical/annular (2D) shell samplers: build concentric rings of particles
+around the origin instead of a lattice, each ring sized so its particle
+count times the reference cell area matches the ring's actual area. `domain`
+is assumed centered on the origin (`domain.max[0] - domain.min[0]` is read as
+the diameter/side length). `sampleShell` optionally clips to a
+circle/square (`circle`) with `extraRings` of overhang past the boundary,
+used by `caseUtils.compressible.sedov.initial` when `shellSampling=True`
+(off by default there). `sampleShellv2` is a simpler, always-circular
+version used by `caseUtils.compressible.yeeVortex.sample` for the Yee vortex
+case; it also returns the per-shell `(index, r_begin, r_end, dr, points,
+areas)` tuples alongside the merged `ParticleSet`.
+"""
+
 import random
 from ..geometry import ParticleSet
 from ..utils.support import volumeToSupport
 import torch
+
+__all__ = ['sampleShell', 'sampleShellv2']
 
 def sampleShell(nx, domain, targetNeighbors, circle = True, extraRings = 0):
     dx = (domain.max[0] - domain.min[0]) / nx

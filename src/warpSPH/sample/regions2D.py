@@ -1,9 +1,25 @@
+"""2D regular-lattice sampler split into up to four axis-aligned regions by
+one or two split lines, used to give each region a different resolution
+(oversampled regions all get `masses.min()`, then rescaled by `rho0`, so
+mass is uniform across the merged set even though particle spacing isn't).
+`sampleRegionSystem` is the entry point -- it merges the regions, computes a
+uniform density field, relaxes supports/density via `evaluateOptimalSupport`,
+and derives pressure/energy through `idealGasEOS` for an at-rest gas; it is
+used by `caseUtils.compressible.triplePoint.equalMass` for the triple-point
+problem's per-region resolution. The `splitDomain`/`maskParticles`/
+`sampleRegions`/`sampleRegionsSymmetric`/`mergeParticles`/`computeNs`/
+`plotDomain` helpers below are internal to that pipeline (or plotting-only,
+for `plotDomain`) and not used outside this file.
+"""
+
 import numpy as np
 from ..configurations import *
 from warpSPH.modules import *
 import torch
 from warpSPHCore import *
 from ..enumTypes import *
+
+__all__ = ['sampleRegionSystem']
 
 def splitDomain(split_x, split_y, domain, nx):
     lx = domain.max[0] - domain.min[0]

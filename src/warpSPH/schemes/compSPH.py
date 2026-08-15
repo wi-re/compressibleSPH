@@ -1,3 +1,13 @@
+"""The CompSPH (Owen 2010-style compatible-hydro) step: adaptive support
+solve, super-symmetric adjacency, Gather-mode density, optional grad-h
+(`GradHState`), ideal-gas EOS, the Cullen-Hopkins viscosity switch, the
+CompSPH pressure/viscosity acceleration and dudt kernels, and the
+Monaghan-Price energy-balance term `f_ij` (evaluated at the half-step
+velocity). Falls back to computing `divergence` from `computeMomentumConsistent`
+the first time a state has none (e.g. right after a resume that doesn't
+persist it).
+"""
+
 from ..modules.adaptiveSupport import computeOmega, evaluateOptimalSupport
 from ..modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates
 from ..modules.compSPH.accel import computeCompSPHAccelWarp

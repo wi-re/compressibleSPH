@@ -1,8 +1,23 @@
+"""The minimal particle state/update/system triad every other module in this
+package extends: positions and velocities as the integrated pair, plus the
+constant per-particle bookkeeping fields (support, mass, density, kind,
+material, UID) every scheme needs regardless of its physics. `BaseSystem`'s
+`apply_*_update`/`finalize` hooks are the pattern (`update_position` for the
+position/velocity pair, `update_component` for anything else,
+`apply_quantity_update` a no-op) that `compSPH.py`, `compressibleMonaghan.py`,
+`incompressible.py` and `weaklyCompressible.py` all repeat with their own
+extra fields layered on top. Referenced directly (not just as a base class) by
+`modules/momentum/consistent.py`'s type hint.
+"""
+
 from warpSPHIntegrators import *
 from dataclasses import dataclass
 import torch
 from typing import Optional
 from warpSPHCore import *
+
+__all__ = ['BaseParticleState', 'BaseSystemUpdate', 'BaseSystem']
+
 
 @dataclass
 class BaseParticleState(BaseState):

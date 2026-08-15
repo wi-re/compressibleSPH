@@ -1,3 +1,16 @@
+"""`RelaxedJacobiSolverConfig` (min/max iterations, tolerance, relaxation factor)
+and `IncompressibleSolverConfig`, which bundles two of the former
+(`pressureSolver`, `divergenceFreeSolver`) plus `integrateRho`. Embedded as
+`.solverConfig` on `IncompressibleSPHConfig` and read via
+`schemeConfig.solverConfig.{pressureSolver,divergenceFreeSolver}.*` by
+`modules/incompressible/{incompressible,divergenceFree}.py` and
+`schemes/dfsph.py`. `buildDefaultPSConfig`/`buildDefaultDFConfig` give the
+pressure and divergence-free solvers different tuned defaults (iteration caps,
+tolerances, relaxation) rather than sharing one default.
+"""
+
+__all__ = ['RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+
 from ...enumTypes import *
 from typing import Optional, Union, List
 from dataclasses import dataclass, field

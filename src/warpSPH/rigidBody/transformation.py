@@ -1,6 +1,16 @@
+"""Builds a rigid body's world-space transform -- rotation about the origin
+then translation to `centerOfMass` -- as a 3x3 homogeneous matrix, so
+`update.updateBodyParticlesWCSPH` can move the body's rest-pose particle/ghost
+positions with one matrix multiply. Hardcoded to 2D (a single z-axis rotation
+angle), matching the rest of the mDBC rigid-body path.
+"""
+
 import torch
 
 from ..configurations.rigidBody import RigidBody
+
+__all__ = ['getTransformationMatrix']
+
 
 def getTransformationMatrix(rigidBody : RigidBody):
     device = rigidBody.centerOfMass.device

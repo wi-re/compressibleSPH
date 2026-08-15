@@ -1,3 +1,17 @@
+"""The DFSPH (Divergence-Free SPH) step for the incompressible scheme:
+adjacency, density (mDBC-corrected), boundary velocities/Dirichlet BCs,
+free-surface detection, delta-SPH velocity diffusion, continuity `drhodt`,
+forcing/gravity/mDBC no-penetration shift folded into an explicit `dvdt`,
+then `solveDivergenceFree` projects that `dvdt` onto a divergence-free
+pressure correction (`dvdt_pressure`). Several stretches are commented out
+rather than removed (tracked separately in CLEANUP_PLAN.md), including an
+alternate implicit-particle-shift path (`solveIncompressible`) and the
+delta-SPH density-diffusion term. Whether the returned `drhodt` actually
+drives the density update or is overridden depends on
+`schemeConfig.solverConfig.integrateRho`: when it is false, density is instead
+recomputed from scratch each step via `computeDensities`.
+"""
+
 from warpSPH.configurations import SimulationConfig, WeaklyCompressibleSPHConfig
 from warpSPH.systems import CompSPHSystem, WeaklyCompressibleSystemUpdate
 from warpSPH.modules.boundaryConditions import computeForcing, enforceDirichlet, enforceUpdates

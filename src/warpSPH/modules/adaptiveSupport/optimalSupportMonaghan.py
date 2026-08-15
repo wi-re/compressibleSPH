@@ -1,3 +1,15 @@
+"""Monaghan-style adaptive smoothing length: Newton iteration on the implicit constraint h = h(rho(h)).
+
+Each iteration rebuilds the Verlet neighbor list, re-estimates density at the
+current support, and takes a Newton step ``h -= F(h)/dF_dh`` where ``F(h) =
+h - computeH(rho, m, targetNeighbors, dim)`` and ``dF_dh`` comes from
+``computeOmegaWarp`` (the grad-h correction term). Steps are clamped to
+``[hMin*0.25, hMax*4.0]`` each iteration and non-finite steps are held at the
+previous value; iteration stops early once the relative change in ``h`` drops
+below ``compParams.adaptiveSupportThreshold``, or after
+``adaptiveSupportIterations``.
+"""
+
 from ...configurations.compressibleConfig import CompressibleSPHConfig
 
 from .wp_omega import computeOmegaWarp
@@ -6,6 +18,8 @@ from warpSPHCore import *
 from ...configurations import SimulationConfig
 from ...utils.support import volumeToSupport, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
+
+__all__ = ['evaluateOptimalSupportMonaghan']
 
 def computeH(rho, m, targetNeighbors, dim):
     safe_rho = torch.clamp(torch.nan_to_num(rho, nan=1.0, posinf=1.0, neginf=1.0), min=1e-12)
