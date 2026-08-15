@@ -1,6 +1,6 @@
 """Linear acoustic wave (1D), compressible.
 
-The script form of this case was `examples/compressible/02-Linear_Wave.ipynb`.
+The script form of this case was `examples/compressible/02-linear-wave.ipynb`.
 A small-amplitude sinusoidal perturbation advects at the sound speed; the run
 covers one acoustic crossing of the box, which is what makes the analytic
 overlay in `plotState` a meaningful check.

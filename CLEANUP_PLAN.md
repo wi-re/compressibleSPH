@@ -125,7 +125,7 @@ see README for the current layout, not reconstructed here.
       - Apply the Sod pilot's pattern (real case code + generic helpers, visible
         step loop, explicit parameters cell) rather than collapsing to thin
         wrappers; keep genuinely notebook-shaped analysis/plotting as its own cells.
-      - Worst offender left: `13-openFlow.ipynb` (1704 LOC, 57 cells). The three
+      - Worst offender left: `13-open-flow.ipynb` (1704 LOC, 57 cells). The three
         incompressible notebooks (~2700 combined) are the other half.
 - [x] `datagen/weaklyCompressible/bak/` — gone; the directory no longer exists.
 

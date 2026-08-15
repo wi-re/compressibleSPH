@@ -31,14 +31,14 @@ file.
 ## The two notebook shapes
 
 - **`profilePlot`** (1D scatter-against-`x`, matplotlib): `01-sod/`,
-  `02-Linear_Wave.ipynb`, `03-Kidder_Isentropic_Compression.ipynb`,
-  `04-Noh_Implosion.ipynb`, `05-Woodward_Colella.ipynb`, `06-sedov/`. A
+  `02-linear-wave.ipynb`, `03-kidder-isentropic-compression.ipynb`,
+  `04-noh-implosion.ipynb`, `05-woodward-colella.ipynb`, `06-sedov/`. A
   notebook calls the case's exported `draw<Case>` (e.g. `drawKidder`,
   `drawWoodwardColella`) directly instead of `case.setupPlot`/`updatePlot`,
   which go through `openWindow`/`pumpEvents` and do not live-update reliably
   inside a Jupyter cell in this environment.
 - **`particlePlot`** (2D field view, vispy via `visualizeWithFallback`):
-  `08-Hydrostatic.ipynb` through `13-Rayleigh_Taylor.ipynb`,
+  `08-hydrostatic.ipynb` through `13-rayleigh-taylor.ipynb`,
   `14-triplePoint/`. `08` is the pilot: `cases/plotting.py` gained
   `buildFieldPlotter`/`refreshFieldPlotter`, the window/event-loop-free core
   of `particlePlot`'s `setupPlot`/`updatePlot` (mirroring `profilePlot`'s

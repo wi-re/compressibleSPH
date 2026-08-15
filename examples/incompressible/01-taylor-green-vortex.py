@@ -5,7 +5,7 @@ The case lives in `warpSPH.cases.tgv`; the relaxation prepass, the TGV velocity
 field and the diagnostics are its hooks, everything else is `warpSPH.runner`.
 Equivalent invocations::
 
-    python examples/incompressible/01-tgv-incomp.py --nx 256 --tLimit 2.0
+    python examples/incompressible/01-taylor-green-vortex.py --nx 256 --tLimit 2.0
     python -m warpSPH.cases.tgv --nx 256 --tLimit 2.0
     warpsph-run tgv --nx 256 --tLimit 2.0
 """

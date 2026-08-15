@@ -1,7 +1,7 @@
 """Kelvin-Helmholtz instability (2D), compressible.
 
 The script form of this case was
-`examples/compressible/12-Kelvin-Helmholtz.ipynb`. Two counter-streaming layers
+`examples/compressible/12-kelvin-helmholtz.ipynb`. Two counter-streaming layers
 of different density, seeded with a single-mode transverse perturbation, so the
 roll-up is deterministic and the same at every resolution.
 """

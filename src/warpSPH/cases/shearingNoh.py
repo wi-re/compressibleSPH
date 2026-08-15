@@ -1,7 +1,7 @@
 """Shearing Noh implosion (2D), compressible.
 
 The script form of this case was
-`examples/compressible/11-Shearing_Noh_Implosion_2D.ipynb`. A Noh implosion
+`examples/compressible/11-shearing-noh-implosion-2d.ipynb`. A Noh implosion
 with a transverse shear of amplitude `vs` superimposed, so the converging shock
 has to survive a velocity discontinuity it is not aligned with.
 """

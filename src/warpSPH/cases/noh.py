@@ -1,6 +1,6 @@
 """Noh implosion (1D), compressible.
 
-The script form of this case was `examples/compressible/04-Noh_Implosion.ipynb`.
+The script form of this case was `examples/compressible/04-noh-implosion.ipynb`.
 Uniform cold gas converges on the origin at `v_s`; the exact post-shock state is
 `rho_s = rho0 ((gamma+1)/(gamma-1))^dim`, drawn as the reference line.
 """

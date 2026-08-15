@@ -100,10 +100,10 @@ def discover() -> list[Example]:
 def siblingNotebook(script: Path) -> Path | None:
     """The notebook this wrapper belongs to, if there is one.
 
-    Not simply `script.with_suffix('.ipynb')`: the compressible family names
-    its wrappers `08-hydrostatic.py` and its notebooks `08-Hydrostatic.ipynb`,
-    so match case-insensitively first and then fall back to the slot number
-    (`08-`), which is the part that is actually stable between the two.
+    Wrapper and notebook stems now agree, so the exact (case-insensitive) match
+    is the normal path. The slot-number fallback (`08-`) is kept because it is
+    what makes a *newly added* example work before anyone has thought about
+    naming, and because notebooks and wrappers have drifted apart here before.
     """
     notebooks = sorted(script.parent.glob("*.ipynb"))
     stem = script.stem.lower()

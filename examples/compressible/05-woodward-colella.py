@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """05 woodward colella -- thin wrapper around the shared runner.
 
-The notebook this came from is `05-Woodward_Colella.ipynb`; the case itself is
+The notebook this came from is `05-woodward-colella.ipynb`; the case itself is
 `warpSPH.cases.woodwardColella`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

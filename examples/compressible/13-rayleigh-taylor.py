@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """13 rayleigh taylor -- thin wrapper around the shared runner.
 
-The notebook this came from is `13-Rayleigh_Taylor.ipynb`; the case itself is
+The notebook this came from is `13-rayleigh-taylor.ipynb`; the case itself is
 `warpSPH.cases.rayleighTaylor`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

@@ -1,3 +1,18 @@
+"""Configuration for the wave-equation demo: shapes, sources, obstacles.
+
+A wave case is described declaratively -- a list of sources and a list of
+obstacles, each a :class:`ShapeSpec` -- and read from a TOML casefile by
+:mod:`warpSPH.caseUtils.waveEquation.casefile`. These are re-exported from
+:mod:`warpSPH.configurations` under ``Wave``-prefixed names (``WaveShapeSpec``,
+``WaveCaseConfig``) because ``ShapeSpec`` and ``CaseConfig`` are too generic to
+put in that namespace unqualified.
+
+The ``randomize*`` flags and the ``*Range`` pairs exist so one casefile
+describes a *family* of cases rather than a single one -- the wave system's
+purpose is generating varied unstructured-data samples, so a case is a
+distribution to draw from. See :mod:`warpSPH.schemes.waveEquation`.
+"""
+
 import torch
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
@@ -8,7 +23,6 @@ from warpSPHCore import *
 
 from dataclasses import dataclass, field
 
-# from waves.utils.domain import buildDomainDescription
 from ..geometry import SamplingScheme
 
 @dataclass

@@ -1,6 +1,6 @@
 """Yee isentropic vortex (2D), compressible.
 
-The script form of this case was `examples/compressible/10-Yee_Vortex.ipynb`.
+The script form of this case was `examples/compressible/10-yee-vortex.ipynb`.
 The vortex is sampled on concentric shells rather than a lattice, and the outer
 `bufferRings` shells are held at their initial state by a Dirichlet boundary
 condition -- the sampler returns that BC, which is why it is installed here

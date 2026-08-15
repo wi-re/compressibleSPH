@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """03 kidder isentropic compression -- thin wrapper around the shared runner.
 
-The notebook this came from is `03-Kidder_Isentropic_Compression.ipynb`; the case itself is
+The notebook this came from is `03-kidder-isentropic-compression.ipynb`; the case itself is
 `warpSPH.cases.kidder`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

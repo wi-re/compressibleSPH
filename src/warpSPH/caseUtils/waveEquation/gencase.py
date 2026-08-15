@@ -2,7 +2,8 @@
 
 This module used to contain many hardcoded source/boundary case generators.
 Those setups are now represented by TOML casefiles and parsed via
-`waves.casefile` + `waves.shape_generation`.
+:mod:`warpSPH.caseUtils.waveEquation.casefile` +
+:mod:`warpSPH.caseUtils.waveEquation.shape_generation`.
 
 Only common initialization helpers that are still used by runtime code remain here.
 """

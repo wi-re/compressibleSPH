@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """12 kelvin helmholtz -- thin wrapper around the shared runner.
 
-The notebook this came from is `12-Kelvin-Helmholtz.ipynb`; the case itself is
+The notebook this came from is `12-kelvin-helmholtz.ipynb`; the case itself is
 `warpSPH.cases.kelvinHelmholtz`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

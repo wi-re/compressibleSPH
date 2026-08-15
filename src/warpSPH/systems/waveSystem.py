@@ -1,3 +1,20 @@
+"""State and system containers for the wave-equation demo.
+
+``WaveSystemStatev3`` carries the usual particle constants (positions,
+supports, masses, ...) so the same samplers and neighbour search work on it,
+plus the four fields the wave equation actually needs: ``u`` and ``v`` (the
+integrated pair), ``c`` (per-particle wave speed, which is what makes
+obstacles and boundaries "hard") and ``damping`` (the absorbing profile).
+
+``u`` is tagged ``'dxdt'``/``'position'`` and ``v`` ``'dvdt'``/``'velocity'``
+purely so ``warpSPHIntegrators`` treats the pair with its position/velocity
+integrators; neither is a position or a velocity. That reuse is the point --
+the wave system rides the same integrator machinery as the fluid schemes.
+
+Not a fluid scheme and not a registered case; see
+:mod:`warpSPH.schemes.waveEquation` for what it is for.
+"""
+
 import torch
 from typing import Optional
 from dataclasses import dataclass

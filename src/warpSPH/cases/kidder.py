@@ -1,7 +1,7 @@
 """Kidder isentropic compression (1D), compressible.
 
 The script form of this case was
-`examples/compressible/03-Kidder_Isentropic_Compression.ipynb`.
+`examples/compressible/03-kidder-isentropic-compression.ipynb`.
 
 Two things make this case unlike the other compressible examples, and both are
 carried over as hooks rather than folded into the runner:

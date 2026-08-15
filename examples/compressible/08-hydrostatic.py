@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """08 hydrostatic -- thin wrapper around the shared runner.
 
-The notebook this came from is `08-Hydrostatic.ipynb`; the case itself is
+The notebook this came from is `08-hydrostatic.ipynb`; the case itself is
 `warpSPH.cases.hydrostatic`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

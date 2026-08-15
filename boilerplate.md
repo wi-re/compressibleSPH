@@ -1,3 +1,29 @@
+# Video description boilerplate
+
+Copy-paste source for the descriptions attached to the rendered case videos when
+they are published outside this repository (YouTube and similar). Nothing reads
+this file programmatically — it is a writing aid, not configuration.
+
+Use it as: the general block below, with the `<PLACEHOLDER>` run metadata filled
+in, preceded by the matching per-case snippet from the end of this file. The
+metadata it asks for (case, final time, step count, particle count, dimension,
+precision, device) is exactly what a run's own banner and completion report
+print, so the easiest source is the console output of the run that produced the
+video — or the `caseSpec.json` written next to its export.
+
+Two caveats before reusing it:
+
+- **The numbering here is the original 01–15 scheme**, where 07 was Sedov 2D and
+  15 was the equal-mass triple point. The examples tree has since folded 07 into
+  [`examples/compressible/06-sedov/`](examples/compressible/06-sedov/) and 15
+  into [`examples/compressible/14-triplePoint/`](examples/compressible/14-triplePoint/),
+  so the snippet numbers no longer match the directory names. The case *names*
+  are still correct.
+- **The Case Data table is only partly filled in.** Blank rows are simply rows
+  nobody has published a video for yet.
+
+---
+
 ## Video Description Boilerplate (General)
 
 This video shows a GPU-based compressible SPH simulation from the warpSPH benchmark suite.

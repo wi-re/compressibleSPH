@@ -1,7 +1,7 @@
 """The step loop, once.
 
 `examples/compressible/01-sod/sod_1d.py`,
-`examples/incompressible/01-tgv-incomp.py` and
+`examples/incompressible/01-taylor-green-vortex.py` and
 `datagen/weaklyCompressible/generator.py` each carried their own copy of: build
 config, unpack ``buildScheme``, initialize state, loop the integrator, time it,
 accumulate diagnostics, plot every N, export every M, encode a video. This

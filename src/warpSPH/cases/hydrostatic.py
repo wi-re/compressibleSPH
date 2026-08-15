@@ -1,6 +1,6 @@
 """Hydrostatic equilibrium (2D), compressible.
 
-The script form of this case was `examples/compressible/08-Hydrostatic.ipynb`.
+The script form of this case was `examples/compressible/08-hydrostatic.ipynb`.
 A dense square sits in a lighter background at uniform pressure, so the exact
 solution is "nothing happens": every velocity should stay at zero. What the
 plot actually shows is the spurious surface tension at the density jump, which

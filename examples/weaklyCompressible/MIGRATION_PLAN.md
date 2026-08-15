@@ -115,7 +115,7 @@ none of them could set it, which made `--inviscid` runs unsteerable.
 
 One shape, not two. Every case in this family is 2D and plots particle fields,
 so all the notebooks are `particlePlot`-shaped and follow
-`../compressible/08-Hydrostatic.ipynb` cell for cell: `buildFieldPlotter` /
+`../compressible/08-hydrostatic.ipynb` cell for cell: `buildFieldPlotter` /
 `refreshFieldPlotter` from `cases/plotting.py` called directly (they are
 `setupPlot`/`updatePlot` minus `openWindow`/`pumpEvents`, which do not
 live-update in a Jupyter cell here), with the case's own `Field` list passed in.
@@ -166,7 +166,7 @@ editable if the reader knows what each knob means.
 | 10 | `10-moving-obstacle.ipynb` | `movingObstacle` | **done** — mean-velocity-vs-target panel at the hook point |
 | 11 | `11-driven-square.ipynb` | `drivenSquare` | **done (2026-08-14), case redesigned** — see below; no longer a `channelFlow` hook |
 | 12 | `12-dambreak.ipynb` | `dambreak` | **done** — kept the recomputed-density cell, paired with `surfaceIndicators`; front position recorded at the hook point |
-| 13 | `13-openFlow.ipynb` | `channelFlow.openFlowCase` | open — 1704 lines, 57 cells, the worst one; do it last |
+| 13 | `13-open-flow.ipynb` | `channelFlow.openFlowCase` | open — 1704 lines, 57 cells, the worst one; do it last |
 
 `naca.ipynb` stays as it is: a standalone SDF-visualisation scratchpad with no
 case, already recorded as won't-fix in `CLEANUP_PLAN.md`. (It is also the only

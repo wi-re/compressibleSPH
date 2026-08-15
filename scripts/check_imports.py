@@ -108,7 +108,13 @@ def notebook_source(path: Path) -> str:
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
             continue
-        for line in cell.get("source", []):
+        source = cell.get("source", [])
+        # nbformat permits `source` to be one string as well as a list of
+        # lines. Iterating a string walks it character by character, which
+        # turns every cell it appears in into nonsense the parser rejects.
+        if isinstance(source, str):
+            source = source.splitlines(keepends=True)
+        for line in source:
             stripped = line.lstrip()
             # IPython magics / shell escapes are not valid Python.
             if stripped.startswith(("%", "!", "?")):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """02 linear wave -- thin wrapper around the shared runner.
 
-The notebook this came from is `02-Linear_Wave.ipynb`; the case itself is
+The notebook this came from is `02-linear-wave.ipynb`; the case itself is
 `warpSPH.cases.linearWave`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

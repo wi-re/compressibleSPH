@@ -1,7 +1,7 @@
 """Gresho-Chan vortex (2D), compressible.
 
 The script form of this case was
-`examples/compressible/09-Gresho_Chan_Vortex.ipynb`. A steady rotating vortex
+`examples/compressible/09-gresho-chan-vortex.ipynb`. A steady rotating vortex
 balanced by its own pressure gradient: the exact solution is time-independent,
 so any drift in the velocity profile is scheme error.
 """

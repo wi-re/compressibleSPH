@@ -4,7 +4,7 @@ import scipy.optimize
 
 
 def sound_speed(gamma, pressure, density, dustFrac=0.):
-    """
+    r"""
     Calculate sound speed, scaled by the dust fraction according to:
 
         .. math::

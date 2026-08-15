@@ -8,7 +8,7 @@ sideways**, back and forth along x at `oscillationAmplitude` and
 swinging through an otherwise still fluid. That is what "driven" names here:
 the body is what is being driven, not the flow. Compare against
 `movingObstacle` (case 10, a body that spins in place instead of translating)
-and `openFlowCase` (`13-openFlow.py`, a fixed obstacle in a channel with real
+and `openFlowCase` (`13-open-flow.py`, a fixed obstacle in a channel with real
 walls and inflow).
 
 Three things follow from "back and forth" that did not apply to a body

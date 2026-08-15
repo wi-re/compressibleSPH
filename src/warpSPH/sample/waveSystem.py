@@ -1,3 +1,15 @@
+"""Assemble a ``WaveSystemv3`` from the grids the case generator produced.
+
+Takes the per-particle ``u``/``v``/``c``/``damping`` grids plus the two id
+grids from :func:`warpSPH.caseUtils.waveEquation.gencase.genInitial`, resolves
+source ids to amplitudes and obstacle/boundary ids to wave speeds, optionally
+smooths the initial conditions, and returns the system together with its
+timestep.
+
+This is the last stage of the wave pipeline, not an entry point -- there is no
+``Case`` wrapping it, so a caller has to run the earlier stages themselves.
+"""
+
 import torch
 from ..systems.waveSystem import computeDt, WaveSystemv3, WaveSystemStatev3
 from ..caseUtils.waveEquation.sample import smoothValuesWarp

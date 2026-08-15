@@ -5,7 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "warpSPH"
 version = "0.5.0"
-description = "GPU-accelerated SPH neighbor search and operators built with NVIDIA Warp and PyTorch"
+authors = [
+  { name="Rene Winchenbach", email="contact@fluids.dev" },
+]
+maintainers = [
+  { name="Rene Winchenbach", email="contact@fluids.dev" },
+]
+description = "Cases, runner and examples for GPU SPH: compressible, weakly compressible and incompressible schemes on warpSPHCore"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -32,6 +38,10 @@ dependencies = [
     "tqdm", "seaborn", "pandas", "pyglet", "dill", "numba", "scipy", "scikit-image", "h5py", "ipykernel", "ipympl"
 ]
 
+[project.urls]
+Repository = "https://github.com/wi-re/warpSPH"
+Issues = "https://github.com/wi-re/warpSPH"
+
 [project.optional-dependencies]
 notebooks = [
     "matplotlib",
@@ -42,6 +52,8 @@ dev = [
     "pytest",
     "build",
     "twine",
+    # Notebooks are committed stripped; see CONTRIBUTING.md.
+    "nbstripout",
 ]
 
 [project.scripts]

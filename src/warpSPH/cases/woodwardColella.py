@@ -1,7 +1,7 @@
 """Woodward-Colella blast-wave interaction (1D), compressible.
 
 The script form of this case was
-`examples/compressible/05-Woodward_Colella.ipynb`. Two strong blasts launched
+`examples/compressible/05-woodward-colella.ipynb`. Two strong blasts launched
 from opposite ends of the tube collide near x = 0.7; that collision is why the
 run needs the adaptive `timestep` hook and a tighter CFL factor than the other
 1D examples.

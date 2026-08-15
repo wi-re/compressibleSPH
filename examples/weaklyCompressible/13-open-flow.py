@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """13 open flow -- thin wrapper around the shared runner.
 
-The notebook this came from is `13-openFlow.ipynb`; the case itself is
+The notebook this came from is `13-open-flow.ipynb`; the case itself is
 `warpSPH.cases.channelFlow`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """11 shearing noh implosion 2d -- thin wrapper around the shared runner.
 
-The notebook this came from is `11-Shearing_Noh_Implosion_2D.ipynb`; the case itself is
+The notebook this came from is `11-shearing-noh-implosion-2d.ipynb`; the case itself is
 `warpSPH.cases.shearingNoh`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

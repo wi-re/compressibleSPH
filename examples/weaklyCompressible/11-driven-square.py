@@ -10,7 +10,7 @@ export, plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 
 A square rigid body translates sideways at `obstacleVelocity` through an
 otherwise still, periodic box of fluid -- a towed body, not a fixed one in a
-freestream (that's `13-openFlow.py`). `--obstacleShape` takes any key of
+freestream (that's `13-open-flow.py`). `--obstacleShape` takes any key of
 `SHAPE_PRESETS`; `--enableFreestream` layers a driven current under the
 translation as a separate experiment, off by default.
 """

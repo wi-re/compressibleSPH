@@ -1,7 +1,7 @@
 """Rayleigh-Taylor instability (2D), compressible.
 
 The script form of this case was
-`examples/compressible/13-Rayleigh_Taylor.ipynb`. Heavy fluid over light in a
+`examples/compressible/13-rayleigh-taylor.ipynb`. Heavy fluid over light in a
 tall box under constant gravity; the sampler installs both the Dirichlet
 boundary bands and the gravity forcing, so `buildSystem` is all this case needs.
 """

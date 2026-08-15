@@ -38,6 +38,7 @@ and the visualisation in [`warpSPHPlotting`](https://github.com/wi-re/warpSPHPlo
 - [Configuration reference](#configuration-reference)
 - [Package layout](#package-layout)
 - [Tests](#tests)
+- [Contributing](CONTRIBUTING.md) — dev setup, nbstripout, what to run before committing
 - [Gallery](#gallery)
 - [Precision, and other things that bite](#precision-and-other-things-that-bite)
 
@@ -64,6 +65,9 @@ pip install -e warpSPH/
 A CUDA device is required for anything beyond imports. `ffmpeg` is optional —
 without it, `--video` is skipped rather than failing a run that already produced
 its frames.
+
+Contributing, and in particular **committing notebooks**, needs one more step:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
@@ -116,7 +120,13 @@ python -m warpSPH.cases.sod [flags]         # the same case, as a module
 python examples/compressible/01-sod/sod_1d.py [flags]
 ```
 
-`warpsph-run` with no case name lists everything with its description.
+`warpsph-run` with no case name lists everything with its description, and
+`warpsph-run <case> --help` describes every flag at that case's own defaults —
+including, for the enum-valued ones (`--kernel`, `--supportMode`,
+`--gradientMode`, `--laplacianMode`, `--samplingScheme`, `--integrationScheme`),
+the accepted values read straight off the enums. Every boolean flag has a
+`--no-` twin, listed beside it, so a `true` in a config file stays overridable
+from the command line.
 
 `warpsph-run --precision float64 ...` works because the CLI selects the precision
 *before* `warpSPH` is imported. The other two entry points import `warpSPH`
@@ -280,11 +290,11 @@ notebooks stay for exploration; the scripts are what you run unattended.
 
 | case | script | notes |
 |---|---|---|
-| `impact` | [01](examples/weaklyCompressible/01-impact-spheres.py), [02](examples/weaklyCompressible/02-impact-squares.py) | two bodies colliding; `--shape circle` or `box` |
+| `impact` | [01-impact/](examples/weaklyCompressible/01-impact/) ([spheres](examples/weaklyCompressible/01-impact/impact_spheres.py), [squares](examples/weaklyCompressible/01-impact/impact_squares.py)) | two bodies colliding; `--shape circle` or `box` |
 | `squarePatch` | [03-rotating-square-patch.py](examples/weaklyCompressible/03-rotating-square-patch.py) | rotating square patch of fluid |
 | `droplet` | [04-oscillating-droplet.py](examples/weaklyCompressible/04-oscillating-droplet.py) | oscillating droplet in a central potential |
 | `tgv-wc` | [05-taylor-green-vortex.py](examples/weaklyCompressible/05-taylor-green-vortex.py) | Taylor-Green vortex with explicit viscosity |
-| `randomFlow` | [06](examples/weaklyCompressible/06-periodic-random-flow.py), [07](examples/weaklyCompressible/07-bounded-random-flow.py) | divergence-free noise; `--bounded` adds walls |
+| `randomFlow` | [06-randomFlow/](examples/weaklyCompressible/06-randomFlow/) ([periodic](examples/weaklyCompressible/06-randomFlow/randomFlow_periodic.py), [bounded](examples/weaklyCompressible/06-randomFlow/randomFlow_bounded.py)) | divergence-free noise; `--bounded` adds walls |
 | `kolmogorov` | [08-kolmogorov-flow.py](examples/weaklyCompressible/08-kolmogorov-flow.py) | sinusoidally forced periodic box |
 | `ldc` | [09-lid-driven-cavity.py](examples/weaklyCompressible/09-lid-driven-cavity.py) | lid-driven cavity |
 | `movingObstacle` | [10-moving-obstacle.py](examples/weaklyCompressible/10-moving-obstacle.py) | flow past a spinning rigid body |
@@ -296,7 +306,7 @@ notebooks stay for exploration; the scripts are what you run unattended.
 
 | case | script | notes |
 |---|---|---|
-| `tgv` | [01-tgv-incomp.py](examples/incompressible/01-tgv-incomp.py) | Taylor-Green vortex, divergence-free |
+| `tgv` | [01-taylor-green-vortex.py](examples/incompressible/01-taylor-green-vortex.py) | Taylor-Green vortex, divergence-free |
 | `squarePatch` | [03-rotating-square-patch.py](examples/incompressible/03-rotating-square-patch.py) | same case at `--scheme divergenceFree` |
 | `randomFlow` | [periodic-random-flow.py](examples/incompressible/periodic-random-flow.py) | same case at `--scheme divergenceFree` |
 
@@ -305,6 +315,35 @@ only in a flag; the scripts pin the flag. Two notebooks deliberately have no
 case: `weaklyCompressible/naca.ipynb` is a standalone airfoil-SDF visualisation
 with no simulation in it, and `incompressible/1d-test.ipynb` is an exploratory
 scratchpad rather than a published example.
+
+### The wave system
+
+There is a fourth thing in the tree that is **not** a fluid scheme and has no
+registered case: a scalar wave-equation solver, `d2u/dt2 = c^2 laplacian(u)`,
+with PML-style absorbing damping.
+
+| piece | where |
+|---|---|
+| the scheme | [`schemes/waveEquation.py`](src/warpSPH/schemes/waveEquation.py) |
+| state and system | [`systems/waveSystem.py`](src/warpSPH/systems/waveSystem.py) |
+| configuration | [`configurations/waveEquationConfig.py`](src/warpSPH/configurations/waveEquationConfig.py) |
+| case generation | [`caseUtils/waveEquation/`](src/warpSPH/caseUtils/waveEquation/) |
+| system assembly | [`sample/waveSystem.py`](src/warpSPH/sample/waveSystem.py) |
+
+It is kept because it is a compact demo of the SPH operators applied to
+*unstructured, mesh-like data* — a moving-neighbourhood Laplacian over scattered
+points, with a heterogeneous wave speed making obstacles and walls — which is
+the shape of problem graph and point-cloud ML models are usually posed on. The
+`randomize*` flags and `*Range` pairs in its config exist so that one TOML
+casefile describes a *family* of cases to sample from, rather than one case.
+
+Two things to know before reaching for it: the pipeline is
+`build_configs_from_casefile` → `sampleParticles` → `genInitial` →
+`finalizeWaveSystemSetup` → integrate with `f_wave_equation`, and **there is no
+entry point that runs those five stages for you** — no `Case`, no CLI, no
+example. No casefile ships either, though every key in the TOML schema has a
+default. It is also 2D in practice (`genInitial` allocates `nx**2`). Making it
+runnable means writing that glue and a casefile to go with it.
 
 ---
 
@@ -477,7 +516,11 @@ src/
     io/                    HDF5/JSON export, import, parsing and datasets
 examples/                  notebooks, runnable scripts, sweeps, rendered media
 datagen/                   dataset generation on top of the same cases
-scripts/                   check_imports.py, run_tests.sh, run_sweep.py
+                           (see datagen/README.md)
+scripts/                   run_tests.sh (pytest), run_sweep.py (every case,
+                           briefly), check_imports.py (imports resolve),
+                           render_examples.py (regenerate example media),
+                           gradcheck_*.py (adjoint correctness, 15 of them)
 tests/                     pytest suite
 ```
 
@@ -487,21 +530,23 @@ tests/                     pytest suite
 scripts/run_tests.sh          # or plain `pytest`
 ```
 
-42 tests, a few seconds once the warp kernel cache is warm; a CUDA device is
-required. The script just wraps pytest, silencing the third-party warnings that
-otherwise bury the result; it forwards any extra arguments
-(`scripts/run_tests.sh -k sod -v`). They assert *properties* rather than golden numbers — total-energy
-conservation for Sod, Taylor-Green decay against the analytic rate, density
-bounds and gravitational work for the dam break — plus the runner's own
-invariants: that every case registers and names a resolvable scheme, that the
-spec round-trips through JSON and YAML, and that the banner, report and
-`--quiet` behave.
+89 tests, about two minutes once the warp kernel cache is warm; a CUDA device
+is required. Most of that is the 15 `gradcheck_*.py` scripts, which each run in
+their own subprocess -- deselecting `tests/test_gradcheck_scripts.py` brings
+the rest in under 30 seconds. The script just wraps pytest, silencing the
+third-party warnings that otherwise bury the result; it forwards any extra
+arguments (`scripts/run_tests.sh -k sod -v`). They assert *properties* rather
+than golden numbers — total-energy conservation for Sod, Taylor-Green decay
+against the analytic rate, density bounds and gravitational work for the dam
+break — plus the runner's own invariants: that every case registers and names
+a resolvable scheme, that the spec round-trips through JSON and YAML, and that
+the banner, report and `--quiet` behave.
 
 To exercise every case rather than the three the physics tests cover, sweep
 them:
 
 ```bash
-scripts/run_sweep.py                # every case, 5 steps each, ~3 min
+scripts/run_sweep.py                # every case, 5 steps each, ~4 min
 scripts/run_sweep.py --full         # every case to its own tLimit (long)
 scripts/run_sweep.py --cases sod noh
 ```
@@ -526,25 +571,60 @@ imports that nothing else executes.
 
 ## Gallery
 
-Previews and embedded videos for the compressible set:
-[examples/compressible/EXAMPLES_SUMMARY.md](examples/compressible/EXAMPLES_SUMMARY.md)
+Previews and embedded videos, one page per family:
+[compressible](examples/compressible/EXAMPLES_SUMMARY.md) ·
+[weakly compressible](examples/weaklyCompressible/EXAMPLES_SUMMARY.md).
+
+All of this media is produced by
+[`scripts/render_examples.py`](scripts/render_examples.py), which re-runs each
+example's `.py` wrapper at its shipped settings and files the GIF, MP4 and
+final-frame PNG next to the notebook that references them. These are
+full-length runs, not smoke tests, so re-rendering everything takes hours —
+`--only` narrows it, and `--list` shows what would run and where it would land:
+
+```bash
+scripts/render_examples.py --list
+scripts/render_examples.py --only dambreak ldc
+```
+
+(For "does every case still run", `scripts/run_sweep.py` is the right tool.)
+
+### Compressible
 
 | Case | Notebook | Preview | Video |
 |---|---|---|---|
 | 01. Sod Shock Tube (1D) | [ipynb](examples/compressible/01-sod/sod_1d.ipynb) | ![](examples/compressible/01-sod/outputs/01-Sod_Shock_Tube.png) | [MP4](examples/compressible/01-sod/outputs/01-Sod_Shock_Tube.mp4) |
-| 02. Linear Wave | [ipynb](examples/compressible/02-Linear_Wave.ipynb) | ![](examples/compressible/outputs/02-Linear_wave.png) | [MP4](examples/compressible/outputs/02-Linear_wave.mp4) |
-| 03. Kidder Isentropic Compression | [ipynb](examples/compressible/03-Kidder_Isentropic_Compression.ipynb) | ![](examples/compressible/outputs/03-Kidder_Isentropic_compression.png) | [MP4](examples/compressible/outputs/03-Kidder_Isentropic_compression.mp4) |
-| 04. Noh Implosion | [ipynb](examples/compressible/04-Noh_Implosion.ipynb) | ![](examples/compressible/outputs/04-Noh_Implosion.png) | [MP4](examples/compressible/outputs/04-Noh_Implosion.mp4) |
-| 05. Woodward-Colella Double Blastwave | [ipynb](examples/compressible/05-Woodward_Colella.ipynb) | ![](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.png) | [MP4](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.mp4) |
+| 02. Linear Wave | [ipynb](examples/compressible/02-linear-wave.ipynb) | ![](examples/compressible/outputs/02-Linear_wave.png) | [MP4](examples/compressible/outputs/02-Linear_wave.mp4) |
+| 03. Kidder Isentropic Compression | [ipynb](examples/compressible/03-kidder-isentropic-compression.ipynb) | ![](examples/compressible/outputs/03-Kidder_Isentropic_compression.png) | [MP4](examples/compressible/outputs/03-Kidder_Isentropic_compression.mp4) |
+| 04. Noh Implosion | [ipynb](examples/compressible/04-noh-implosion.ipynb) | ![](examples/compressible/outputs/04-Noh_Implosion.png) | [MP4](examples/compressible/outputs/04-Noh_Implosion.mp4) |
+| 05. Woodward-Colella Double Blastwave | [ipynb](examples/compressible/05-woodward-colella.ipynb) | ![](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.png) | [MP4](examples/compressible/outputs/05-Wodward_Colella_Double_Blastwave.mp4) |
 | 06. Sedov-Taylor Blastwave (1D/2D/3D) | [ipynb](examples/compressible/06-sedov/sedov_1d.ipynb) | ![](examples/compressible/06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.png) | [MP4](examples/compressible/06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.mp4) |
-| 08. Hydrostatic | [ipynb](examples/compressible/08-Hydrostatic.ipynb) | ![](examples/compressible/outputs/08-Hydrostatic.png) | [MP4](examples/compressible/outputs/08-Hydrostatic.mp4) |
-| 09. Gresho-Chan Vortex | [ipynb](examples/compressible/09-Gresho_Chan_Vortex.ipynb) | ![](examples/compressible/outputs/09-Gresho_Chan_Vortex.png) | [MP4](examples/compressible/outputs/09-Gresho_Chan_Vortex.mp4) |
-| 10. Yee Vortex | [ipynb](examples/compressible/10-Yee_Vortex.ipynb) | ![](examples/compressible/outputs/10-Yee_Vortex.png) | [MP4](examples/compressible/outputs/10-Yee_Vortex.mp4) |
-| 11. Shearing Noh Implosion (2D) | [ipynb](examples/compressible/11-Shearing_Noh_Implosion_2D.ipynb) | ![](examples/compressible/outputs/11-Shearing_Noh_2D.png) | [MP4](examples/compressible/outputs/11-Shearing_Noh_2D.mp4) |
-| 12. Kelvin-Helmholtz | [ipynb](examples/compressible/12-Kelvin-Helmholtz.ipynb) | ![](examples/compressible/outputs/12-Kelvin_Helmholtz.png) | [MP4](examples/compressible/outputs/12-Kelvin_Helmholtz.mp4) |
-| 13. Rayleigh-Taylor | [ipynb](examples/compressible/13-Rayleigh_Taylor.ipynb) | ![](examples/compressible/outputs/13-Rayleigh_Taylor.png) | [MP4](examples/compressible/outputs/13-Rayleigh_Taylor.mp4) |
+| 08. Hydrostatic | [ipynb](examples/compressible/08-hydrostatic.ipynb) | ![](examples/compressible/outputs/08-Hydrostatic.png) | [MP4](examples/compressible/outputs/08-Hydrostatic.mp4) |
+| 09. Gresho-Chan Vortex | [ipynb](examples/compressible/09-gresho-chan-vortex.ipynb) | ![](examples/compressible/outputs/09-Gresho_Chan_Vortex.png) | [MP4](examples/compressible/outputs/09-Gresho_Chan_Vortex.mp4) |
+| 10. Yee Vortex | [ipynb](examples/compressible/10-yee-vortex.ipynb) | ![](examples/compressible/outputs/10-Yee_Vortex.png) | [MP4](examples/compressible/outputs/10-Yee_Vortex.mp4) |
+| 11. Shearing Noh Implosion (2D) | [ipynb](examples/compressible/11-shearing-noh-implosion-2d.ipynb) | ![](examples/compressible/outputs/11-Shearing_Noh_2D.png) | [MP4](examples/compressible/outputs/11-Shearing_Noh_2D.mp4) |
+| 12. Kelvin-Helmholtz | [ipynb](examples/compressible/12-kelvin-helmholtz.ipynb) | ![](examples/compressible/outputs/12-Kelvin_Helmholtz.png) | [MP4](examples/compressible/outputs/12-Kelvin_Helmholtz.mp4) |
+| 13. Rayleigh-Taylor | [ipynb](examples/compressible/13-rayleigh-taylor.ipynb) | ![](examples/compressible/outputs/13-Rayleigh_Taylor.png) | [MP4](examples/compressible/outputs/13-Rayleigh_Taylor.mp4) |
 | 14. Triple Point (Equal Spacing) | [ipynb](examples/compressible/14-triplePoint/triplePoint_equalSpacing.ipynb) | ![](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_resolution.png) | [MP4](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_resolution.mp4) |
 | 14. Triple Point (Equal Mass) | [ipynb](examples/compressible/14-triplePoint/triplePoint_equalMass.ipynb) | ![](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_mass.png) | [MP4](examples/compressible/14-triplePoint/outputs/14-Triple_Point_equal_mass.mp4) |
+
+### Weakly compressible
+
+| Case | Notebook | Preview | Video |
+|---|---|---|---|
+| 01. Impact (spheres) | [ipynb](examples/weaklyCompressible/01-impact/impact_spheres.ipynb) | ![](examples/weaklyCompressible/01-impact/outputs/01-impact_spheres.png) | [MP4](examples/weaklyCompressible/01-impact/outputs/01-impact_spheres.mp4) |
+| 01. Impact (squares) | [ipynb](examples/weaklyCompressible/01-impact/impact_squares.ipynb) | ![](examples/weaklyCompressible/01-impact/outputs/01-impact_squares.png) | [MP4](examples/weaklyCompressible/01-impact/outputs/01-impact_squares.mp4) |
+| 03. Rotating Square Patch | [ipynb](examples/weaklyCompressible/03-rotating-square-patch.ipynb) | ![](examples/weaklyCompressible/outputs/03-rotatingSquarePatch.png) | [MP4](examples/weaklyCompressible/outputs/03-rotatingSquarePatch.mp4) |
+| 04. Oscillating Droplet | [ipynb](examples/weaklyCompressible/04-oscillating-droplet.ipynb) | ![](examples/weaklyCompressible/outputs/04-oscillatingDroplet.png) | [MP4](examples/weaklyCompressible/outputs/04-oscillatingDroplet.mp4) |
+| 05. Taylor-Green Vortex | [ipynb](examples/weaklyCompressible/05-taylor-green-vortex.ipynb) | ![](examples/weaklyCompressible/outputs/05-taylorGreenVortex.png) | [MP4](examples/weaklyCompressible/outputs/05-taylorGreenVortex.mp4) |
+| 06. Random Flow (periodic) | [ipynb](examples/weaklyCompressible/06-randomFlow/randomFlow_periodic.ipynb) | ![](examples/weaklyCompressible/06-randomFlow/outputs/06-randomFlowPeriodic.png) | [MP4](examples/weaklyCompressible/06-randomFlow/outputs/06-randomFlowPeriodic.mp4) |
+| 06. Random Flow (bounded) | [ipynb](examples/weaklyCompressible/06-randomFlow/randomFlow_bounded.ipynb) | ![](examples/weaklyCompressible/06-randomFlow/outputs/06-randomFlowBounded.png) | [MP4](examples/weaklyCompressible/06-randomFlow/outputs/06-randomFlowBounded.mp4) |
+| 08. Kolmogorov Flow | [ipynb](examples/weaklyCompressible/08-kolmogorov-flow.ipynb) | ![](examples/weaklyCompressible/outputs/08-kolmogorovFlow.png) | [MP4](examples/weaklyCompressible/outputs/08-kolmogorovFlow.mp4) |
+| 09. Lid-Driven Cavity | [ipynb](examples/weaklyCompressible/09-lid-driven-cavity.ipynb) | ![](examples/weaklyCompressible/outputs/09-lidDrivenCavity.png) | [MP4](examples/weaklyCompressible/outputs/09-lidDrivenCavity.mp4) |
+| 10. Moving Obstacle | [ipynb](examples/weaklyCompressible/10-moving-obstacle.ipynb) | ![](examples/weaklyCompressible/outputs/10-movingObstacle.png) | [MP4](examples/weaklyCompressible/outputs/10-movingObstacle.mp4) |
+| 11. Driven Square | [ipynb](examples/weaklyCompressible/11-driven-square.ipynb) | ![](examples/weaklyCompressible/outputs/11-drivenSquare.png) | [MP4](examples/weaklyCompressible/outputs/11-drivenSquare.mp4) |
+| 12. Dam Break | [ipynb](examples/weaklyCompressible/12-dambreak.ipynb) | ![](examples/weaklyCompressible/outputs/12-dambreak.png) | [MP4](examples/weaklyCompressible/outputs/12-dambreak.mp4) |
+| 13. Open Channel Flow | [ipynb](examples/weaklyCompressible/13-open-flow.ipynb) | *(no render yet)* | — |
 
 ## Precision, and other things that bite
 

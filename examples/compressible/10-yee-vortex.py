@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """10 yee vortex -- thin wrapper around the shared runner.
 
-The notebook this came from is `10-Yee_Vortex.ipynb`; the case itself is
+The notebook this came from is `10-yee-vortex.ipynb`; the case itself is
 `warpSPH.cases.yeeVortex`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

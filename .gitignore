@@ -209,4 +209,7 @@ images/
 # tracked sweep *configs* and must stay visible)
 /sweeps/
 
+# Captured test output at the repo root; `*.log` above does not match it.
+/log.txt
+
 memory_snapshot.json

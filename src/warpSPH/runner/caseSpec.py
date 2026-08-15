@@ -175,17 +175,92 @@ class CaseSpec:
 #: Short options for the flags reached for often enough to earn one.
 _SHORT_FLAGS = {'quiet': '-q', 'verbose': '-v'}
 
+#: One line per :class:`CaseSpec` field, shown by ``--help``. Without these the
+#: help is a list of field names restating themselves, and the only description
+#: of what any of them mean lives in the README.
+_FIELD_HELP = {
+    'caseName': 'name used for the export directory and the banner',
+    # -- discretisation --
+    'nx': 'particles across the domain at the base resolution',
+    'dim': 'spatial dimension (1, 2 or 3)',
+    'L': 'domain edge length',
+    'n_h': 'neighbours per smoothing length; converted to targetNeighbors',
+    'periodic': 'wrap the domain at its edges',
+    # -- operators --
+    'kernel': 'SPH kernel function',
+    'integrationScheme': 'time integrator, from warpSPHIntegrators',
+    'supportMode': 'how a pair\'s two support radii combine into one',
+    'gradientMode': 'gradient discretisation',
+    'laplacianMode': 'Laplacian discretisation',
+    'samplingScheme': 'how the initial particles are placed',
+    'verletScale': "neighbour-list padding factor; unset uses the scheme's own",
+    # -- time stepping --
+    'tLimit': 'simulated time to stop at',
+    'dt': 'fixed timestep; unset lets the case derive one',
+    'adaptiveDt': 'recompute dt each step from the CFL condition',
+    'cflFactor': 'CFL safety factor, when adaptiveDt is on',
+    'minDt': 'floor on the adaptive timestep',
+    'maxDt': 'ceiling on the adaptive timestep',
+    'nSteps': 'stop after this many steps instead of at tLimit',
+    # -- runtime --
+    'precision': 'scalar precision; resolved before import, so pass it to '
+                 'warpsph-run rather than to a case module',
+    'device': "torch device; unset picks cuda:0 when one is available",
+    # -- output --
+    'plot': 'draw frames while the run proceeds',
+    'plotInterval': 'steps between drawn frames',
+    'show': 'open a live window; ignored when no interactive backend exists',
+    'holdPlot': 'block on the final figure instead of closing it',
+    'plotBackend': 'matplotlib, vispy or pyVista; unset picks by dimension',
+    'store': 'write simulation state to HDF5',
+    'storeMode': 'states = one file per stored step; trajectory = one growing file',
+    'storeInterval': 'steps between stored states (storeMode=states)',
+    'exportInterval': 'simulated time between frames (storeMode=trajectory)',
+    'exportRoot': "parent directory for run folders; unset uses "
+                  "$WARPSPH_EXPORT_ROOT, else 'export'",
+    'video': 'encode the exported frames with ffmpeg; skipped if it is missing',
+    'progress': 'show a progress bar; unset means "when a terminal is watching"',
+    'verbose': 'print extra detail during setup',
+    'quiet': 'suppress the banner, the progress bar and the completion report',
+}
+
+def enumChoices() -> Dict[str, List[str]]:
+    """Accepted values for each enum-valued field, read off the enums themselves.
+
+    The enums are the authority on what is accepted, so ``--help`` reports their
+    members rather than repeating a list here that would drift out of date.
+
+    Imported lazily: these come from ``warpSPHCore``/``warpSPHIntegrators``,
+    which resolve precision on first import, and building a parser must not
+    force that choice.
+    """
+    from warpSPHIntegrators import IntegrationSchemeType
+    from warpSPHCore import (GradientScheme, KernelFunctions, LaplacianScheme,
+                             SupportScheme)
+    from ..geometry import SamplingScheme
+    byField = {
+        'kernel': KernelFunctions,
+        'supportMode': SupportScheme,
+        'gradientMode': GradientScheme,
+        'laplacianMode': LaplacianScheme,
+        'samplingScheme': SamplingScheme,
+        'integrationScheme': IntegrationSchemeType,
+    }
+    return {name: [m.name for m in enumClass] for name, enumClass in byField.items()}
+
 
 def _addField(parser: argparse.ArgumentParser, name: str, default: Any, annotation: Any, help: str):
     """Declare one flag, inferring its type from the dataclass default."""
     short = _SHORT_FLAGS.get(name)
     if isinstance(default, bool):
         # store_true would make `plot: true` in a config file un-overridable from
-        # the CLI, so both polarities get a flag.
+        # the CLI, so both polarities get a flag. BooleanOptionalAction keeps the
+        # default at None -- which is what distinguishes "not passed" from
+        # "passed the default" -- while listing `--no-x` next to `--x` in the
+        # help, so the negation is discoverable rather than merely present.
         names = [f'--{name}'] + ([short] if short else [])
-        parser.add_argument(*names, dest=name, action='store_true', default=None, help=help)
-        parser.add_argument(f'--no-{name}', dest=name, action='store_false', default=None,
-                            help=argparse.SUPPRESS)
+        parser.add_argument(*names, dest=name, action=argparse.BooleanOptionalAction,
+                            default=None, help=help)
         return
 
     kind = float
@@ -225,6 +300,13 @@ def buildArgumentParser(description: str = 'Run a warpSPH case.',
     "not passed" distinguishable from "passed the default".
     """
     parser = argparse.ArgumentParser(description=description)
+    try:
+        choices = enumChoices()
+    except ImportError:
+        # Building a parser is also how `--help` is produced, which must keep
+        # working without the whole stack importable; the values are then just
+        # absent from the help rather than fatal.
+        choices = {}
     parser.add_argument('--config', type=str, default=None,
                         help='JSON/YAML file of CaseSpec fields. CLI flags override it.')
     parser.add_argument('--saveConfig', type=str, default=None,
@@ -238,18 +320,27 @@ def buildArgumentParser(description: str = 'Run a warpSPH case.',
             helpText = (f'solver to run (default: {shown!r}). '
                         f'One of: {", ".join(schemeNames())}')
         else:
-            helpText = f'CaseSpec.{f.name} (default: {shown!r})'
+            helpText = f'{_FIELD_HELP.get(f.name, f.name)} (default: {shown!r})'
+            if f.name in choices:
+                helpText += f'. One of: {", ".join(choices[f.name])}'
         # Type inference stays on the dataclass default/annotation: a case
         # default of a different type must not change the flag's type.
         _addField(parser, f.name, f.default, f.type, helpText)
 
+    configOnly = []
     for name, value in (caseParams or {}).items():
         # A list/dict-valued parameter (Woodward-Colella's shock regions, the
         # dam break's gravity vector) has no sensible flag form -- argparse
         # would infer `float` from it. Those stay settable via --config only.
         if isinstance(value, (list, dict)):
+            configOnly.append(name)
             continue
         _addField(parser, name, value, type(value), f'case parameter (default: {value!r})')
+
+    if configOnly:
+        # Silently dropping these leaves no way to find out they exist.
+        parser.epilog = ('case parameters settable only through --config (their '
+                         'values are lists or mappings): ' + ', '.join(sorted(configOnly)))
 
     return parser
 

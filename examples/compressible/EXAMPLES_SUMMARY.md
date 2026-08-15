@@ -13,17 +13,17 @@ folded into 14's own directory alongside its equal-mass/equal-spacing variants).
 | Case | Notebook | Preview |
 |---|---|---|
 | 01. Sod Shock Tube (1D) | [01-sod/sod_1d.ipynb](01-sod/sod_1d.ipynb) | ![](01-sod/outputs/01-Sod_Shock_Tube.png) |
-| 02. Linear Wave | [02-Linear_Wave.ipynb](02-Linear_Wave.ipynb) | ![](outputs/02-Linear_wave.png) |
-| 03. Kidder Isentropic Compression | [03-Kidder_Isentropic_Compression.ipynb](03-Kidder_Isentropic_Compression.ipynb) | ![](outputs/03-Kidder_Isentropic_compression.png) |
-| 04. Noh Implosion | [04-Noh_Implosion.ipynb](04-Noh_Implosion.ipynb) | ![](outputs/04-Noh_Implosion.png) |
-| 05. Woodward-Colella Double Blastwave | [05-Woodward_Colella.ipynb](05-Woodward_Colella.ipynb) | ![](outputs/05-Wodward_Colella_Double_Blastwave.png) |
+| 02. Linear Wave | [02-linear-wave.ipynb](02-linear-wave.ipynb) | ![](outputs/02-Linear_wave.png) |
+| 03. Kidder Isentropic Compression | [03-kidder-isentropic-compression.ipynb](03-kidder-isentropic-compression.ipynb) | ![](outputs/03-Kidder_Isentropic_compression.png) |
+| 04. Noh Implosion | [04-noh-implosion.ipynb](04-noh-implosion.ipynb) | ![](outputs/04-Noh_Implosion.png) |
+| 05. Woodward-Colella Double Blastwave | [05-woodward-colella.ipynb](05-woodward-colella.ipynb) | ![](outputs/05-Wodward_Colella_Double_Blastwave.png) |
 | 06. Sedov-Taylor Blastwave (1D/2D/3D) | [06-sedov/sedov_1d.ipynb](06-sedov/sedov_1d.ipynb) | ![](06-sedov/outputs/06-Sedov_Taylor_Blastwave_1D.png) |
-| 08. Hydrostatic | [08-Hydrostatic.ipynb](08-Hydrostatic.ipynb) | ![](outputs/08-Hydrostatic.png) |
-| 09. Gresho-Chan Vortex | [09-Gresho_Chan_Vortex.ipynb](09-Gresho_Chan_Vortex.ipynb) | ![](outputs/09-Gresho_Chan_Vortex.png) |
-| 10. Yee Vortex | [10-Yee_Vortex.ipynb](10-Yee_Vortex.ipynb) | ![](outputs/10-Yee_Vortex.png) |
-| 11. Shearing Noh Implosion (2D) | [11-Shearing_Noh_Implosion_2D.ipynb](11-Shearing_Noh_Implosion_2D.ipynb) | ![](outputs/11-Shearing_Noh_2D.png) |
-| 12. Kelvin-Helmholtz | [12-Kelvin-Helmholtz.ipynb](12-Kelvin-Helmholtz.ipynb) | ![](outputs/12-Kelvin_Helmholtz.png) |
-| 13. Rayleigh-Taylor | [13-Rayleigh_Taylor.ipynb](13-Rayleigh_Taylor.ipynb) | ![](outputs/13-Rayleigh_Taylor.png) |
+| 08. Hydrostatic | [08-hydrostatic.ipynb](08-hydrostatic.ipynb) | ![](outputs/08-Hydrostatic.png) |
+| 09. Gresho-Chan Vortex | [09-gresho-chan-vortex.ipynb](09-gresho-chan-vortex.ipynb) | ![](outputs/09-Gresho_Chan_Vortex.png) |
+| 10. Yee Vortex | [10-yee-vortex.ipynb](10-yee-vortex.ipynb) | ![](outputs/10-Yee_Vortex.png) |
+| 11. Shearing Noh Implosion (2D) | [11-shearing-noh-implosion-2d.ipynb](11-shearing-noh-implosion-2d.ipynb) | ![](outputs/11-Shearing_Noh_2D.png) |
+| 12. Kelvin-Helmholtz | [12-kelvin-helmholtz.ipynb](12-kelvin-helmholtz.ipynb) | ![](outputs/12-Kelvin_Helmholtz.png) |
+| 13. Rayleigh-Taylor | [13-rayleigh-taylor.ipynb](13-rayleigh-taylor.ipynb) | ![](outputs/13-Rayleigh_Taylor.png) |
 | 14. Triple Point (Equal Spacing/Mass) | [14-triplePoint/triplePoint_equalSpacing.ipynb](14-triplePoint/triplePoint_equalSpacing.ipynb) | ![](14-triplePoint/outputs/14-Triple_Point_equal_resolution.png) |
 
 ## Case Details (Preview + MP4)

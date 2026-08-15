@@ -1,6 +1,6 @@
 """Taylor-Green vortex (2D), incompressible.
 
-The script form of this case was `examples/incompressible/01-tgv-incomp.py`.
+The script form of this case was `examples/incompressible/01-taylor-green-vortex.py`.
 Two things that file did are dropped here rather than carried over: it built a
 `regions` list that was never passed anywhere, and it imported the local
 zero-byte `dfsph.py` / `dfsph_step.py` -- the real step function comes from

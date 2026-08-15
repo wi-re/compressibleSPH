@@ -33,23 +33,14 @@ import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 
-GRADCHECK_SCRIPTS = [
-    "gradcheck_wp_surfaceAware.py",
-    "gradcheck_sdf.py",
-    "gradcheck_scalarArg_dt.py",
-    "gradcheck_compSPH.py",
-    "gradcheck_dissipation.py",
-    "gradcheck_crk.py",
-    "gradcheck_adaptiveSupport.py",
-    "gradcheck_deltaSPH.py",
-    "gradcheck_shockCapturing.py",
-    "gradcheck_mdbc.py",
-    "gradcheck_incompressible.py",
-    "gradcheck_liu.py",
-    "gradcheck_surfaceDetection.py",
-    "gradcheck_util.py",
-    "gradcheck_deltaShift.py",
-]
+# Discovered rather than listed: a hardcoded list silently stops covering a
+# module the moment someone adds a gradcheck script and forgets this file, and
+# the failure mode is invisible (the suite still passes, just proving less).
+GRADCHECK_SCRIPTS = sorted(p.name for p in SCRIPTS_DIR.glob("gradcheck_*.py"))
+
+# A refactor that moves or renames the scripts should fail loudly here rather
+# than quietly parametrizing over nothing.
+assert GRADCHECK_SCRIPTS, f"no gradcheck_*.py scripts found in {SCRIPTS_DIR}"
 
 
 @pytest.mark.parametrize("script_name", GRADCHECK_SCRIPTS)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """04 noh implosion -- thin wrapper around the shared runner.
 
-The notebook this came from is `04-Noh_Implosion.ipynb`; the case itself is
+The notebook this came from is `04-noh-implosion.ipynb`; the case itself is
 `warpSPH.cases.noh`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

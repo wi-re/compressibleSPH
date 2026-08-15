@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """09 gresho chan vortex -- thin wrapper around the shared runner.
 
-The notebook this came from is `09-Gresho_Chan_Vortex.ipynb`; the case itself is
+The notebook this came from is `09-gresho-chan-vortex.ipynb`; the case itself is
 `warpSPH.cases.greshoVortex`, and everything generic (config, step loop, export,
 plotting, ffmpeg) is `warpSPH.runner`. Equivalent invocations::
 

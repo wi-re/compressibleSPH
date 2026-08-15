@@ -1,6 +1,6 @@
 """Channel flow past a fixed obstacle (2D), weakly compressible.
 
-The script form of this case was `examples/weaklyCompressible/13-openFlow.ipynb`.
+The script form of this case was `examples/weaklyCompressible/13-open-flow.ipynb`.
 
 It is the same construction the dam break already uses -- a `W x L` box, a
 boundary region cut from an obstacle SDF, and a freestream forcing band at the
