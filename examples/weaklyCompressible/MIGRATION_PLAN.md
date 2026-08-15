@@ -286,9 +286,10 @@ that `--shape moon --rotation 40` did what you meant.
 - Every inline `visualize(...)`/`PlottingOptions` block (~50 lines each) →
   `buildFieldPlotter(ctx, runningState, FIELDS)`.
 - The `nu_tests` sweep cell where it was copy-pasted without a purpose: 06, 07,
-  11, 12, 13 (67 lines each, identical, all ending in a
+  11 (old), 12, 13 (67 lines each, identical, all ending in a
   `plotter.updateQuantities` call on a plotter from a different cell). It stays
-  in 05 only. (Done for 05–10; 11, 12 and 13 still carry theirs.)
+  in 05 only. (Done for 05–11, 11 by starting over rather than by deleting the
+  cell; 12 and 13 still carry theirs.)
 - The trailing run of empty cells every notebook ends with (4–5 each).
 - 13's `torch.profiler` cells, its commented-out alternate system builds, and
   the half-finished `# def ldcDirichlet` block pasted into 11/12/13.
@@ -326,15 +327,16 @@ domain-width-to-sweep). Redesigned as its own case,
 already existed (`rigidBody/integrate.py` integrates both every step) but
 nothing in this family used.
 
-Two design points, both because the motion is periodic rather than one-shot:
+Three design points, the first two because the motion is periodic rather than
+one-shot, the third found by verifying the second:
 
 - **The velocity is re-imposed every step**, `kidder.py`'s pattern for a
-  time-dependent boundary condition: a `postStep` hook recomputes
-  `d/dt[A sin(2*pi*t/T)]` from the current `t` every step, because
-  `linearVelocity` is what the rigid-body integrator actually reads each step
-  — a one-shot assignment in `initialConditions` (the first version of this
-  redesign, before oscillation was asked for) leaves the body translating in a
-  straight line forever, not oscillating.
+  time-dependent boundary condition: a `postStep` hook recomputes the analytic
+  velocity from the current `t` every step, because `linearVelocity` is what
+  the rigid-body integrator actually reads each step — a one-shot assignment
+  in `initialConditions` (the first version of this redesign, before
+  oscillation was asked for) leaves the body translating in a straight line
+  forever, not oscillating.
 - **`configureScheme` widens the domain's x extent**, rather than reusing the
   shared block's square box, so the body's total sweep
   (`2 * (oscillationAmplitude + obstacleSize)`, exported as `sweptWidth(ctx)`)
@@ -345,6 +347,25 @@ Two design points, both because the motion is periodic rather than one-shot:
   domain's y extent (`spec.L`, untouched) regardless of how wide x is widened,
   so this only adds particles along x at the same spacing — no separate `nx`
   bookkeeping needed.
+- **The body starts at rest, not at the domain centre at peak speed —
+  found while verifying the above, not asked for, but a real bug.** The first
+  working version used `x(t) = A sin(2*pi*t/T)`: zero at `t=0`, but velocity
+  `A*omega*cos(0) = A*omega` there too — an instantaneous jump from the
+  fluid's rest state, a genuine velocity discontinuity. `run_sweep`-scale
+  verification (`nx=128`, matching the shipped notebook, `tLimit=10`) measured
+  a -7.2%/+5.7% density excursion against `rho0` over the run, against
+  `movingObstacle`'s own -3.1%/+5.0% at the same resolution and run length —
+  worse than the family's already-accepted baseline, not just imperfect.
+  `x(t) = A cos(2*pi*t/T)` starts the body at rest at the `+A` extreme instead
+  (`buildSystem` now samples it there, adding `oscillationAmplitude` onto
+  whatever `obstacleOffset` asks for); measured -4.1%/+3.5% under the same
+  conditions — tighter than `movingObstacle`'s own. Some excursion past the
+  usual +-1% band is a shared characteristic of a rigid body driven through a
+  small, periodic, nearly inviscid box regardless (no outflow to carry
+  acoustic energy away, and it worsens with `nx` because `alpha`'s artificial
+  viscosity scales with `h`) — confirmed by `movingObstacle`, unmodified,
+  showing the same pattern — so this fix closes the gap to that baseline
+  rather than eliminating the excursion outright, which was never the ask.
 
 Default: a square (`obstacleShape='box'`, any `SHAPE_PRESETS` key),
 `oscillationAmplitude=0.5`, `oscillationPeriod=4.0`, oscillating through
@@ -363,11 +384,14 @@ Verified: `run_sweep.py --cases drivenSquare openFlow movingObstacle` (3/3),
 full `run_tests.sh` still green, `configureScheme` prints `width/sweptWidth ==
 domainMarginRatio` exactly at the shipped defaults (domain x in
 `[-1.5, 1.5]`, sweep `1.5`, ratio `2.0`, margin `0.75` on each side),
-`channelFlow.openFlowCase` still builds after losing its sibling, and the
+`channelFlow.openFlowCase` still builds after losing its sibling, the
 notebook's own drift plot holds `centerOfMass` against the analytic
-`A sin(2*pi*t/T)` for the whole run (not periodically wrapped — only the
+`A cos(2*pi*t/T)` for the whole run (not periodically wrapped — only the
 neighbour search's *distances* wrap, so the raw coordinate is exact against the
-sine, not a sawtooth).
+cosine, not a sawtooth), and the density numbers above (four matched
+`nx=128, tLimit=10` runs: shocked `drivenSquare`, fixed `drivenSquare`,
+`movingObstacle`, each cross-checked at `nx=48` too to separate the phase fix
+from a resolution effect).
 
 ## Outputs and animations
 

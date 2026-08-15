@@ -4,14 +4,15 @@ The script form of this case was `examples/weaklyCompressible/11-driven-square.i
 A rigid body -- a square by default, `--obstacleShape` takes any key of
 :data:`~warpSPH.cases.weaklyCompressible.SHAPE_PRESETS` -- **oscillates
 sideways**, back and forth along x at `oscillationAmplitude` and
-`oscillationPeriod`, through an otherwise still fluid. That is what "driven"
-names here: the body is what is being driven, not the flow. Compare against
+`oscillationPeriod`, starting from rest at `x = +oscillationAmplitude` and
+swinging through an otherwise still fluid. That is what "driven" names here:
+the body is what is being driven, not the flow. Compare against
 `movingObstacle` (case 10, a body that spins in place instead of translating)
 and `openFlowCase` (`13-openFlow.py`, a fixed obstacle in a channel with real
 walls and inflow).
 
-Two things follow from "back and forth" that did not apply to a body translating
-in one direction forever:
+Three things follow from "back and forth" that did not apply to a body
+translating in one direction forever:
 
 - **The velocity is re-imposed every step**, not integrated once at t=0.
   `postStep` sets `RigidBody.linearVelocity` from the analytic
@@ -30,6 +31,11 @@ in one direction forever:
   excursion) is what keeps that true regardless of `obstacleSize`/
   `oscillationAmplitude` -- `configureScheme` below computes the domain's x
   extent from it rather than reusing the shared block's square box.
+- **Starting the body at the domain centre moving at its peak speed is a real
+  velocity discontinuity**, not just an odd-looking first frame -- see
+  `oscillationVelocity`'s docstring for the measured effect on density. The
+  body is sampled at `x = +oscillationAmplitude` (`buildSystem`) and released
+  from rest instead.
 
 The notebook this replaced had grown into something else entirely: a channel
 (`W x L`, walls via `band`, `semiPeriodic`) with a fixed NACA aerofoil in a
@@ -75,10 +81,24 @@ def sweptWidth(ctx: RunContext) -> float:
 
 
 def oscillationVelocity(ctx: RunContext, t: float) -> torch.Tensor:
-    """`d/dt[A sin(2*pi*t/T)]` as a `[vx, 0]` tensor -- sideways, along x."""
+    """`d/dt[A cos(2*pi*t/T)]` as a `[vx, 0]` tensor -- sideways, along x.
+
+    Zero at `t=0`: the body starts at **rest** at the `x = +amplitude` extreme
+    of its swing (`buildSystem` places it there), not at the domain centre
+    moving at its peak speed. The centre-with-peak-speed phase was the first
+    version of this case and it is not a cosmetic choice -- an instantaneous
+    jump from 0 to `amplitude*omega` in one step is a velocity discontinuity,
+    and it measurably shocked the fluid: `run_sweep`-scale verification found
+    density excursions of -7.2%/+5.7% against `movingObstacle`'s -0.3%/+1.8%
+    at matched settings, for a case with no other difference from
+    `movingObstacle` except this. Starting from rest removes the discontinuity
+    (the acceleration is still maximal at `t=0`, but that alone did not
+    produce a comparable shock in `movingObstacle`, which also starts its spin
+    from a standing start).
+    """
     amplitude = ctx.param('oscillationAmplitude')
     omega = 2.0 * math.pi / ctx.param('oscillationPeriod')
-    vx = amplitude * omega * math.cos(omega * t)
+    vx = -amplitude * omega * math.sin(omega * t)
     return torch.tensor([vx, 0.0], device=ctx.device, dtype=ctx.dtype)
 
 
@@ -95,6 +115,13 @@ def configureScheme(ctx: RunContext) -> None:
 
 
 def buildSystem(ctx: RunContext):
+    # Sample the body at x = +amplitude (plus whatever obstacleOffset asks for
+    # on top), matching where oscillationVelocity's zero-at-t=0 phase expects
+    # it to start -- see that function's docstring for why this matters.
+    offset = list(ctx.param('obstacleOffset'))
+    offset[0] += ctx.param('oscillationAmplitude')
+    ctx.spec.params['obstacleOffset'] = offset
+
     fluidSdf = domainFluidSdf(ctx)
     ctx.scratch['fluidSdf'] = fluidSdf
     return buildRegionSystem(ctx, [
@@ -156,7 +183,8 @@ drivenSquareCase = registerCase(Case(
         # Shape/size/aspect/rotation/offset; a square (box, aspect 1) is what
         # this case is named for, any other key of SHAPE_PRESETS works.
         **dict(OBSTACLE_PARAMS, obstacleShape='box'),
-        # How it moves: back and forth along x, x(t) = amplitude * sin(2*pi*t/period).
+        # How it moves: back and forth along x, x(t) = amplitude * cos(2*pi*t/period)
+        # -- starting from rest at x = +amplitude, not from the centre at peak speed.
         oscillationAmplitude=0.5,
         oscillationPeriod=4.0,
         # The domain's x extent is at least this many times the body's total
