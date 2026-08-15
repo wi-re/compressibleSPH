@@ -49,6 +49,32 @@ one keeps the recipe.
   an equally real state object) instead of the bare fixture for new gradcheck
   coverage of this repo's scheme layer.
 
+- **A minimal reproduction can be the bug.** The above cost weeks in the worst
+  possible shape: `computeCompSPHBalanceTermWarp` segfaulted in a hand-built
+  minimal case, and the investigation
+  (`scripts/troubleshoot_balanceTerm_segfault.py`) eliminated the arithmetic, the
+  `wp.static` dispatch, the CSR shapes, the domain size, the dimension, the warp
+  version and the adjacency construction — every one of them a property of the
+  *product*. It concluded the most likely lead was an out-of-bounds read that a
+  cold process exposed and a warm one masked. It was none of that. The harness
+  had never built its reference states properly, so the "minimal case" was not a
+  stripped-down valid input but an invalid one, and the real defect was an
+  `Optional` argument left as `None` (below). **When a repro is the only thing
+  that crashes, suspect the repro before concluding the product hides a memory
+  bug** — and be especially suspicious when eliminating product properties keeps
+  not moving the outcome, which is the signature of the input being wrong.
+
+- **An `Optional` `reference*` argument must fall back to its `query*`
+  counterpart, not stay `None`.** The defect behind that segfault: when
+  `referenceVolumes` was not passed and the reference state carried no volume
+  member, it stayed `None` and reached the kernel as a null array. Several entry
+  points shared it. Fixed in `warpSPHCore` (`120c4bf`, 2026-08-06) with the
+  one-liner now at `operations.py:52`, alongside making the state path primary.
+  This repo's `modules/compSPH/balance.py` already does the same for
+  `referenceVelocities`/`referenceEnergies`/`referencePressures` — when adding a
+  new paired `query*`/`reference*` argument, add the fallback in the same commit;
+  the failure mode is a segfault, not a `TypeError`.
+
 - **The damage from a severed scalar kernel argument compounds with BPTT depth,
   so short-trajectory verification hides it.** `balance.py`'s `gamma` (the
   by-value case above, next to the already-fixed `dt`) was worth 0.003% of

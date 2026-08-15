@@ -2,6 +2,32 @@
 """Manual troubleshooting harness for the computeCompSPHBalanceTermWarp
 segfault (CLEANUP_PLAN.md, Phase 4.2).
 
+STATUS 2026-08-15: **resolved -- the crash no longer reproduces.** Clean in
+every mode (`forward`, `forward-grad`, `backward`) and for all six energy
+schemes under `--scheme all`. The "only `equalWork` survives" finding below no
+longer holds; all six pass.
+
+Cause, per the user, was two things and *neither* was an out-of-bounds read in
+the kernel -- the lead this investigation was chasing:
+
+  1. **This harness was itself wrong.** It never built the reference states
+     properly. The "cold process with fresh minimal allocations" theory below
+     was the wrong track: the minimal case was not a stripped-down valid input,
+     it was an invalid one.
+  2. **A real bug in the call path**: when `referenceVolumes` was not passed
+     explicitly it stayed `None` instead of falling back to `queryVolumes`, so
+     a reference state with no volume member handed the kernel a null array.
+     `computeCompSPHBalanceTermWarp` was one of several entry points affected.
+     Fixed upstream in `warpSPHCore` on 2026-08-06 by commit `120c4bf`
+     ("make the state path the primary one"), which added the fallback now at
+     `warpSPHCore/operations.py:52`:
+
+         referenceVolumes = referenceVolumes if referenceVolumes is not None else queryVolumes
+
+CRK specifically was fixed by passing a fully set-up state. The rest of this
+docstring is the original investigation, preserved as the elimination record --
+but read its conclusions knowing the harness itself was the faulty input.
+
 Background: a native segfault (confirmed via `python -X faulthandler`, not a
 Python exception) reproduces when calling `computeCompSPHBalanceTermWarp`
 (modules/compSPH/balance.py) standalone with a freshly-built, minimal

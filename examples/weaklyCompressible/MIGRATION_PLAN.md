@@ -166,16 +166,23 @@ editable if the reader knows what each knob means.
 | 10 | `10-moving-obstacle.ipynb` | `movingObstacle` | **done** — mean-velocity-vs-target panel at the hook point |
 | 11 | `11-driven-square.ipynb` | `drivenSquare` | **done (2026-08-14), case redesigned** — see below; no longer a `channelFlow` hook |
 | 12 | `12-dambreak.ipynb` | `dambreak` | **done** — kept the recomputed-density cell, paired with `surfaceIndicators`; front position recorded at the hook point |
-| 13 | `13-open-flow.ipynb` | `channelFlow.openFlowCase` | open — 1704 lines, 57 cells, the worst one; do it last |
+| 13 | `13-open-flow.ipynb` | `channelFlow.openFlowCase` | open — 57 cells, 1199 code LOC, the worst one; do it last |
 
 `naca.ipynb` stays as it is: a standalone SDF-visualisation scratchpad with no
-case, already recorded as won't-fix in `CLEANUP_PLAN.md`. (It is also the only
-notebook here shipping stored outputs, 216 KB of them — worth stripping while
-passing by, separately from this migration.)
+case, already recorded as won't-fix in `CLEANUP_PLAN.md`. (It ships 214 KB of
+stored outputs — worth stripping while passing by, separately from this
+migration. It is *not* the only one here that does, as this said before:
+measured 2026-08-15, `13-open-flow.ipynb` carries 3660 KB across 46 outputs and
+`08-kolmogorov-flow.ipynb` 195 KB across 14. The `nbstripout` filter is a
+`clean` filter, so committed outputs survive until the file is next staged —
+and it only runs in clones where `nbstripout --install` has been run, which
+`CONTRIBUTING.md` now covers.)
 
-`utils.py` is a re-export shim for `warpSPH.caseUtils`, imported only by the 12
-and 13 notebooks. It should have no importers left once those two are ported;
-delete it in the same commit as slot 13, not before.
+`utils.py` is a re-export shim for `warpSPH.caseUtils`. As of 2026-08-15 its
+only importer is the **13** notebook — slot 12 was ported and dropped it, so
+the "12 and 13" this said before is out of date. It should have no importers
+left once 13 is ported; delete it in the same commit as slot 13, not before.
+(Its module docstring says the same, so both move together.)
 
 ## The dam-break plot path — closed 2026-08-14
 
