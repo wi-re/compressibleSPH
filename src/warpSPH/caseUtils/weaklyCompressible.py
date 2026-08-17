@@ -503,6 +503,10 @@ def setupKolmogorov(compressibleSystem, config, schemeConfig, simSetup, args):
     dtype = simSetup.dtype
     domain = config.domain
 
+    # This domain only supplies the extents the noise grid is laid out over -- the
+    # band-padded box, which is not config.domain -- so it stays on the host; the
+    # noise field itself is moved to the simulation device by the first forcing call
+    # and stays there.
     domain_cpu = buildDomainDescription(
         simSetup.L + simSetup.dx * simSetup.band * 2,
         dim,
@@ -537,11 +541,12 @@ def setupKolmogorov(compressibleSystem, config, schemeConfig, simSetup, args):
     def forcing(state, cfg, compParams, x, d, n, t, dt):
         pos = getPeriodicPositions(x, domain)
         u_x = xi * torch.sin(k * np.pi * pos[:, 1])
-        # The noise is generated on a numpy backend
-        # This means that we cannot really have gradients here, but we can still use the noise to perturb the forcing field
-        # Note that this is not a problem for the simulation, since the forcing is not part of the optimization process
-        # and using no_grad around noise generators is a common practice in machine learning to avoid unnecessary gradient computations
-        u_y = noiseGen(pos.detach().cpu()).to(dtype=x.dtype, device=x.device) * noiseLevel
+        # noiseGen samples a device-resident grid, so this stays on the GPU; it used to
+        # be a scipy RegularGridInterpolator called on the host, which round-tripped the
+        # whole position array per stage and cost ~68% of host self-time at 155k particles.
+        # The positions stay detached: the noise perturbs the forcing but is not meant to
+        # be optimized through, and the interpolator is differentiable now that it is torch.
+        u_y = noiseGen(pos.detach()).to(dtype=x.dtype, device=x.device) * noiseLevel
         return torch.stack([u_x, u_y], dim=1) * state.masses.unsqueeze(1)
 
     kolmogorovForcing = BoundaryCondition(

@@ -1,7 +1,9 @@
 """Math helpers subpackage: periodic-boundary position wrapping
 (`getPeriodicPositions`), the Perlin/simplex noise generator (`noise.py`,
-`noiseFunctions/`), and a portable scatter-reduction helper (`scatter.py`)
-vendored from PyTorch Geometric so warpSPH doesn't depend on it.
+`noiseFunctions/`), a device-resident linear grid interpolator
+(`interpolation.py`, a torch port of scipy's `RegularGridInterpolator`), and a
+portable scatter-reduction helper (`scatter.py`) vendored from PyTorch Geometric
+so warpSPH doesn't depend on it.
 """
 
 import torch
@@ -15,6 +17,7 @@ def getPeriodicPositions(x, domain):
     return modPos
 
 from .noise import generateNoise, generateOctaveNoise
+from .interpolation import RegularGridInterpolator
 from .scatter import scatter_sum, broadcast
 
-__all__ = ['getPeriodicPositions', 'generateNoise', 'generateOctaveNoise', 'scatter_sum', 'broadcast']
+__all__ = ['getPeriodicPositions', 'generateNoise', 'generateOctaveNoise', 'RegularGridInterpolator', 'scatter_sum', 'broadcast']
