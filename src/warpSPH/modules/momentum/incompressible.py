@@ -10,6 +10,7 @@ from warpSPHCore import *
 from ...systems.baseState import *
 from warpSPH.configurations import SimulationConfig
 from typing import Any, Optional, Union
+import torch
 
 from torch.profiler import profile, record_function, ProfilerActivity
 

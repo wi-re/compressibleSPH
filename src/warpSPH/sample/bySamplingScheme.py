@@ -14,6 +14,7 @@ branches are wired but currently unexercised.
 from ..configurations import SimulationConfig
 from ..geometry import *
 import h5py
+import torch
 
 __all__ = ['sampleParticles']
 

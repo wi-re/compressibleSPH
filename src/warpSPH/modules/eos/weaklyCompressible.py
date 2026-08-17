@@ -12,6 +12,7 @@ hidden.
 
 from ...enumTypes import *
 from torch.profiler import profile, record_function, ProfilerActivity
+import torch
 
 __all__ = ['weaklyCompressibleEOS']
 

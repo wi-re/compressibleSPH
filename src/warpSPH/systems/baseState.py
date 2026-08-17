@@ -16,7 +16,7 @@ import torch
 from typing import Optional
 from warpSPHCore import *
 
-__all__ = ['BaseParticleState', 'BaseSystemUpdate', 'BaseSystem']
+__all__ = ['BaseState', 'BaseParticleState', 'BaseSystemUpdate', 'BaseSystem']
 
 
 @dataclass

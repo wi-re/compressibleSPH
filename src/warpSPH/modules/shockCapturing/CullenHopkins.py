@@ -16,6 +16,11 @@ from .switchState import *
 
 from warpSPHCore import *
 from .CullenDehnen2010 import *
+from ...systems.compressibleMonaghan import CompressibleState
+from ...configurations import SimulationConfig
+from ...configurations.compressibleConfig import CompressibleSPHConfig
+from typing import Optional, Union
+import torch
 
 __all__ = ['computeHopkinsTerms', 'computeHopkinsUpdate']
 

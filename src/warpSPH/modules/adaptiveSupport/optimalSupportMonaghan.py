@@ -18,6 +18,8 @@ from warpSPHCore import *
 from ...configurations import SimulationConfig
 from ...utils.support import volumeToSupport, nH_to_n_h
 from torch.profiler import profile, record_function, ProfilerActivity
+from typing import Optional
+import torch
 
 __all__ = ['evaluateOptimalSupportMonaghan']
 
