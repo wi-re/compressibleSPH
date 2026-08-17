@@ -3,7 +3,8 @@
 Two blocks, and they exist for different reasons. The **banner** is printed
 once setup is finished and `dt` is known, so what it shows is what will
 actually run rather than what was asked for -- resolution, the resolved
-timestep, the derived step count, and where output is going. The **report** is
+timestep, the derived step count, the fluid model and dissipation the scheme
+ended up configured with, and where output is going. The **report** is
 printed at the end, for the case that motivates all of this: a long run left
 unattended. Coming back to a finished terminal should answer "did it finish,
 did it stay sane, and where did the output go" without re-reading the scrollback
@@ -67,6 +68,138 @@ def _enumName(value) -> str:
     return getattr(value, 'name', str(value))
 
 
+def _scalarValue(value) -> Optional[float]:
+    """Config numbers arrive as python floats, warp scalars, or 0-d tensors.
+
+    `fluid.fixedSoundSpeed` in particular is a tensor whenever a case let
+    `setupWeaklyCompressibleTimestep` pick it, and `None` is a legal value for
+    every `fluidProperties` field.
+    """
+    if value is None:
+        return None
+    if isinstance(value, torch.Tensor):
+        flat = value.detach().cpu().reshape(-1)
+        return float(flat[0]) if flat.numel() else None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _number(label: str, value) -> Optional[str]:
+    """`label 1.5`, or nothing at all when the value is unset."""
+    number = _scalarValue(value)
+    return None if number is None else f'{label} {number:g}'
+
+
+def _joined(*parts, separator: str = ' | ') -> str:
+    return separator.join(part for part in parts if part)
+
+
+def _viscosityTermName(value) -> str:
+    """`DiffusionParameters` is a `wp.struct`, so its terms are stored as ints."""
+    from ..configurations.moduleConfigurations.diffusionParameters import ViscosityTerms
+    if isinstance(value, ViscosityTerms):
+        return value.name
+    try:
+        return ViscosityTerms(int(value)).name
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _fluidDescription(schemeConfig) -> Optional[str]:
+    """The pressure model the scheme will actually close the system with.
+
+    Weakly compressible and incompressible schemes carry a `fluid` block: a
+    rest density and a fixed sound speed, which between them set the pressure
+    scale and the acoustic timestep. Compressible schemes have neither -- their
+    pressure comes from the internal energy through `gamma`.
+
+    Only the parameters the selected EOS reads are printed. `fluidProperties`
+    defaults every field, so showing `kappa` beside an isothermal EOS would
+    suggest it played a part when `isoThermalEOS` never looks at it. DFSPH
+    (the config with a `solverConfig`) gets its pressure from the solver and
+    never calls the EOS at all, so naming one there would be a lie -- it still
+    reads `restDensity` and `fixedSoundSpeed`, via shifting and the boundaries.
+    """
+    fluid = getattr(schemeConfig, 'fluid', None)
+    if fluid is not None:
+        eos = _enumName(fluid.eosType)
+        incompressible = hasattr(schemeConfig, 'solverConfig')
+        # rho0 and c_s stay on the line whatever the EOS is: the timestep,
+        # the dissipation terms and the shifting all read them directly.
+        parts = ['incompressible (pressure from solver)' if incompressible
+                 else f'EOS {eos}',
+                 _number('rho0', fluid.restDensity),
+                 _number('c_s', fluid.fixedSoundSpeed)]
+        if not incompressible:
+            if eos in ('stiffTait', 'Polytropic', 'Murnaghan'):
+                parts.append(_number('exponent', fluid.polytropicExponent))
+            if eos in ('Tait', 'Polytropic', 'Murnaghan'):
+                parts.append(_number('kappa', fluid.kappa))
+        return _joined(*parts)
+
+    if hasattr(schemeConfig, 'gamma'):
+        background = _scalarValue(getattr(schemeConfig, 'backgroundPressure', None))
+        return _joined('ideal gas',
+                       _number('gamma', schemeConfig.gamma),
+                       _number('rho0', getattr(schemeConfig, 'rho0', None)),
+                       # Zero is the default and means "off"; it is only worth
+                       # a column when a case has actually dialled it in.
+                       _number('p_background', background) if background else None)
+    return None
+
+
+def _viscosityDescriptions(schemeConfig) -> List[str]:
+    """Dissipation settings, as one row plus continuations.
+
+    The two families configure this in entirely different places, so there is
+    no common line to print: delta-SPH picks between an artificial `alpha` and
+    a physical `nu` and adds density diffusion on top, while the compressible
+    schemes carry a Monaghan-style viscosity formulation with its own
+    coefficients, an artificial conductivity, and optionally a switch that
+    rewrites `alpha` per particle as the run goes.
+    """
+    params = getattr(schemeConfig, 'diffusionParams', None)
+    if params is None:
+        return []
+
+    if hasattr(params, 'inviscid'):  # WeaklyCompressibleDiffusionParams
+        if params.inviscid:
+            viscosity = _joined('artificial', _number('alpha', params.inviscidAlpha))
+        else:
+            viscosity = _joined('physical', _number('nu', params.viscidNu))
+        # Density diffusion belongs to the same block but only delta-SPH runs
+        # it -- DFSPH (the config with a `solverConfig`) leaves the call out.
+        if not hasattr(schemeConfig, 'solverConfig'):
+            viscosity = _joined(viscosity,
+                                _joined(f'density diffusion '
+                                        f'{_enumName(params.densityDiffusionTerm)}',
+                                        _number('delta', params.densityDelta),
+                                        separator=' '))
+        return [viscosity]
+
+    switch = getattr(schemeConfig, 'viscositySwitchParams', None)
+    switchName = _enumName(switch.scheme) if switch is not None else 'NoneSwitch'
+    rows = [_joined(_viscosityTermName(params.viscosityTerm),
+                    _joined(_number('C_l', params.C_l),
+                            _number('C_q', params.C_q), separator=', '),
+                    _number('K', params.K),
+                    f'switch {"none" if switchName == "NoneSwitch" else switchName}')]
+    if switch is not None and switchName != 'NoneSwitch':
+        # The switch overrides C_l per particle, so its bounds are what the
+        # run is really viscous between.
+        rows.append(_joined(f'alpha in [{_scalarValue(switch.alpha_min):g}, '
+                            f'{_scalarValue(switch.alpha_max):g}]',
+                            f'divergence {switch.divergenceScheme}'))
+    rows.append(_joined(f'conductivity '
+                        f'{_viscosityTermName(params.thermalConductivityTerm)}',
+                        _joined(_number('Cu_l', params.Cu_l),
+                                _number('Cu_q', params.Cu_q), separator=', '),
+                        _number('scaling', params.thermalConductivity)))
+    return rows
+
+
 def describeRun(ctx, state, nSteps: int, timeLimited: bool) -> None:
     """The pre-run banner. Called once `dt` and the step count are final."""
     spec = ctx.spec
@@ -90,6 +223,16 @@ def describeRun(ctx, state, nSteps: int, timeLimited: bool) -> None:
                          f'targetNeighbors {float(config.targetNeighbors):.1f}'))
     print(_row('integrator', f'{_enumName(config.integrationScheme)} | '
                              f'support {_enumName(config.supportMode)}'))
+
+    # After `configureScheme` and the case's own setup have run, so these are
+    # the values the solver will use rather than the scheme defaults -- a case
+    # that derives its sound speed from the expected velocity shows the
+    # derived one.
+    fluid = _fluidDescription(ctx.schemeConfig)
+    if fluid:
+        print(_row('fluid', fluid))
+    for index, viscosity in enumerate(_viscosityDescriptions(ctx.schemeConfig)):
+        print(_row('viscosity' if index == 0 else '', viscosity))
 
     dt = float(config.dt)
     adaptive = (f'adaptive, cfl {config.cflFactor:g}' if config.adaptiveDt else 'fixed')

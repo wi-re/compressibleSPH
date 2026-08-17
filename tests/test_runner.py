@@ -172,11 +172,41 @@ def test_runReportsItselfUnlessQuiet(capsys):
     printed = capsys.readouterr().out
     assert 'warpSPH | sod' in printed          # banner
     assert 'particles' in printed and 'timestep' in printed
+    assert 'fluid' in printed and 'viscosity' in printed
     assert 'sod finished in' in printed        # report
     assert 'totalEnergy' in printed            # diagnostics summary
 
     run(getCase('sod'), nx=100, nSteps=2, plot=False, store=False, quiet=True)
     assert capsys.readouterr().out == ''
+
+
+def test_bannerDescribesTheFluidEachSolverActuallyUses():
+    """The three families keep these settings in three different places.
+
+    A compressible run is pinned by `gamma` on the scheme config itself and
+    dissipates through a `wp.struct` whose viscosity term is an int; a weakly
+    compressible one is pinned by a rest density and a sound speed on a `fluid`
+    block and dissipates through an `alpha`. Neither dataclass carries the
+    other's fields, so reading the wrong one is the failure guarded here.
+    """
+    import torch
+
+    from warpSPH.configurations.compSPHConfig import CompSPHConfig
+    from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
+    from warpSPH.runner.report import _fluidDescription, _viscosityDescriptions
+
+    compressible = CompSPHConfig()
+    assert 'gamma 1.4' in _fluidDescription(compressible)
+    assert 'Monaghan1992' in _viscosityDescriptions(compressible)[0]
+
+    weaklyCompressible = WeaklyCompressibleSPHConfig()
+    weaklyCompressible.fluid.restDensity = 1000.0
+    # A tensor, because that is what `setupWeaklyCompressibleTimestep` leaves
+    # behind when a case lets it derive the sound speed.
+    weaklyCompressible.fluid.fixedSoundSpeed = torch.tensor(60.0)
+    fluid = _fluidDescription(weaklyCompressible)
+    assert 'rho0 1000' in fluid and 'c_s 60' in fluid
+    assert 'alpha 0.01' in _viscosityDescriptions(weaklyCompressible)[0]
 
 
 def test_reportNamesDivergenceLoudly():

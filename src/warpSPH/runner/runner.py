@@ -401,7 +401,7 @@ def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
                   tLimit: float) -> str:
     # A time-limited run has no meaningful step total, so it counts time.
     parts = [f'{i + 1}/{nSteps}' if nSteps is not None else f'{i + 1}',
-             f't={row["t"]:.4g}' + ('' if nSteps is not None else f'/{tLimit:.4g}')]
+             f't={row["t"]:.4f}' + ('' if nSteps is not None else f'/{tLimit:.4g}')]
     parts += [f'{k}={v:.4g}' for k, v in row.items()
               if k not in ('step', 't', 'stepTime_ms') and isinstance(v, (int, float))]
 
@@ -410,7 +410,7 @@ def _describeStep(i: int, nSteps: Optional[int], row: Dict[str, float],
 
     warp_memory = wp.get_mempool_used_mem_current() / (1024 ** 2)  # in MB
 
-    if i % 10 == 0:
+    if i % 100 == 0:
         torch.cuda.empty_cache()
 
 
