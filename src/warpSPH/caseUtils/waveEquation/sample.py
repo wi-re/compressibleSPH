@@ -25,6 +25,7 @@ def smoothValuesWarp(quantity, particleState, nIters, neighbors, config):
             querySupports=particleState.supports, referenceSupports=particleState.supports,
             queryMasses=particleState.masses, referenceMasses=particleState.masses,
             queryDensities = particleState.densities, referenceDensities = particleState.densities,
+            queryKinds = particleState.kinds, referenceKinds = particleState.kinds,
             queryValues = sampled, referenceValues = sampled,
             kernel = KernelFunctions.Wendland2,
             adjacency= neighbors, domain = config.domain,
