@@ -124,16 +124,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
 
         # print(self.state)
 
-        velocity_magnitudes = torch.linalg.vector_norm(self.state.velocities, dim=-1)
-        finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
-        max_velocity_magnitude = (
-            torch.max(finite_velocity_magnitudes).item()
-            if finite_velocity_magnitudes.numel() > 0
-            else float('nan')
-        )
-
         # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
-        # print(f'Maximum Velocity Magnitude: {max_velocity_magnitude}')
         config = kwargs.get('config', None)
         schemeConfig = kwargs.get('schemeConfig', None)
         if schemeConfig.shiftProperties.active:
@@ -227,8 +218,7 @@ class WeaklyCompressibleSystem(BaseIntegrationSystem):
         # self.state.densities = initialRho * (2 - epsilon) / (2+epsilon)
         self.state.densities = initialRho * torch.exp(dt * drhodtMid / midRho)  # Use exponential update to avoid negative densities
 
-        if torch.any(self.state.kinds != 0):
-            self.state.densities[self.state.kinds != 0] = midRho[self.state.kinds != 0]
+        self.state.densities = torch.where(self.state.kinds != 0, midRho, self.state.densities)
 
         if schemeConfig.shiftProperties.active:
             if schemeConfig.shiftProperties.correctdrhodt:

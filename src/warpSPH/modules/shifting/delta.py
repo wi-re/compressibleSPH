@@ -54,8 +54,9 @@ def computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, ite
         )
         c_max = v_max / c0
         h_min = currentState.supports.min()
-        if c_max < 1e-6:
-            c_max = torch.tensor(0.1, device=currentState.velocities.device)
+        # NaN (no finite velocities) compares False against 1e-6 just like the
+        # `if` it replaces, so c_max is left as NaN in that case -- same as before.
+        c_max = torch.where(c_max < 1e-6, c_max.new_tensor(0.1), c_max)
         # print(f'Iteration {i}, max velocity: {v_max.item()}, min support: {h_min.item()}, c_max: {c_max.item()}')
 
 

@@ -198,6 +198,7 @@ import torch
 from torch.profiler import profile, record_function, ProfilerActivity
 from typing import Optional, Union, Tuple
 from warpSPHCore import *
+from ._util import stateHasBoundaryParticles
 
 
 
@@ -511,7 +512,7 @@ def computeMdbcNoPenShiftWarp(
 
 
 def computeMdbcNoPenShift(currentState: Any, config: Any, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> Tuple[torch.Tensor, torch.Tensor]:
-    if not torch.any(currentState.kinds == 1):
+    if not stateHasBoundaryParticles(currentState, config):
         # No boundary particles, return zero shift
         return torch.zeros_like(currentState.velocities)
     with record_function("warpSPH - (mdbc) - computeMdbcNoPenShift"):

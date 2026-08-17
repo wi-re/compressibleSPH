@@ -29,6 +29,7 @@ from ...configurations.moduleConfigurations.gravity import GravityType, gravityC
 from ...configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
 
 from ..liu import interpolateLiuLiu
+from ._util import stateHasBoundaryParticles
 
 
 def noSlip(currentState: Any, config: SimulationConfig, schemeConfig: WeaklyCompressibleSPHConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
@@ -174,14 +175,14 @@ def zeroVelocity(currentState: Any, config: SimulationConfig, schemeConfig: Weak
 
 
 def computeBoundaryVelocities(currentState: Any, config: SimulationConfig, schemeConfig: WeaklyCompressibleSPHConfig, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    if not torch.any(currentState.kinds == 1):
+    if not stateHasBoundaryParticles(currentState, config):
         return currentState.velocities
     with record_function("[warpSPH] - (mdbc) - computeBoundaryVelocities"):
 
         materials = currentState.materials[currentState.kinds == 1]
         uniqueMaterials = torch.unique(materials)
-        
-        
+
+
         boundaryRegions = [region for region in config.regions if region.type == RegionType.Boundary]
         kinds = [region.kind for region in boundaryRegions]
         ghostMask = currentState.kinds == 2

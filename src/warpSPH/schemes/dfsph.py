@@ -214,9 +214,10 @@ def dfsph_step(
     # with TimedBlock('enforce updates', use_cuda=True, device=config.device) as tb_enforce:
     with record_function("[warpSPH] - [deltaSPH - 17] - enforce updates"):
         enforceUpdates(update, currentSystem, config.dt, currentSystem.t, config, schemeConfig)
-        update.dxdt[currentState.kinds != 0,:] = 0.0
-        update.dvdt[currentState.kinds != 0,:] = 0.0
-        update.drhodt[currentState.kinds != 0] = 0.0
+        nonFluidMask = (currentState.kinds != 0).unsqueeze(-1)
+        update.dxdt = torch.where(nonFluidMask, torch.zeros_like(update.dxdt), update.dxdt)
+        update.dvdt = torch.where(nonFluidMask, torch.zeros_like(update.dvdt), update.dvdt)
+        update.drhodt = torch.where(nonFluidMask.squeeze(-1), torch.zeros_like(update.drhodt), update.drhodt)
 
     # performanceDict = {
     #     'tb_adjacency': tb_adjacency,

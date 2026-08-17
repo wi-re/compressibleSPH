@@ -29,9 +29,10 @@ from ...enumTypes import *
 from ...configurations.moduleConfigurations.gravity import GravityType, gravityConfiguration
 
 from ..liu import interpolateLiuLiu
+from ._util import stateHasBoundaryParticles
 
 def computeMdbcDensity(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]]) -> torch.Tensor:
-    if not torch.any(currentState.kinds == 1):
+    if not stateHasBoundaryParticles(currentState, config):
         return currentState.densities
     with record_function("[warpSPH] - (mdbc) - computeMdbcDensity"):
         rho_interp, rho_interp_grad, numNeighbors, A_g, b = interpolateLiuLiu(
