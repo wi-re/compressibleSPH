@@ -5,9 +5,13 @@ particle-shifting settings, embedded as `.shiftProperties` on
 several of the dataclass's own field defaults (`computeMach` False->True,
 `projectionScheme` `dot`->`mat`) -- both are live values used depending on
 whether a caller constructs `ShiftProperties()` directly or via the builder.
+
+The `implicit*` fields configure `modules/shifting/implicitShifting.py`'s
+matrix-free BiCGStab solve, used when `scheme == ShiftingScheme.implicit`;
+they are ignored for `ShiftingScheme.deltaSPH`.
 """
 
-__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftProperties', 'buildDefaultShiftProperties']
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftProperties', 'buildDefaultShiftProperties']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -26,7 +30,13 @@ class ShiftingProjectionScheme(Enum):
     dot = 1
     mat = 2
 
-@dataclass 
+
+class ShiftingImplicitInitializer(Enum):
+    zero = 0
+    deltaPlus = 1
+    deltaMinus = 2
+
+@dataclass
 class ShiftProperties:
     iterations: int = field(default=1, metadata={"description": "Number of iterations for shifting"})
     CFL: float = field(default=0.3, metadata={"description": "CFL number for the delta-SPH shift"})
@@ -47,6 +57,14 @@ class ShiftProperties:
     correctdvdt: bool = field(default=False, metadata={"description": "Whether to correct dvdt after shifting"})
 
     reuseNormals: bool = field(default=True, metadata={"description": "Whether to reuse normals from previous iteration for surface detection"})
+
+    implicitTolerance: float = field(default=1e-4, metadata={"description": "Absolute residual tolerance for the implicit shifting BiCGStab solve"})
+    implicitRelativeTolerance: float = field(default=1e-4, metadata={"description": "Relative residual tolerance for the implicit shifting BiCGStab solve"})
+    implicitMaxSolverIter: int = field(default=64, metadata={"description": "Maximum BiCGStab iterations for the implicit shifting solve"})
+    implicitInitializer: ShiftingImplicitInitializer = field(default=ShiftingImplicitInitializer.zero, metadata={"description": "Initial guess for the implicit shifting solve"})
+    implicitUsePreconditioner: bool = field(default=True, metadata={"description": "Whether to apply the Jacobi preconditioner in the implicit shifting solve"})
+    implicitSolverThreshold: Optional[float] = field(default=None, metadata={"description": "Per-particle shift-magnitude divergence threshold for the implicit shifting solve; defaults to dx/2 when None"})
+    implicitRelaxation: float = field(default=0.1, metadata={"description": "Damping factor applied to each implicit-shifting Newton step (1.0 = full step); the assembled system is a graph-Laplacian-style operator with an exact translation null space, so a full undamped step is only reliably stable extremely close to the solution. 0.1 was swept against a jittered-lattice convergence test (repeatable across runs; 0.15 was already occasionally unstable), matching this codebase's own IISPH Jacobi relaxation precedent"})
 
 def buildDefaultShiftProperties() -> ShiftProperties:
     return ShiftProperties(

@@ -37,9 +37,10 @@ from ..util.wp_numNeighbors import countNeighborsWarp
 from ..surfaceDetection import *
 from ..density import *
 from .delta import computeDeltaShift
+from .implicitShifting import computeImplicitShift
 from ..util import *
 
-from ...configurations.moduleConfigurations.shifting import ShiftProperties, ShiftingProjectionScheme
+from ...configurations.moduleConfigurations.shifting import ShiftProperties, ShiftingProjectionScheme, ShiftingScheme
 
 __all__ = ['solveShifting']
 
@@ -112,8 +113,11 @@ def solveShifting(
             else:
                 fs = fsm = n = lMin = None
 
-            with record_function(f"[warpSPH] - (shift) - computeDeltaShift"):
-                update, adjacency = computeDeltaShift(systemState, config, schemeConfig, domain, adjacency, iters = 1)
+            with record_function(f"[warpSPH] - (shift) - computeShift"):
+                if schemeConfig.shiftProperties.scheme == ShiftingScheme.implicit:
+                    update, adjacency = computeImplicitShift(systemState, config, schemeConfig, domain, adjacency, iters = 1)
+                else:
+                    update, adjacency = computeDeltaShift(systemState, config, schemeConfig, domain, adjacency, iters = 1)
             # print(f"Iteration {i} [inside solveShifting], max shift magnitude: {update.norm(dim=1).max().item()}")
 
 
