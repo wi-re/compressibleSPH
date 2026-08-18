@@ -273,6 +273,40 @@ from warpSPHCore import *
 
 from copy import deepcopy
 
+
+def _liuOutputShape(ctx, extras):
+    return extras["queryPositions"].shape[0]
+
+
+def _liuScalarDtype(ctx, extras):
+    return _torch_scalar_to_warp_dtype(extras["queryPositions"].dtype)
+
+
+def _liuVecDtype(ctx, extras):
+    qp = extras["queryPositions"]
+    return _get_warp_vector_dtype(qp.shape[1] + 1, qp.dtype)
+
+
+def _liuMatDtype(ctx, extras):
+    qp = extras["queryPositions"]
+    return _get_warp_matrix_dtype(qp.shape[1] + 1, qp.shape[1] + 1, qp.dtype)
+
+
+_LIU_MATRICES = OperatorSpec(
+    kernel=computeLiuMatrices_Kernel,
+    outputs=(
+        OutputSpec(dtype=_liuScalarDtype, shape=_liuOutputShape),
+        OutputSpec(dtype=_liuVecDtype, shape=_liuOutputShape),
+        OutputSpec(dtype=_liuMatDtype, shape=_liuOutputShape),
+        OutputSpec(dtype=wp.int32, shape=_liuOutputShape),
+    ),
+    extras=(
+        ExtraSpec("queryPositions", ExtraKind.TENSOR),
+        ExtraSpec("referenceQuantities", ExtraKind.TENSOR),
+    ),
+)
+
+
 def computeLiuMatricesWarp(
     queryPositions: torch.Tensor,
     referenceParticles: ParticleState,
@@ -301,44 +335,19 @@ def computeLiuMatricesWarp(
             #     renormalizationState,
             # )
 
-            # outputSize = referenceParticles.shape[0]
-            D = queryPositions.shape[1]
-
-            outputVecType = _get_warp_vector_dtype(D+1, queryPositions.dtype)
-            outputMatType = _get_warp_matrix_dtype(D+1, D+1, queryPositions.dtype)
-            outputSizes = (
-                queryPositions.shape[0],
-                queryPositions.shape[0],
-                queryPositions.shape[0],
-                queryPositions.shape[0],
-            )
-            outputDtypes = (
-                _torch_scalar_to_warp_dtype(queryPositions.dtype),
-                outputVecType,
-                outputMatType,
-                wp.int32
-            )
-            
         with record_function("warpSPH[computeLiuMatrices] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeLiuMatrices_Kernel,
-                numThreads = queryPositions.shape[0],
-                outputSizes  = outputSizes,
-                outputDtypes = outputDtypes,
-                defaultStateArguments=(
-                    referenceParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=referenceParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryPositions,
-                    referenceQuantities
-                ),
+            )
+            return launchOperator(
+                _LIU_MATRICES, ctx,
+                queryPositions=queryPositions,
+                referenceQuantities=referenceQuantities,
             )
 
 

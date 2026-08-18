@@ -295,6 +295,40 @@ def computeCompSPHAccel_Kernel(
         accel, pressureAccel_ij, viscosityAccel_ij
     )
 
+def _compSPHAccelPairShape(ctx, extras):
+    return ctx.adjacency.i.shape[0]
+
+
+def _compSPHAccelDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.positions).dtype
+
+
+_COMPSPH_ACCEL = OperatorSpec(
+    kernel=computeCompSPHAccel_Kernel,
+    outputs=(
+        OutputSpec(dtype=_compSPHAccelDtype, shape=ShapeOf.QUERY),
+        OutputSpec(dtype=_compSPHAccelDtype, shape=_compSPHAccelPairShape),
+        OutputSpec(dtype=_compSPHAccelDtype, shape=_compSPHAccelPairShape),
+    ),
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("queryEnergies", ExtraKind.TENSOR),
+        ExtraSpec("referenceEnergies", ExtraKind.TENSOR),
+        ExtraSpec("individualCs", ExtraKind.SCALAR),
+        ExtraSpec("queryCs", ExtraKind.TENSOR),
+        ExtraSpec("referenceCs", ExtraKind.TENSOR),
+        ExtraSpec("viscositySwitch", ExtraKind.SCALAR),
+        ExtraSpec("queryAlphas", ExtraKind.TENSOR),
+        ExtraSpec("referenceAlphas", ExtraKind.TENSOR),
+        ExtraSpec("explicitPressure", ExtraKind.SCALAR),
+        ExtraSpec("queryPressures", ExtraKind.TENSOR),
+        ExtraSpec("referencePressures", ExtraKind.TENSOR),
+        ExtraSpec("conductivityParams", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computeCompSPHAccelWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -338,19 +372,6 @@ def computeCompSPHAccelWarp(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
-            outputSizes = (
-                queryParticles.positions.shape[0],
-                adjacency.i.shape[0],
-                adjacency.i.shape[0]
-            )
-            outputDtypes = (
-                outputDtype,
-                outputDtype,
-                outputDtype
-            )
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             
             queryEnergies_ = queryEnergies if queryEnergies is not None else (queryParticles.internalEnergies if hasattr(queryParticles, 'internalEnergies') else None)
@@ -385,29 +406,22 @@ def computeCompSPHAccelWarp(
                 raise ValueError("Energies must be provided either through queryEnergies or as a property of queryParticles.")
 
         with record_function("warpSPH[computeCompSPHAccel] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeCompSPHAccel_Kernel,
-                numThreads = queryParticles.positions.shape[0],
-                outputSizes  = outputSizes,
-                outputDtypes = outputDtypes,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities_, referenceVelocities_,
-                    queryEnergies_, referenceEnergies_,
-                    individual_cs, queryCs_, referenceCs_,
-                    viscositySwitch, queryAlphas_, referenceAlphas_,
-                    explicitPressure, queryPressures_, referencePressures_,
-                    conductivityParams
-                ),
+            )
+            return launchOperator(
+                _COMPSPH_ACCEL, ctx,
+                queryVelocities=queryVelocities_, referenceVelocities=referenceVelocities_,
+                queryEnergies=queryEnergies_, referenceEnergies=referenceEnergies_,
+                individualCs=individual_cs, queryCs=queryCs_, referenceCs=referenceCs_,
+                viscositySwitch=viscositySwitch, queryAlphas=queryAlphas_, referenceAlphas=referenceAlphas_,
+                explicitPressure=explicitPressure, queryPressures=queryPressures_, referencePressures=referencePressures_,
+                conductivityParams=conductivityParams,
             )
 
 

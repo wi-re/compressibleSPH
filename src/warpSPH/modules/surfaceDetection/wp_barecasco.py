@@ -396,6 +396,24 @@ def computeBarecascoSurfaceDetection_Kernel(
     )
 
 
+def _barecascoNormalsDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.positions).dtype
+
+
+def _barecascoValuesDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_BARECASCO_SURFACE_DETECTION = OperatorSpec(
+    kernel=computeBarecascoSurfaceDetection_Kernel,
+    outputs=(
+        OutputSpec(dtype=_barecascoNormalsDtype, shape=ShapeOf.QUERY),
+        OutputSpec(dtype=_barecascoValuesDtype, shape=ShapeOf.QUERY),
+    ),
+    extras=(ExtraSpec("barecascoThreshold", ExtraKind.SCALAR),),
+)
+
+
 def computeBarecascoSurfaceDetectionWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -424,29 +442,20 @@ def computeBarecascoSurfaceDetectionWarp(
             #     renormalizationState,
             # )
 
-            outputSize = [queryParticles.positions.shape[0], queryParticles.positions.shape[0]]
-            outputDtype = [castTorchToWarpAsBuiltins(queryParticles.positions).dtype, castTorchToWarpAsBuiltins(queryParticles.densities).dtype]
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[computeBarecascoSurfaceDetection] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeBarecascoSurfaceDetection_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    scalar_t(barecascoThreshold),
-                ),
+            )
+            return launchOperator(
+                _BARECASCO_SURFACE_DETECTION, ctx,
+                barecascoThreshold=scalar_t(barecascoThreshold),
             )
 
 

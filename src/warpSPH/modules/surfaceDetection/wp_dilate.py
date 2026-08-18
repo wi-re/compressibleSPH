@@ -201,6 +201,17 @@ def dilateSurfaceMask_Kernel(
     )
 
 
+def _dilateSurfaceMaskDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_DILATE_SURFACE_MASK = OperatorSpec(
+    kernel=dilateSurfaceMask_Kernel,
+    outputs=(OutputSpec(dtype=_dilateSurfaceMaskDtype, shape=ShapeOf.QUERY),),
+    extras=(ExtraSpec("freeSurfaceMask", ExtraKind.TENSOR),),
+)
+
+
 def dilateSurfaceMaskWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -229,30 +240,18 @@ def dilateSurfaceMaskWarp(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[dilateSurfaceMask] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = dilateSurfaceMask_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
-                ),
-                additionalArguments=(
-                    freeSurfaceMask,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
             )
+            return launchOperator(_DILATE_SURFACE_MASK, ctx, freeSurfaceMask=freeSurfaceMask)
 
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):

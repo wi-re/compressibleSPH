@@ -237,6 +237,20 @@ def computeAlpha_Kernel(
 
 
 
+def _alphaDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_ALPHA = OperatorSpec(
+    kernel=computeAlpha_Kernel,
+    outputs=(OutputSpec(dtype=_alphaDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryApparentAreas", ExtraKind.TENSOR),
+        ExtraSpec("referenceApparentAreas", ExtraKind.TENSOR),
+    ),
+)
+
+
 def computeAlphaWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -265,30 +279,21 @@ def computeAlphaWarp(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             referenceApparentAreas = referenceApparentAreas if referenceApparentAreas is not None else queryApparentAreas
 
         with record_function("warpSPH[computeAlpha] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeAlpha_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryApparentAreas, referenceApparentAreas,
-                ),
+            )
+            return launchOperator(
+                _ALPHA, ctx,
+                queryApparentAreas=queryApparentAreas, referenceApparentAreas=referenceApparentAreas,
             )
 
 

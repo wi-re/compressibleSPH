@@ -231,6 +231,23 @@ def computePressureSurfaceAware_Kernel(
     ) / queryState.densities[i]
 
 
+def _surfaceAwareDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.positions).dtype
+
+
+_PRESSURE_SURFACE_AWARE = OperatorSpec(
+    kernel=computePressureSurfaceAware_Kernel,
+    outputs=(OutputSpec(dtype=_surfaceAwareDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryPressures", ExtraKind.TENSOR),
+        ExtraSpec("referencePressures", ExtraKind.TENSOR),
+        ExtraSpec("querySurfaceMask", ExtraKind.TENSOR),
+        ExtraSpec("referenceSurfaceMask", ExtraKind.TENSOR),
+        ExtraSpec("pressureTerm", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computePressureSurfaceAwareWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -264,33 +281,25 @@ def computePressureSurfaceAwareWarp(
             #     renormalizationState,
             # )
             device = queryParticles.positions.device
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             querySurfaceMask_ = querySurfaceMask if querySurfaceMask is not None else getCachedDummyTensor((1,), dtype=torch.int32, device=device)
             referenceSurfaceMask_ = referenceSurfaceMask if referenceSurfaceMask is not None else getCachedDummyTensor((1,), dtype=torch.int32, device=device)
 
         with record_function("warpSPH[computePressureSurfaceAware] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computePressureSurfaceAware_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryPressures, referencePressures,
-                    querySurfaceMask_, referenceSurfaceMask_,
-                    wp.int32(pressureTerm.value),
-                ),
+            )
+            return launchOperator(
+                _PRESSURE_SURFACE_AWARE, ctx,
+                queryPressures=queryPressures, referencePressures=referencePressures,
+                querySurfaceMask=querySurfaceMask_, referenceSurfaceMask=referenceSurfaceMask_,
+                pressureTerm=wp.int32(pressureTerm.value),
             )
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):

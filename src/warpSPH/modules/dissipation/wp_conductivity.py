@@ -255,6 +255,32 @@ def computeConductivity_Kernel(
         zero_like_warp(outputValues)
     )
 
+def _conductivityDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_CONDUCTIVITY = OperatorSpec(
+    kernel=computeConductivity_Kernel,
+    outputs=(OutputSpec(dtype=_conductivityDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("queryEnergies", ExtraKind.TENSOR),
+        ExtraSpec("referenceEnergies", ExtraKind.TENSOR),
+        ExtraSpec("individualCs", ExtraKind.SCALAR),
+        ExtraSpec("queryCs", ExtraKind.TENSOR),
+        ExtraSpec("referenceCs", ExtraKind.TENSOR),
+        ExtraSpec("viscositySwitch", ExtraKind.SCALAR),
+        ExtraSpec("queryAlphas", ExtraKind.TENSOR),
+        ExtraSpec("referenceAlphas", ExtraKind.TENSOR),
+        ExtraSpec("explicitPressure", ExtraKind.SCALAR),
+        ExtraSpec("queryPressures", ExtraKind.TENSOR),
+        ExtraSpec("referencePressures", ExtraKind.TENSOR),
+        ExtraSpec("conductivityParams", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computeConductivityWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -295,8 +321,6 @@ def computeConductivityWarp(
             #     renormalizationState,
             # )
             device = queryParticles.positions.device
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             
@@ -331,28 +355,22 @@ def computeConductivityWarp(
                 raise ValueError("Energies must be provided either through queryEnergies or as a property of queryParticles.")
             
         with record_function("warpSPH[computeConductivity] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeConductivity_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities_, referenceVelocities_,
-                    queryEnergies_, referenceEnergies_,
-                    individual_cs, queryCs_, referenceCs_,
-                    viscositySwitch, queryAlphas_, referenceAlphas_,
-                    explicitPressure, queryPressures_, referencePressures_,
-                    conductivityParams
-                ),
+            )
+            return launchOperator(
+                _CONDUCTIVITY, ctx,
+                queryVelocities=queryVelocities_, referenceVelocities=referenceVelocities_,
+                queryEnergies=queryEnergies_, referenceEnergies=referenceEnergies_,
+                individualCs=individual_cs, queryCs=queryCs_, referenceCs=referenceCs_,
+                viscositySwitch=viscositySwitch, queryAlphas=queryAlphas_, referenceAlphas=referenceAlphas_,
+                explicitPressure=explicitPressure, queryPressures=queryPressures_, referencePressures=referencePressures_,
+                conductivityParams=conductivityParams,
             )
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):
         #     warp_result = warpWrapper(

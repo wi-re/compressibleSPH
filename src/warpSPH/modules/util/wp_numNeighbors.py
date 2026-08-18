@@ -198,6 +198,12 @@ def countNeighbors_Kernel(
     )
 
 
+_COUNT_NEIGHBORS = OperatorSpec(
+    kernel=countNeighbors_Kernel,
+    outputs=(OutputSpec(dtype=wp.int32, shape=ShapeOf.QUERY),),
+)
+
+
 def countNeighborsWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -225,29 +231,18 @@ def countNeighborsWarp(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.kinds).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[countNeighbors] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = countNeighbors_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
-                ),
-                additionalArguments=(
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
             )
+            return launchOperator(_COUNT_NEIGHBORS, ctx)
 
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):

@@ -438,6 +438,29 @@ def computeMdbcNoPenShift_Kernel(
     outputValues[i] = avg_out
     outputCounters[i] = ret_ctr
 
+def _mdbcShiftDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.positions).dtype
+
+
+def _mdbcCounterDtype(ctx, extras):
+    return vector(length=ctx.query.positions.shape[1], dtype=wp.int32)
+
+
+_MDBC_NOPEN_SHIFT = OperatorSpec(
+    kernel=computeMdbcNoPenShift_Kernel,
+    outputs=(
+        OutputSpec(dtype=_mdbcShiftDtype, shape=ShapeOf.QUERY),
+        OutputSpec(dtype=_mdbcCounterDtype, shape=ShapeOf.QUERY),
+    ),
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("queryOffsets", ExtraKind.TENSOR),
+        ExtraSpec("referenceOffsets", ExtraKind.TENSOR),
+    ),
+)
+
+
 def computeMdbcNoPenShiftWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -471,30 +494,21 @@ def computeMdbcNoPenShiftWarp(
             #     renormalizationState,
             # )
 
-            outputSize = (queryParticles.positions.shape[0], queryParticles.positions.shape[0])
-            outputDtype = (castTorchToWarpAsBuiltins(queryParticles.positions).dtype, vector(length = queryParticles.positions.shape[1], dtype=wp.int32))
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[computeMdbcNoPenShift] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeMdbcNoPenShift_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities, referenceVelocities,
-                    queryOffsets, referenceOffsets
-                ),
+            )
+            return launchOperator(
+                _MDBC_NOPEN_SHIFT, ctx,
+                queryVelocities=queryVelocities, referenceVelocities=referenceVelocities,
+                queryOffsets=queryOffsets, referenceOffsets=referenceOffsets,
             )
 
 

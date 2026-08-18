@@ -252,6 +252,25 @@ def computeDeltaShift_Kernel(
         rho0, dx,
     )
 
+def _deltaShiftDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.positions).dtype
+
+
+_DELTA_SHIFT = OperatorSpec(
+    kernel=computeDeltaShift_Kernel,
+    outputs=(OutputSpec(dtype=_deltaShiftDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("R", ExtraKind.SCALAR),
+        ExtraSpec("n", ExtraKind.SCALAR),
+        ExtraSpec("CFL", ExtraKind.SCALAR),
+        ExtraSpec("computeMach", ExtraKind.SCALAR),
+        ExtraSpec("c_max", ExtraKind.SCALAR),
+        ExtraSpec("rho0", ExtraKind.SCALAR),
+        ExtraSpec("dx", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computeDeltaShiftWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -270,26 +289,17 @@ def computeDeltaShiftWarp(
     renormalizationState: Optional[Union[torch.Tensor,RenormalizationState]] = None,
 ):
     with record_function("warpSPH[CRKVolume]"):
-        outputSize  = queryParticles.positions.shape[0]
-        outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
-
-        return warpWrapper2(
-            launcher = launch_kernel,
-            kernel   = computeDeltaShift_Kernel,
-            outputSizes  = outputSize,
-            outputDtypes = outputDtype,
-            defaultStateArguments=(
-                queryParticles, operationProperties, domain,
-                queryVolumes, referenceVolumes,
-                adjacency,
-                referenceParticles,
-                crkState,
-                gradHState,
-                renormalizationState,
+        ctx = SPHContext(
+            query=queryParticles, properties=operationProperties, domain=domain,
+            adjacency=adjacency, reference=referenceParticles,
+            corrections=Corrections(
+                volumes=(queryVolumes, referenceVolumes),
+                crk=crkState, gradH=gradHState, renorm=renormalizationState,
             ),
-            additionalArguments=(
-                R, n, CFL, computeMach, c_max,
-                rho0, dx,
-            ),
+        )
+        return launchOperator(
+            _DELTA_SHIFT, ctx,
+            R=R, n=n, CFL=CFL, computeMach=computeMach, c_max=c_max,
+            rho0=rho0, dx=dx,
         )
 

@@ -278,6 +278,17 @@ def computeMaronneSurfaceDetection_Kernel(
     )
 
 
+def _maronneDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_MARONNE_SURFACE_DETECTION = OperatorSpec(
+    kernel=computeMaronneSurfaceDetection_Kernel,
+    outputs=(OutputSpec(dtype=_maronneDtype, shape=ShapeOf.QUERY),),
+    extras=(ExtraSpec("surfaceNormals", ExtraKind.TENSOR),),
+)
+
+
 def computeMaronneSurfaceDetection(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -306,30 +317,18 @@ def computeMaronneSurfaceDetection(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[computeMaronneSurfaceDetection] - Kernel Execution"):
-            result = warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeMaronneSurfaceDetection_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    surfaceNormals,
-                ),
-            ) < 0.5
+            )
+            result = launchOperator(_MARONNE_SURFACE_DETECTION, ctx, surfaceNormals=surfaceNormals) < 0.5
 
             return (result).to(dtype = queryParticles.positions.dtype)
 

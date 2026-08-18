@@ -209,6 +209,19 @@ def computePsi0_Kernel(
     output_psi0[i] = psi0
     output_psi0_H[i] = psi0h
 
+def _psi0Dtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_PSI0 = OperatorSpec(
+    kernel=computePsi0_Kernel,
+    outputs=(
+        OutputSpec(dtype=_psi0Dtype, shape=ShapeOf.QUERY),
+        OutputSpec(dtype=_psi0Dtype, shape=ShapeOf.QUERY),
+    ),
+)
+
+
 def computePsi0Warp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -222,25 +235,15 @@ def computePsi0Warp(
     renormalizationState: Optional[Union[torch.Tensor,RenormalizationState]] = None,
 ):
     with record_function("warpSPH[computePsi0]"):
-        outputSize = queryParticles.positions.shape[0]
-        outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-        return warpWrapper2(
-            launcher = launch_kernel,
-            kernel   = computePsi0_Kernel,
-            outputSizes  = (outputSize, outputSize),
-            outputDtypes = (outputDtype, outputDtype),
-            defaultStateArguments=(
-                queryParticles, operationProperties, domain,
-                queryVolumes, referenceVolumes,
-                adjacency,
-                referenceParticles,
-                crkState,
-                gradHState,
-                renormalizationState,
-            ),
-            additionalArguments=(
+        ctx = SPHContext(
+            query=queryParticles, properties=operationProperties, domain=domain,
+            adjacency=adjacency, reference=referenceParticles,
+            corrections=Corrections(
+                volumes=(queryVolumes, referenceVolumes),
+                crk=crkState, gradH=gradHState, renorm=renormalizationState,
             ),
         )
+        return launchOperator(_PSI0, ctx)
 
 
         # with record_function("warpSPH[CRKVolume] - Preprocessing"):

@@ -256,6 +256,23 @@ def computeDensityDiffusionDeltaSPH_Kernel(
     )
 
 
+def _densityDiffusionDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_DENSITY_DIFFUSION_DELTA_SPH = OperatorSpec(
+    kernel=computeDensityDiffusionDeltaSPH_Kernel,
+    outputs=(OutputSpec(dtype=_densityDiffusionDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryGradRho", ExtraKind.TENSOR),
+        ExtraSpec("referenceGradRho", ExtraKind.TENSOR),
+        ExtraSpec("queryGradRhoL", ExtraKind.TENSOR),
+        ExtraSpec("referenceGradRhoL", ExtraKind.TENSOR),
+        ExtraSpec("densityScheme", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computeDensityDiffusionDeltaSPH(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -293,35 +310,28 @@ def computeDensityDiffusionDeltaSPH(
             # )
 
             outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
             queryGradRho_ = queryGradRho if queryGradRho is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
             queryGradRhoL_ = queryGradRhoL if queryGradRhoL is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
             referenceGradRho_ = referenceGradRho if referenceGradRho is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
             referenceGradRhoL_ = referenceGradRhoL if referenceGradRhoL is not None else getCachedDummyTensor((outputSize, domain.dim), dtype=get_torch_precision(), device=device)
 
         with record_function("warpSPH[computeDensityDiffusionDeltaSPH] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeDensityDiffusionDeltaSPH_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryGradRho_, referenceGradRho_,
-                    queryGradRhoL_, referenceGradRhoL_,
-                    wp.int32(densityScheme.value)
-                ),
+            )
+            return launchOperator(
+                _DENSITY_DIFFUSION_DELTA_SPH, ctx,
+                queryGradRho=queryGradRho_, referenceGradRho=referenceGradRho_,
+                queryGradRhoL=queryGradRhoL_, referenceGradRhoL=referenceGradRhoL_,
+                densityScheme=wp.int32(densityScheme.value),
             )
 
 

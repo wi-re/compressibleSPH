@@ -249,6 +249,25 @@ def computeVelocityDiffusionDeltaSPH_Kernel(
     )
 
 
+def _velocityDiffusionDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.velocities).dtype
+
+
+_VELOCITY_DIFFUSION_DELTA_SPH = OperatorSpec(
+    kernel=computeVelocityDiffusionDeltaSPH_Kernel,
+    outputs=(OutputSpec(dtype=_velocityDiffusionDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("inviscid", ExtraKind.SCALAR),
+        ExtraSpec("alpha", ExtraKind.SCALAR),
+        ExtraSpec("c_s", ExtraKind.SCALAR),
+        ExtraSpec("nu", ExtraKind.SCALAR),
+        ExtraSpec("dim", ExtraKind.SCALAR),
+    ),
+)
+
+
 def computeVelocityDiffusionDeltaSPH(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -285,30 +304,22 @@ def computeVelocityDiffusionDeltaSPH(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.velocities).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[computeVelocityDiffusionDeltaSPH] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeVelocityDiffusionDeltaSPH_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities, referenceVelocities,
-                    wp.bool(inviscid), scalar_t(alpha), scalar_t(c_s), scalar_t(nu), wp.int32(domain.dim)
-                ),
+            )
+            return launchOperator(
+                _VELOCITY_DIFFUSION_DELTA_SPH, ctx,
+                queryVelocities=queryVelocities, referenceVelocities=referenceVelocities,
+                inviscid=wp.bool(inviscid), alpha=scalar_t(alpha), c_s=scalar_t(c_s), nu=scalar_t(nu),
+                dim=wp.int32(domain.dim),
             )
 
 

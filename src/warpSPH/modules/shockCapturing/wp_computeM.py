@@ -1,7 +1,7 @@
 """Warp kernel computing the CRKSPH gradient-correction matrix M = sum_j m_j (x_ij (x) grad W_ij).
 
 ``computeMWarp`` is the torch-facing entry point (dispatched through
-``warpWrapper2``/``launch_kernel`` like the other ``wp_*.py`` modules); the
+``launchOperator``/``launch_kernel`` like the other ``wp_*.py`` modules); the
 underlying ``@wp.func``/``@wp.kernel`` helpers accumulate the dyadic product
 over each particle's neighbor list, honoring gradient renormalization, grad-h,
 volume, and CRK correction flags from ``correctionData`` when enabled. The
@@ -194,6 +194,17 @@ def computeM_Kernel(
         zero_like_warp(outputValues)
     )
 
+def _computeMDtype(ctx, extras):
+    dim = ctx.query.positions.shape[1]
+    return matrix(shape=(dim, dim), dtype=scalar_t)  # type: ignore
+
+
+_COMPUTE_M = OperatorSpec(
+    kernel=computeM_Kernel,
+    outputs=(OutputSpec(dtype=_computeMDtype, shape=ShapeOf.QUERY),),
+)
+
+
 def computeMWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -219,30 +230,19 @@ def computeMWarp(
             #     renormalizationState,
             # )
             device = queryParticles.positions.device
-            outputSize = queryParticles.positions.shape[0]
-            # outputDtype = castTorchToWarpAsBuiltins(queryParticles.positions).dtype
-            outputDtype = matrix(shape=(queryParticles.positions.shape[1], queryParticles.positions.shape[1]), dtype=scalar_t) # type: ignore
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-        
+
         with record_function("warpSPH[computeM] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeM_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
-                ),
-                additionalArguments=(
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
             )
+            return launchOperator(_COMPUTE_M, ctx)
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):
         #     warp_result = warpWrapper(

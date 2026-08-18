@@ -185,6 +185,16 @@ def computeOmega_Kernel(
         zero_like_warp(outputValues)
     )
 
+def _omegaDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_OMEGA = OperatorSpec(
+    kernel=computeOmega_Kernel,
+    outputs=(OutputSpec(dtype=_omegaDtype, shape=ShapeOf.QUERY),),
+)
+
+
 def computeOmegaWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -198,25 +208,15 @@ def computeOmegaWarp(
     renormalizationState: Optional[Union[torch.Tensor,RenormalizationState]] = None,
 ):
     with record_function("warpSPH[computeOmega]"):
-        outputSize = queryParticles.positions.shape[0]
-        outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-        return warpWrapper2(
-            launcher = launch_kernel,
-            kernel   = computeOmega_Kernel,
-            outputSizes  = outputSize,
-            outputDtypes = outputDtype,
-            defaultStateArguments=(
-                queryParticles, operationProperties, domain,
-                queryVolumes, referenceVolumes,
-                adjacency,
-                referenceParticles,
-                crkState,
-                gradHState,
-                renormalizationState,
-            ),
-            additionalArguments=(
+        ctx = SPHContext(
+            query=queryParticles, properties=operationProperties, domain=domain,
+            adjacency=adjacency, reference=referenceParticles,
+            corrections=Corrections(
+                volumes=(queryVolumes, referenceVolumes),
+                crk=crkState, gradH=gradHState, renorm=renormalizationState,
             ),
         )
+        return launchOperator(_OMEGA, ctx)
 
 
         # with record_function("warpSPH[CRKVolume] - Preprocessing"):

@@ -202,6 +202,17 @@ def warpSum_Kernel(
     )
 
 
+def _warpSumDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(extras["queryValues"]).dtype
+
+
+_WARP_SUM = OperatorSpec(
+    kernel=warpSum_Kernel,
+    outputs=(OutputSpec(dtype=_warpSumDtype, shape=ShapeOf.QUERY),),
+    extras=(ExtraSpec("queryValues", ExtraKind.TENSOR),),
+)
+
+
 def warpSum(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -230,30 +241,18 @@ def warpSum(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryValues).dtype
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
-            
+
         with record_function("warpSPH[warpSum] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = warpSum_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
-                ),
-                additionalArguments=(
-                    queryValues,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
             )
+            return launchOperator(_WARP_SUM, ctx, queryValues=queryValues)
 
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):

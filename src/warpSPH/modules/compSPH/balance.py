@@ -301,6 +301,38 @@ def computeCompSPHBalanceTerm_Kernel(
 
 from ...enumTypes import EnergyScheme
 
+def _balanceTermDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+def _balancePairShape(ctx, extras):
+    return ctx.adjacency.i.shape[0]
+
+
+def _balanceNumThreads(ctx, extras):
+    return ctx.query.positions.shape[0]
+
+
+_COMPSPH_BALANCE_TERM = OperatorSpec(
+    kernel=computeCompSPHBalanceTerm_Kernel,
+    outputs=(OutputSpec(dtype=_balanceTermDtype, shape=_balancePairShape),),
+    numThreads=_balanceNumThreads,
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("queryEnergies", ExtraKind.TENSOR),
+        ExtraSpec("referenceEnergies", ExtraKind.TENSOR),
+        ExtraSpec("queryPressures", ExtraKind.TENSOR),
+        ExtraSpec("referencePressures", ExtraKind.TENSOR),
+        ExtraSpec("pairWisePressureAccel", ExtraKind.TENSOR),
+        ExtraSpec("pairWiseViscosityAccel", ExtraKind.TENSOR),
+        ExtraSpec("energyScheme", ExtraKind.SCALAR),
+        ExtraSpec("dt", ExtraKind.TENSOR),
+        ExtraSpec("gamma", ExtraKind.TENSOR),
+    ),
+)
+
+
 def computeCompSPHBalanceTermWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -346,15 +378,6 @@ def computeCompSPHBalanceTermWarp(
             #     renormalizationState,
             # )
 
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
-            outputSizes = (
-                adjacency.i.shape[0]
-            )
-            outputDtypes = (
-                outputDtype
-            )
-
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             
             queryEnergies_ = queryEnergies if queryEnergies is not None else (queryParticles.internalEnergies if hasattr(queryParticles, 'internalEnergies') else None)
@@ -376,29 +399,22 @@ def computeCompSPHBalanceTermWarp(
             # print(f'Energy Scheme: {energyScheme} [value: {energyScheme.value}]')
 
         with record_function("warpSPH[computeCompSPHBalanceTerm] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeCompSPHBalanceTerm_Kernel,
-                numThreads = queryParticles.positions.shape[0],
-                outputSizes  = outputSizes,
-                outputDtypes = outputDtypes,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities_, referenceVelocities_,
-                    queryEnergies_, referenceEnergies_,
-                    queryPressures_, referencePressures_,
-                    pairWise_pressureAccel, pairWise_viscosityAccel,
-                    wp.int32(energyScheme.value), asScalarArg(dt, device=device),
-                    asScalarArg(gamma, device=device)
-                ),
+            )
+            return launchOperator(
+                _COMPSPH_BALANCE_TERM, ctx,
+                queryVelocities=queryVelocities_, referenceVelocities=referenceVelocities_,
+                queryEnergies=queryEnergies_, referenceEnergies=referenceEnergies_,
+                queryPressures=queryPressures_, referencePressures=referencePressures_,
+                pairWisePressureAccel=pairWise_pressureAccel, pairWiseViscosityAccel=pairWise_viscosityAccel,
+                energyScheme=wp.int32(energyScheme.value), dt=asScalarArg(dt, device=device),
+                gamma=asScalarArg(gamma, device=device),
             )
 
 

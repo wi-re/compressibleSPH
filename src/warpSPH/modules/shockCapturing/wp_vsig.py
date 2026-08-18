@@ -275,6 +275,23 @@ def computeVsig_Kernel(
     else:
         outputValues[i] = zero_like_warp(outputValues)
 
+def _vsigDtype(ctx, extras):
+    return castTorchToWarpAsBuiltins(ctx.query.densities).dtype
+
+
+_VSIG = OperatorSpec(
+    kernel=computeVsig_Kernel,
+    outputs=(OutputSpec(dtype=_vsigDtype, shape=ShapeOf.QUERY),),
+    extras=(
+        ExtraSpec("queryVelocities", ExtraKind.TENSOR),
+        ExtraSpec("referenceVelocities", ExtraKind.TENSOR),
+        ExtraSpec("individualCs", ExtraKind.SCALAR),
+        ExtraSpec("queryCs", ExtraKind.TENSOR),
+        ExtraSpec("referenceCs", ExtraKind.TENSOR),
+    ),
+)
+
+
 def computeVsigWarp(
     queryParticles: ParticleState,
     operationProperties: OperationProperties,
@@ -307,8 +324,6 @@ def computeVsigWarp(
             #     renormalizationState,
             # )
             device = queryParticles.positions.device
-            outputSize = queryParticles.positions.shape[0]
-            outputDtype = castTorchToWarpAsBuiltins(queryParticles.densities).dtype
 
             referenceParticles = referenceParticles if referenceParticles is not None else queryParticles
             queryVelocities_ = queryVelocities if queryVelocities is not None else (queryParticles.velocities if hasattr(queryParticles, 'velocities') else None)
@@ -326,24 +341,18 @@ def computeVsigWarp(
                 raise ValueError("Velocities must be provided either through queryVelocities or as a property of queryParticles.")
 
         with record_function("warpSPH[computeVsig] - Kernel Execution"):
-            return warpWrapper2(
-                launcher = launch_kernel,
-                kernel   = computeVsig_Kernel,
-                outputSizes  = outputSize,
-                outputDtypes = outputDtype,
-                defaultStateArguments=(
-                    queryParticles, operationProperties, domain,
-                    queryVolumes, referenceVolumes,
-                    adjacency,
-                    referenceParticles,
-                    crkState,
-                    gradHState,
-                    renormalizationState,
+            ctx = SPHContext(
+                query=queryParticles, properties=operationProperties, domain=domain,
+                adjacency=adjacency, reference=referenceParticles,
+                corrections=Corrections(
+                    volumes=(queryVolumes, referenceVolumes),
+                    crk=crkState, gradH=gradHState, renorm=renormalizationState,
                 ),
-                additionalArguments=(
-                    queryVelocities_, referenceVelocities_,
-                    individual_cs, queryCs_, referenceCs_,
-                ),
+            )
+            return launchOperator(
+                _VSIG, ctx,
+                queryVelocities=queryVelocities_, referenceVelocities=referenceVelocities_,
+                individualCs=individual_cs, queryCs=queryCs_, referenceCs=referenceCs_,
             )
 
         # with record_function("warpSPH[CRKVolume] - Kernel Execution"):
