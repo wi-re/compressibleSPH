@@ -8,7 +8,8 @@ import h5py
 import torch
 
 from ..configurations import dictToConfig
-from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
+from ..enumTypes import (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
+                         IncompressibleSPHScheme, WaveEquationScheme)
 from ..modules import idealGasEOS
 from ..schemes import buildScheme
 from .hdf5 import loadAdjacency, loadState, loadStage, hdfDtypeToTorchDtype
@@ -24,6 +25,9 @@ def schemeNameToSimulationScheme(name: str) -> CompressibleSPHScheme:
             return scheme
     # Mirrors `schemeAttribute`: whatever can be written must be readable back.
     for scheme in IncompressibleSPHScheme:
+        if scheme.name.lower() == name.lower():
+            return scheme
+    for scheme in WaveEquationScheme:
         if scheme.name.lower() == name.lower():
             return scheme
     raise ValueError(f'Unsupported scheme name: {name}')

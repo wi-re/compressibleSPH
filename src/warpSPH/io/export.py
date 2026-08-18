@@ -9,7 +9,8 @@ import numpy as np
 import torch
 
 from ..configurations import *
-from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
+from ..enumTypes import (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
+                         IncompressibleSPHScheme, WaveEquationScheme)
 from ..utils import getCurrentTimestamp
 from .hdf5 import dumpAdjacency, dumpState, dumpStage, copy_dict_to_h5, _encode_callable
 
@@ -17,15 +18,17 @@ from .hdf5 import dumpAdjacency, dumpState, dumpStage, copy_dict_to_h5, _encode_
 def schemeAttribute(scheme) -> str:
     """The scheme's name, as an HDF5 attribute can store it.
 
-    All three scheme enums have to be named here: an enum member that falls
-    through lands in `attrs` as a Python object, and h5py rejects it with
-    "Object dtype has no native HDF5 equivalent". `IncompressibleSPHScheme` was
-    missing from two of the three sites, so `--store` had never worked for the
-    incompressible family.
+    Every scheme enum has to be named here: an enum member that falls through
+    lands in `attrs` as a Python object, and h5py rejects it with "Object
+    dtype has no native HDF5 equivalent" (and `json.dump` rejects it outright
+    for `config.json`). `IncompressibleSPHScheme` was missing from two of the
+    three sites, so `--store` had never worked for the incompressible family;
+    `WaveEquationScheme` was missing here entirely, breaking `--plot`/`--store`
+    for the wave case with the same `TypeError`.
     """
     return scheme.name if isinstance(
         scheme, (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
-                 IncompressibleSPHScheme)) else scheme
+                 IncompressibleSPHScheme, WaveEquationScheme)) else scheme
 
 
 def exportSimulationSystem(

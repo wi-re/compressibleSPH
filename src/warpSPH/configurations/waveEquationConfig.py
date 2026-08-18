@@ -94,3 +94,37 @@ class CaseConfig:
 
     sources: List[WaveSource] = ()
     obstacles: List[WaveBoundary] = ()
+
+
+@dataclass
+class WaveEquationConfig:
+    """The wave scheme's own config: which kernel/operator modes
+    `f_wave_equation` (`schemes/waveEquation.py`) uses for its Laplacian.
+
+    Fills the `SimulationConfig` slot of `WaveEquationScheme`'s `SchemeBundle`
+    (`schemes/builder.py`), i.e. this is what `f_wave_equation` receives as
+    `schemeConfig`. Defaults match the values `f_wave_equation` used to
+    hardcode, so registering the scheme changes no behavior.
+    """
+    kernel: KernelFunctions = field(default=KernelFunctions.Wendland2)
+    supportMode: SupportScheme = field(default=SupportScheme.SuperSymmetric)
+    gradientMode: GradientScheme = field(default=GradientScheme.Difference)
+    laplacianMode: LaplacianScheme = field(default=LaplacianScheme.Brookshaw)
+
+
+def waveEquationConfigToDict(config: 'WaveEquationConfig') -> Dict[str, Any]:
+    return {
+        'kernel': config.kernel.name,
+        'supportMode': config.supportMode.name,
+        'gradientMode': config.gradientMode.name,
+        'laplacianMode': config.laplacianMode.name,
+    }
+
+
+def dictToWaveEquationConfig(configDict: Dict[str, Any]) -> 'WaveEquationConfig':
+    config = WaveEquationConfig()
+    config.kernel = KernelFunctions[configDict['kernel']] if isinstance(configDict['kernel'], str) else configDict['kernel']
+    config.supportMode = SupportScheme[configDict['supportMode']] if isinstance(configDict['supportMode'], str) else configDict['supportMode']
+    config.gradientMode = GradientScheme[configDict['gradientMode']] if isinstance(configDict['gradientMode'], str) else configDict['gradientMode']
+    config.laplacianMode = LaplacianScheme[configDict['laplacianMode']] if isinstance(configDict['laplacianMode'], str) else configDict['laplacianMode']
+    return config

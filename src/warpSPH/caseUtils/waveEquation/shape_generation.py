@@ -11,7 +11,7 @@ compatibility aliases kept for existing notebook code.
 """
 
 import torch
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from ...configurations import WaveCaseConfig, WaveShapeSpec
 from ...math import getPeriodicPositions
@@ -345,7 +345,9 @@ def populate_source_obstacle_grids_structured(
     u_source_grid: torch.Tensor,
     c_source_grid: torch.Tensor,
 ):
-    source_magnitudes: List[float] = []
+    #: `float` or a 0-d `torch.Tensor` -- a tensor stays a tensor so gradients
+    #: can flow to it (see the comment in the loop below).
+    source_magnitudes: List[Any] = []
     for s, source in enumerate(case_config.sources):
         shape_spec = _legacy_to_shape_spec(source, default_kind="sphere")
         sampled = sample_shape_structured(particleState, config, shape_spec)
@@ -353,15 +355,19 @@ def populate_source_obstacle_grids_structured(
 
         magnitude = getattr(source, "magnitude", None)
         if magnitude is not None:
-            value = float(magnitude)
+            # Not `float(magnitude)`: a caller passing a `requires_grad`
+            # tensor here wants it to stay a tensor all the way into the `u`
+            # grid (see `finalizeWaveSystemSetup`), not get detached by a
+            # Python-scalar cast.
+            value = magnitude
         elif getattr(source, "randomizeMagnitude", False):
             lo, hi = case_config.amplitudeRange
-            value = torch.rand((1,), device=particleState.positions.device).item() * (hi - lo) + lo
+            value = torch.rand((), device=particleState.positions.device) * (hi - lo) + lo
         else:
             value = float(case_config.defaultAmplitude)
         source_magnitudes.append(value)
 
-    obstacle_speeds: List[float] = []
+    obstacle_speeds: List[Any] = []
     obstacle_counter = 0
     for obstacle in case_config.obstacles:
         shape_spec = _legacy_to_shape_spec(obstacle, default_kind="box")
@@ -391,10 +397,12 @@ def populate_source_obstacle_grids_structured(
 
         speed = getattr(obstacle, "speed", None)
         if speed is not None:
-            speed_value = float(speed)
+            # Not `float(speed)`: see the matching source-magnitude comment
+            # above -- a tensor here must stay a tensor.
+            speed_value = speed
         elif getattr(obstacle, "randomizeSpeed", False):
             lo, hi = case_config.obstacleSpeedRange
-            speed_value = torch.rand((1,), device=particleState.positions.device).item() * (hi - lo) + lo
+            speed_value = torch.rand((), device=particleState.positions.device) * (hi - lo) + lo
         else:
             speed_value = _default_obstacle_speed(case_config, obstacle_counter - 1)
         obstacle_speeds.append(speed_value)

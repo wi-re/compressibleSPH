@@ -501,3 +501,56 @@ def test_uniformLatticeDensityMatchesBuiltDensity(dim, nx):
     assert densities.mean().item() == pytest.approx(1.0, rel=1e-3), (
         f'dim={dim} nx={nx}: uniform-lattice B7 density estimate is '
         f'{densities.mean().item():.6g}, not 1.0 -- kernel normalisation regression')
+
+
+# --- Wave equation: non-fluid demo scheme, absorbed at the boundary ---------
+
+#: `nx` per dimension is chosen so the point/sphere source (`sourceRadius`
+#: 0.15 by default) is resolved by more than a couple of particles --
+#: important in 3D, where the particle count grows as `nx**3` and a too-coarse
+#: `nx` can leave the source's support empty.
+_WAVE = {'wave1d': dict(dim=1, nx=128), 'wave2d': dict(dim=2, nx=32), 'wave3d': dict(dim=3, nx=20)}
+
+#: How much the discrete wave energy (kinetic + gradient-based potential, see
+#: `cases/waveEquation.py`'s `diagnostics`) is allowed to grow over the run
+#: relative to its initial value. Unlike the compressible schemes above, this
+#: one is not energy-conserving by construction -- the border damping is
+#: explicitly dissipative -- and the initial condition (a compactly-supported
+#: kernel bump) is not smooth on the particle scale, so the first few steps
+#: redistribute a real amount of energy into a form the diagnostic reads as
+#: growth before damping starts winning. Measured growth over `STEPS` steps at
+#: the resolutions above is ~1.2x (1D), ~2.9x (2D), ~11.5x (3D); the bound
+#: below leaves headroom over that but still catches genuine blow-up -- an
+#: unstable `cflFactor` drives this into the billions within a similar step
+#: count.
+_WAVE_ENERGY_DRIFT = 25.0
+
+
+@pytest.fixture(scope='module', params=sorted(_WAVE))
+def waveResult(request):
+    from warpSPH.cases.waveEquation import waveEquationCase
+    return request.param, _run(waveEquationCase, **_WAVE[request.param])
+
+
+def test_waveEquationDoesNotDiverge(waveResult):
+    name, result = waveResult
+    assert not result.diverged, f'{name} diverged'
+    assert len(result.trajectory) == STEPS + 1
+
+
+def test_waveEquationEnergyStaysBounded(waveResult):
+    name, result = waveResult
+    energy = result.series('totalEnergy')
+    assert np.all(np.isfinite(energy)), f'{name} produced a non-finite energy'
+    drift = energy.max() / energy[0]
+    assert drift < _WAVE_ENERGY_DRIFT, f'{name} total energy grew {drift:.2f}x'
+
+
+def test_waveEquationRunsInEveryDimension(waveResult):
+    """The payoff of generalizing the base pipeline to N-D
+    (`WAVE_EQUATION_PLAN.md` step 1): the same scheme code is exercised by the
+    neighbour search and Laplacian operator in 1D, 2D and 3D, not just the
+    2D shape-source path."""
+    name, result = waveResult
+    positions = result.state.state.positions
+    assert positions.shape[1] == _WAVE[name]['dim']

@@ -15,6 +15,7 @@ __all__ = [
     'CompressibleSPHScheme',
     'WeaklyCompressibleSPHScheme',
     'IncompressibleSPHScheme',
+    'WaveEquationScheme',
     'EquationOfState',
     'DensityDiffusionScheme',
     'PressureForceScheme',
@@ -59,6 +60,10 @@ class WeaklyCompressibleSPHScheme(Enum):
 # @torch.jit.script
 class IncompressibleSPHScheme(Enum):
     divergenceFree = 0
+
+# @torch.jit.script
+class WaveEquationScheme(Enum):
+    waveEquation = 0
 
 
 class EquationOfState(Enum):

@@ -276,12 +276,12 @@ def _addField(parser: argparse.ArgumentParser, name: str, default: Any, annotati
 
 
 def schemeNames() -> List[str]:
-    """Every solver name `--scheme` accepts, across the three scheme families."""
+    """Every solver name `--scheme` accepts, across the four scheme families."""
     from ..enumTypes import (CompressibleSPHScheme, IncompressibleSPHScheme,
-                             WeaklyCompressibleSPHScheme)
+                             WaveEquationScheme, WeaklyCompressibleSPHScheme)
     return [member.name
             for enumClass in (CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
-                              IncompressibleSPHScheme)
+                              IncompressibleSPHScheme, WaveEquationScheme)
             for member in enumClass]
 
 

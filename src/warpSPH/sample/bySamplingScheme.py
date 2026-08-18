@@ -13,6 +13,9 @@ branches are wired but currently unexercised.
 
 from ..configurations import SimulationConfig
 from ..geometry import *
+from .regular import sampleRegularParticles
+from .optimal import sampleOptimal
+from warpSPHCore import KernelFunctions
 import h5py
 import torch
 

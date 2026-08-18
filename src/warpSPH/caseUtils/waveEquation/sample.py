@@ -11,6 +11,7 @@ builder for exploratory use (`generateInitialVariables`).
 import torch
 import numpy as np
 from ...utils import *
+from ...math.noiseFunctions.generator import sampleVoronoi
 from typing import List, Union
 from warpSPHCore import *
 
@@ -62,7 +63,7 @@ def addNoise(
     u_min = torch.min(grid).cpu().item()
     u_max = torch.max(grid).cpu().item()
 
-    nx = int(math.sqrt(particleState.positions.shape[0]))
+    nx = round(particleState.positions.shape[0] ** (1 / config.dim))
     if u_min == u_max:
         u_min = -uMagnitude
         u_max = uMagnitude

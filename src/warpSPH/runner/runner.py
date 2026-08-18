@@ -23,10 +23,11 @@ import torch
 
 from ..configurations import buildConfig
 from ..enumTypes import (CompressibleSPHScheme, IncompressibleSPHScheme,
-                         WeaklyCompressibleSPHScheme)
+                         WaveEquationScheme, WeaklyCompressibleSPHScheme)
 from ..io.hdf5 import createOutFile
 from ..io.export import exportSimulationSystem, prepExport, writeFrame, writeInitialData
 from ..schemes import buildScheme
+from warpSPHIntegrators import get_tagged_attr
 from ..utils import buildDomainDescription
 from .case import Case, RunContext
 from .caseSpec import CaseSpec
@@ -71,7 +72,8 @@ def resolveEnum(enumClass, value):
 
 def _resolveScheme(name: str):
     """Map a scheme name onto whichever of the three scheme enums owns it."""
-    for enumClass in (CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme):
+    for enumClass in (CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme,
+                     WaveEquationScheme):
         for member in enumClass:
             if member.name.lower() == str(name).lower():
                 return member
@@ -303,7 +305,12 @@ def _run(case: Case, spec: CaseSpec, startedAt: float) -> RunResult:
         _plotAndStore(ctx, case, spec, runningState, stepResult, i, extraData,
                       groups, storeSteps, final=(not timeLimited and i == nSteps - 1))
 
-        if torch.any(torch.isnan(runningState.state.velocities)):
+        # Read by tag rather than the `velocities` field name: every fluid
+        # scheme's velocity field happens to be named that, but the wave
+        # scheme's is `v` (tagged `'velocity'` so it rides the same
+        # position/velocity integrator machinery under a different name).
+        velocities = get_tagged_attr(runningState.state, tag='velocity')
+        if torch.any(torch.isnan(velocities)):
             print(f'NaN detected in velocities at step {i}; stopping.')
             result.diverged = True
             break

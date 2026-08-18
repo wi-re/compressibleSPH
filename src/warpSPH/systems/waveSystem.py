@@ -11,8 +11,8 @@ purely so ``warpSPHIntegrators`` treats the pair with its position/velocity
 integrators; neither is a position or a velocity. That reuse is the point --
 the wave system rides the same integrator machinery as the fluid schemes.
 
-Not a fluid scheme and not a registered case; see
-:mod:`warpSPH.schemes.waveEquation` for what it is for.
+Not a fluid scheme; see :mod:`warpSPH.schemes.waveEquation` for the step
+function and :mod:`warpSPH.cases.waveEquation` for the registered `Case`.
 """
 
 import torch
@@ -106,11 +106,10 @@ from typing import List
 def computeDt(waveSystem: WaveSystemv3, config: SimulationConfig, caseConfig: WaveCaseConfig, args, obstacleSpeeds: List[float], verbose=False):
     # Compute CFL number based on initial conditions
     n = waveSystem.state.u.shape[0]
-    nx = int(n**0.5)
-    # print(f'Assuming square grid with nx={nx}, ny={nx}')
-    domainArea = (config.domain.max[0] - config.domain.min[0]) * (config.domain.max[1] - config.domain.min[1])
-    # print(f'Particle area: {domainArea/n}, particle spacing: {(domainArea/n)**0.5}')
-    dx = (domainArea/n)**0.5
+    domainVolume = 1.0
+    for d in range(config.dim):
+        domainVolume *= (config.domain.max[d] - config.domain.min[d])
+    dx = (domainVolume / n) ** (1 / config.dim)
 
     dt = 0.02
     cflNumber = max(obstacleSpeeds + [caseConfig.defaultSpeed]) * dt / dx

@@ -1,8 +1,9 @@
 """Resolve a scheme name/enum member to its `SchemeBundle`: the state, config,
-and update classes plus step/export/import functions for one of the five
+and update classes plus step/export/import functions for one of the six
 registered SPH schemes (Monaghan, CompSPH, CRKSPH, deltaSPH,
-divergence-free/DFSPH). `_divergenceFree` imports `dfsph` lazily to avoid a
-circular import with `schemes/__init__.py`, which imports `dfsph` first.
+divergence-free/DFSPH, and the non-fluid wave equation). `_divergenceFree`
+imports `dfsph` lazily to avoid a circular import with `schemes/__init__.py`,
+which imports `dfsph` first.
 """
 
 from dataclasses import dataclass
@@ -11,20 +12,26 @@ from typing import Callable, Union
 from ..systems import (
     CompSPHState, CompSPHSystem, CompressibleState,
     CompressibleSystem, CompressibleSystemUpdate, WeaklyCompressibleState,
-    WeaklyCompressibleSystem,
+    WeaklyCompressibleSystem, WaveSystemStatev3, WaveSystemUpdatev3, WaveSystemv3,
 )
 from ..configurations import (
     CRKSPHConfig, CompSPHConfig, CompressibleSPHConfig,
-    IncompressibleSPHConfig, WeaklyCompressibleSPHConfig, compSPHConfigToDict,
-    compressibleConfigToDict, crkSPHConfigToDict, dictToCRKSPHConfig,
-    dictToCompSPHConfig, dictToCompressibleConfig, dictToIncompressibleSPHConfig,
-    dictToWeaklyCompressibleConfig, incompressibleConfigToDict, weaklyCompressibleConfigToDict,
+    IncompressibleSPHConfig, WeaklyCompressibleSPHConfig, WaveEquationConfig,
+    compSPHConfigToDict, compressibleConfigToDict, crkSPHConfigToDict,
+    dictToCRKSPHConfig, dictToCompSPHConfig, dictToCompressibleConfig,
+    dictToIncompressibleSPHConfig, dictToWeaklyCompressibleConfig,
+    dictToWaveEquationConfig, incompressibleConfigToDict,
+    waveEquationConfigToDict, weaklyCompressibleConfigToDict,
 )
 from .compSPH import compSPH_step
 from .deltaSPH import deltaSPH_step
 from .crkSPH import crkSPH_step
 from .monaghan import compressibleSPH_Monaghan
-from ..enumTypes import CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme
+from .waveEquation import f_wave_equation
+from ..enumTypes import (
+    CompressibleSPHScheme, WeaklyCompressibleSPHScheme, IncompressibleSPHScheme,
+    WaveEquationScheme,
+)
 
 __all__ = ['SchemeBundle', 'buildScheme']
 
@@ -142,6 +149,18 @@ def _divergenceFree() -> SchemeBundle:
     )
 
 
+def _waveEquation() -> SchemeBundle:
+    return SchemeBundle(
+        SimulationSystem=WaveSystemv3,
+        SimulationState=WaveSystemStatev3,
+        SimulationConfig=WaveEquationConfig,
+        SimulationUpdate=WaveSystemUpdatev3,
+        stepFunction=f_wave_equation,
+        exportFunction=waveEquationConfigToDict,
+        importFunction=dictToWaveEquationConfig,
+    )
+
+
 #: enum member -> the factory that builds its bundle.
 _SCHEMES = {
     CompressibleSPHScheme.Monaghan: _monaghan,
@@ -149,6 +168,7 @@ _SCHEMES = {
     CompressibleSPHScheme.CRKSPH: _crkSPH,
     WeaklyCompressibleSPHScheme.deltaSPH: _deltaSPH,
     IncompressibleSPHScheme.divergenceFree: _divergenceFree,
+    WaveEquationScheme.waveEquation: _waveEquation,
 }
 
 #: Lower-cased string spellings. Every enum member answers to its own name; the
@@ -161,7 +181,7 @@ _ALIASES['monaghancompressiblesph'] = CompressibleSPHScheme.Monaghan
 
 def buildScheme(
     schemeName: Union[str, CompressibleSPHScheme, WeaklyCompressibleSPHScheme,
-                      IncompressibleSPHScheme]
+                      IncompressibleSPHScheme, WaveEquationScheme]
 ) -> SchemeBundle:
     """Resolve a scheme name or enum member to its :class:`SchemeBundle`."""
     if isinstance(schemeName, str):

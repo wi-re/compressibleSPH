@@ -54,13 +54,14 @@ def sampleDamping(particleState, config, dampingWidth=0.2, dampingStrength=5.0, 
     
     # Non-periodic mode: traditional edge damping
     l = 1.0 - dampingWidth  # Inner boundary of damping layer
-    
+    dim = positions.shape[-1]
+
     # Calculate distance from domain center
-    dist = torch.sqrt(positions[:,0]**2 + positions[:,1]**2)
-    dist_max = torch.sqrt(torch.tensor(2.0))  # Maximum distance in domain
-    
+    dist = torch.linalg.norm(positions, dim=-1)
+    dist_max = torch.sqrt(torch.tensor(float(dim)))  # Maximum distance in domain
+
     # Also consider rectangular distance for better corner coverage
-    rect_dist = torch.maximum(torch.abs(positions[:,0]), torch.abs(positions[:,1]))
+    rect_dist = positions.abs().amax(dim=-1)
     
     if profile == 'cosine':
         # Smooth cosine taper - works well for absorbing boundaries
@@ -76,10 +77,10 @@ def sampleDamping(particleState, config, dampingWidth=0.2, dampingStrength=5.0, 
     
     elif profile == 'exponential':
         # Original exponential profile but smoother
-        sphere_b = lambda points: getSDF('box')['function'](points, torch.tensor([l, l]))
+        sphere_b = lambda points: getSDF('box')['function'](points, torch.tensor([l] * dim))
         sdf = operatorDict['invert'](sphere_b)
-        dampGrid = sdf(positions).to('cuda')
-        
+        dampGrid = sdf(positions)
+
         mask = dampGrid < 0
         dampGrid[mask] = dampingStrength * (1 - torch.exp(-((-dampGrid[mask]) / dampingWidth)**2))
         dampGrid[~mask] = 0

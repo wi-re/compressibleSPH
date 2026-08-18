@@ -35,7 +35,6 @@ def generateDomainBox(
 def genInitial(
     particleState,
     config,
-    nx,
     domainBox: bool = True,
     domainDamping: bool = True,
 ):
@@ -45,13 +44,14 @@ def genInitial(
     - `cSourceGrid` uses `-1` for boundary walls and positive ids for obstacles.
     """
     device = particleState.positions.device
-    u = torch.zeros(nx**2, device=device)
-    v = torch.zeros(nx**2, device=device)
-    cGrid = torch.ones(nx**2, device=device)
-    dampGrid = torch.zeros(nx**2, device=device)
+    n = particleState.positions.shape[0]
+    u = torch.zeros(n, device=device)
+    v = torch.zeros(n, device=device)
+    cGrid = torch.ones(n, device=device)
+    dampGrid = torch.zeros(n, device=device)
 
-    uSourceGrid = torch.zeros(nx**2, device=device, dtype=torch.long)
-    cSourceGrid = torch.zeros(nx**2, device=device, dtype=torch.long)
+    uSourceGrid = torch.zeros(n, device=device, dtype=torch.long)
+    cSourceGrid = torch.zeros(n, device=device, dtype=torch.long)
 
     if domainBox:
         box = generateDomainBox(

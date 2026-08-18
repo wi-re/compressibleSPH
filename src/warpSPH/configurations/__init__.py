@@ -1,7 +1,7 @@
 """Public namespace for every config dataclass in warpSPH: the scheme-independent
 `SimulationConfig` plus each scheme's own config (`CompressibleSPHConfig`,
 `CompSPHConfig`, `CRKSPHConfig`, `WeaklyCompressibleSPHConfig`,
-`IncompressibleSPHConfig`), the wave-equation case config, and `region.py`/
+`IncompressibleSPHConfig`, `WaveEquationConfig`), the wave-equation case config, and `region.py`/
 `rigidBody.py`. Also re-exports everything from `moduleConfigurations` (the
 shared sub-configs those scheme configs embed, e.g. `DiffusionParameters`,
 `ShiftProperties`, `SurfaceDetectionConfig`). This is the namespace most of the
@@ -13,6 +13,7 @@ from .simulationConfig import SimulationConfig, buildConfig, configurationToDict
 from .waveEquationConfig import ShapeSpec as WaveShapeSpec
 from .waveEquationConfig import WaveSource, WaveBoundary
 from .waveEquationConfig import CaseConfig as WaveCaseConfig
+from .waveEquationConfig import WaveEquationConfig, waveEquationConfigToDict, dictToWaveEquationConfig
 from .compressibleConfig import CompressibleSPHConfig, compressibleConfigToDict, dictToCompressibleConfig
 from .compSPHConfig import CompSPHConfig, compSPHConfigToDict, dictToCompSPHConfig
 from .crkSPH import CRKViscosity, CRKSPHConfig, crkSPHConfigToDict, dictToCRKSPHConfig
@@ -34,6 +35,9 @@ __all__ = [
     'WaveSource',
     'WaveBoundary',
     'WaveCaseConfig',
+    'WaveEquationConfig',
+    'waveEquationConfigToDict',
+    'dictToWaveEquationConfig',
     'CompressibleSPHConfig',
     'CompSPHConfig',
     'CRKViscosity',
