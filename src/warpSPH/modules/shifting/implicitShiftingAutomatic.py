@@ -1,0 +1,137 @@
+"""Phase 4 step 4 of `warpSPHCore/warpier_forward_mode_plan.md`: "swap the
+matvec, keep the solver". Same `bicgstabSolve` call, same relaxation/
+boundary/initializer handling as `implicitShifting.computeImplicitShift`,
+but the Newton matvec `Hess(C) @ x` comes from `warpSPHCore.warpOperationHVP`
+(Phase 4 step 3's composed-JVP-of-a-JVP) instead of `H`/
+`_multiplyLaplacianBlock`'s hand-assembled per-pair kernel Hessian +
+`torch.einsum`. `grad C` (the RHS `B`) is likewise `warpOperationJVP`
+(Phase 4 step 2), not `wp_implicitShifting.computeShiftingPairTerms`'s `J`.
+
+No `sphKernelHessian`/`sphKernelGradient` call, no per-pair `scatter_sum`
+assembly, no hand-derived block-symmetry sign -- every SPH-specific building
+block below is a call into `warpSPHCore`'s Tier-2 bridge (Density's position
+JVP/HVP, `omega` standing in for mass). The one piece of Newton-solver
+machinery this file still writes itself is what `warpOperationJVP`/HVP
+*don't* provide: which particles are boundary (zeroed rows/RHS) and what the
+Jacobi preconditioner's diagonal is -- built the same way `_buildSystem`
+does, just sourced from `warpOperationHVP` called with each coordinate basis
+vector (`tangentReferencePositions=0`, isolating `diagBlock_i = sum_j
+omega_j H_ij` from the general `HVP_i = sum_j omega_j H_ij @ (v_i - v_j)`
+formula) instead of assembling it from a dense per-pair `H` tensor.
+"""
+
+from typing import Any, Tuple
+import torch
+from torch.profiler import record_function
+from warpSPHCore import ParticleState, SupportScheme, OperationProperties, warpOperationJVP, warpOperationHVP
+from warpSPHCore.enumTypes import WarpOperation, OperationDirection
+
+from warpSPH.configurations.simulationConfig import SimulationConfig
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer
+
+from .bicgstab import bicgstabSolve
+from .delta import computeDeltaShift
+
+__all__ = ['computeImplicitShiftAutomatic']
+
+
+def computeImplicitShiftAutomatic(
+    currentState: Any,
+    config: SimulationConfig,
+    schemeConfig: Any,
+    domain: Any,
+    adjacency: Any,
+    iters: int = -1,
+):
+    """Drop-in replacement for `implicitShifting.computeImplicitShift`, same
+    signature and return value (`(delta, adjacency)`), Newton matvec/RHS
+    sourced entirely from `warpOperationJVP`/`warpOperationHVP` instead of a
+    hand-written per-pair kernel Hessian.
+    """
+    with record_function("[warpSPH] - (shift) - automatic"):
+        numParticles = currentState.positions.shape[0]
+        dim = currentState.positions.shape[1]
+        device, dtype = currentState.positions.device, currentState.positions.dtype
+        rho0 = schemeConfig.fluid.restDensity
+
+        if schemeConfig.shiftProperties.summationDensity:
+            omega = currentState.masses / currentState.densities
+        else:
+            omega = currentState.masses / rho0
+
+        omegaState = ParticleState(positions=currentState.positions, supports=currentState.supports,
+                                   masses=omega, kinds=currentState.kinds, densities=None)
+        props = OperationProperties(kernel=config.kernel, operation=WarpOperation.Density,
+                                    supportMode=SupportScheme.Gather, operationMode=OperationDirection.AllToAll)
+
+        zero = torch.zeros(numParticles, dim, device=device, dtype=dtype)
+        basisVectors = torch.eye(dim, device=device, dtype=dtype)
+
+        # grad C -- Phase 4 step 2: one warpOperationJVP call per coordinate.
+        Jw = torch.stack([
+            warpOperationJVP(omegaState, props, domain, adjacency=adjacency,
+                             tangentQueryPositions=basisVectors[d].expand(numParticles, dim))
+            for d in range(dim)
+        ], dim=1)
+        B = Jw.flatten().clone()
+
+        # diag(Hess C) -- Phase 4 step 3, isolated the same way _buildSystem's
+        # diagBlock is: query-side tangent = basis vector, reference-side
+        # tangent = 0, so only the "own position" second-derivative term
+        # survives (HVP_i = sum_j omega_j H_ij @ (e_d - 0) = diagBlock_i @ e_d).
+        diagBlock = torch.stack([
+            warpOperationHVP(omegaState, props, domain, adjacency=adjacency,
+                             tangentQueryPositions=basisVectors[d].expand(numParticles, dim),
+                             tangentReferencePositions=zero)
+            for d in range(dim)
+        ], dim=2)
+
+        initializer = schemeConfig.shiftProperties.implicitInitializer
+        if initializer in (ShiftingImplicitInitializer.deltaPlus, ShiftingImplicitInitializer.deltaMinus):
+            delta, _ = computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, iters=1)
+            sign = -0.5 if initializer == ShiftingImplicitInitializer.deltaPlus else 0.5
+            x0 = (delta.flatten() * sign).clone()
+        else:
+            x0 = torch.zeros(numParticles * dim, device=device, dtype=dtype)
+
+        boundary = currentState.kinds != 0
+        hasBoundary = torch.any(boundary)
+        if hasBoundary:
+            B.view(numParticles, dim)[boundary] = 0
+            x0.view(numParticles, dim)[boundary] = 0
+
+        diagComponents = torch.diagonal(diagBlock, dim1=-2, dim2=-1).flatten()
+        precond = torch.where(diagComponents.abs() > 1e-8, 1.0 / diagComponents, torch.zeros_like(diagComponents))
+        if not torch.any(diagComponents.abs() > 1e-8):
+            precond = None
+
+        def matvec(x: torch.Tensor) -> torch.Tensor:
+            v = x.view(numParticles, dim)
+            Hv = warpOperationHVP(omegaState, props, domain, adjacency=adjacency,
+                                  tangentQueryPositions=v, tangentReferencePositions=v)
+            if hasBoundary:
+                # Matches computeImplicitShift's activeMask (dropping pairs
+                # whose query particle is boundary before scattering): zeroing
+                # those output rows post-hoc has the same effect, since that
+                # mask only ever depended on the query index.
+                Hv = Hv.clone()
+                Hv[boundary] = 0
+            return Hv.flatten()
+
+        dx = config.dx.cpu().item() if isinstance(config.dx, torch.Tensor) else config.dx
+        threshold = schemeConfig.shiftProperties.implicitSolverThreshold
+        if threshold is None:
+            threshold = dx / 2
+
+        xk, solverIters, convergence = bicgstabSolve(
+            matvec, B, x0,
+            tol=schemeConfig.shiftProperties.implicitTolerance,
+            rtol=schemeConfig.shiftProperties.implicitRelativeTolerance,
+            maxiter=schemeConfig.shiftProperties.implicitMaxSolverIter,
+            precond=precond if schemeConfig.shiftProperties.implicitUsePreconditioner else None,
+            threshold=threshold,
+            dim=dim,
+        )
+
+        update = -xk.view(numParticles, dim) * schemeConfig.shiftProperties.implicitRelaxation
+        return update, adjacency
