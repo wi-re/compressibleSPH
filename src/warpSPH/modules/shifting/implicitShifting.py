@@ -11,30 +11,50 @@ Assembling `Hess(C)` from the pairwise kernel Hessian `H_ij` needs care, and
 differs from a literal transcription of diffSPH's block layout in two ways
 verified against a finite-difference Hessian of `C` and a dense exact solve:
 
-- Self-pairs (`i == j`, zero separation) are dropped before assembly: a
-  particle's distance to itself is identically zero regardless of where it
-  moves, so the self term's true contribution to both `grad C` and `Hess C`
-  is zero. The gradient kernel already evaluates safely to zero there
-  (direction normalizes to zero), but `sphKernelHessian`'s near-origin
-  regularization branch does not -- it produced a large, effectively
-  arbitrary value (floating-point noise divided by a near-zero epsilon) that
-  corrupted the assembled diagonal.
-- `Hess(C)`'s row-`i` block is *not* `sum_j omega_j H_ij` placed at column
-  `j` the way `grad C`'s row-`i` term is (that would make `Hess(C)`
-  nonsymmetric and, empirically, solve in the wrong direction even for an
-  almost-perfect lattice). Differentiating `grad_i C = sum_j omega_j
-  gradW(x_i - x_j)` w.r.t. `x_i` and w.r.t. a specific neighbor `x_k`
-  separately gives `d(grad_i C)/dx_i = sum_j omega_j H_ij` (the diagonal
-  block) and `d(grad_i C)/dx_k = -omega_k H_ik` (off-diagonal, negated). The
-  assembled operator is therefore a graph-Laplacian-style matrix -- symmetric,
-  with an exact null space along uniform translation (`diag_i = sum_j H_ij`
-  cancels the off-diagonal row exactly for a constant shift) -- which is why
-  it's solved with BiCGStab rather than a direct solve. A raw, undamped
-  Newton step from this operator is only reliably stable very close to the
-  solution (confirmed by sweeping a jittered-lattice convergence test); the
-  `implicitRelaxation` config field damps each step, matching this
-  codebase's own IISPH Jacobi relaxation precedent
-  (`modules/incompressible/incompressible.py`).
+- Self-pairs (`i == j`, zero separation) are dropped before assembly -- **and
+  both bullets below are the same fact, not two unrelated pitfalls, per a
+  correction made during `warpSPHCore/warpier_forward_mode_plan.md` Phase 4
+  step 3.** `C_i = sum_j omega_j W(x_i - x_j, h_ij)` depends on `x_i` through
+  every term, but the `j = i` term's *own* `x_j` argument is also `x_i` --
+  writing that term as a function of the one shared variable,
+  `f(x) = W(x - x, h) = W(0, h)`, makes it visibly constant (a particle's
+  distance to itself is identically zero everywhere in configuration space,
+  not just at the current position), so `f'(x) = f''(x) = 0` for *any*
+  kernel. Expanding via the chain rule on `g(a, b) = W(a - b, h)` (the two
+  occurrences of `x_i` held temporarily independent as `a`/`b`, then set
+  equal) shows *why*: translation invariance forces `dg/db = -dg/da` and
+  `d^2g/(da db) = -d^2g/da^2 = -d^2g/db^2`, so `f''(x) = H(0,h) - 2H(0,h) +
+  H(0,h) = 0` identically, regardless of what `H(0,h)` numerically equals.
+  **An earlier version of this docstring claimed instead that this was a
+  numerical-safety drop -- that `sphKernelHessian`'s near-origin
+  regularization branch "produced a large, effectively arbitrary value
+  (floating-point noise divided by a near-zero epsilon)" at `r=0`. That
+  claim was wrong**: `sphKernelHessian` returns a well-defined, finite,
+  physically meaningful value there (the kernel's own curvature at its peak
+  -- `warpSPHCore/wp_kernels.ipynb` checks this directly for `Wendland2` and
+  finds a smooth `-15.0`, continuous with its `-14.88` neighbors either
+  side). The value was never the problem; the identity above is why it still
+  has to be excluded from `Hess(C)`'s diagonal regardless of how well-behaved
+  it is -- it was never really part of `d(grad_i C)/dx_i` to begin with.
+- The *same* identity is why `Hess(C)`'s row-`i` block is *not* `sum_j
+  omega_j H_ij` placed at column `j` the way `grad C`'s row-`i` term is (that
+  would make `Hess(C)` nonsymmetric and, empirically, solve in the wrong
+  direction even for an almost-perfect lattice): the chain-rule expansion
+  above gives `dg/da = -dg/db` and `d^2g/(da db) = -d^2g/da^2`, i.e. the
+  *off-diagonal* mixed partial always carries a sign flip relative to the
+  diagonal one. Differentiating `grad_i C = sum_j omega_j gradW(x_i - x_j)`
+  w.r.t. `x_i` and w.r.t. a specific neighbor `x_k` separately gives
+  `d(grad_i C)/dx_i = sum_{j != i} omega_j H_ij` (the diagonal block, self
+  excluded per the identity above) and `d(grad_i C)/dx_k = -omega_k H_ik`
+  (off-diagonal, negated). The assembled operator is therefore a
+  graph-Laplacian-style matrix -- symmetric, with an exact null space along
+  uniform translation (`diag_i = sum_{j!=i} H_ij` cancels the off-diagonal
+  row exactly for a constant shift) -- which is why it's solved with
+  BiCGStab rather than a direct solve. A raw, undamped Newton step from this
+  operator is only reliably stable very close to the solution (confirmed by
+  sweeping a jittered-lattice convergence test); the `implicitRelaxation`
+  config field damps each step, matching this codebase's own IISPH Jacobi
+  relaxation precedent (`modules/incompressible/incompressible.py`).
 
 Free-surface/boundary handling: rows for `currentState.kinds != 0` particles
 get a zero RHS/initial-guess (so the solver doesn't chase a target for
@@ -139,9 +159,9 @@ def computeImplicitShift(
 
         _K, J, H = computeShiftingPairTerms(currentState, domain, config.kernel, adjacency)
 
-        # Drop self-pairs: see the module docstring -- their true gradient/
-        # Hessian contribution is zero, but sphKernelHessian's self-term is
-        # numerically unstable rather than exactly zero.
+        # Drop self-pairs: see the module docstring -- an exact translation-
+        # invariance identity, not a numerical-safety measure against an
+        # unstable sphKernelHessian value (it's well-defined and finite there).
         pairMask = adjacency.i != adjacency.j
         i, j, J, H = adjacency.i[pairMask], adjacency.j[pairMask], J[pairMask], H[pairMask]
 

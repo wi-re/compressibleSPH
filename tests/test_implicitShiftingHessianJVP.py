@@ -5,19 +5,22 @@ output, the same way `test_implicitShiftingGradientJVP.py` validated step 2's
 
 `implicitShifting.py`'s Newton solve needs `Hess(C) @ x` (the BiCGStab
 matvec, `implicitShifting._multiplyLaplacianBlock`): `out_i = diagBlock_i @
-x_i - sum_{j in N(i)} H_ij @ x_j`, `diagBlock_i = sum_j omega_j H_ij`, built
-from `wp_implicitShifting.computeShiftingPairTerms`'s hand-rolled per-pair
-`sphKernelHessian` call plus a hand-written `torch.einsum`/`scatter_sum`
-assembly -- no autograd involved, and (per the module's own docstring) two
-non-obvious pitfalls found by comparing against a dense finite-difference
-Hessian: self-pairs must be dropped before assembly (the kernel Hessian's
-near-origin regularization is unstable, not exactly zero, there), and the
-off-diagonal block is `-omega_k H_ik`, not the naively-placed `omega_j
-H_ij` (needed for the assembled operator to come out symmetric).
+x_i - sum_{j in N(i)} H_ij @ x_j`, `diagBlock_i = sum_{j != i} omega_j H_ij`,
+built from `wp_implicitShifting.computeShiftingPairTerms`'s hand-rolled
+per-pair `sphKernelHessian` call plus a hand-written `torch.einsum`/
+`scatter_sum` assembly -- no autograd involved, and (per the module's own
+docstring, corrected during this same Phase 4 step 3) self-pairs are dropped
+before assembly as an *exact* translation-invariance identity (the self
+term's true contribution to `d^2 C_i/dx_i^2` is zero for any finite pairwise
+kernel Hessian -- `sphKernelHessian` is itself well-defined and finite at
+`r=0`, not unstable there; an earlier version of that docstring claimed
+otherwise and was wrong), and the off-diagonal block is `-omega_k H_ik`, not
+the naively-placed `omega_j H_ij` (the same identity, one sign away --
+needed for the assembled operator to come out symmetric).
 
 `warpSPHCore.warpOperationHVP` (Phase 4 step 3,
 `coreOperations.wp_densityHVP.computeSPHDensityPositionHVP`) reduces to
-exactly `sum_j m_j * H_ij @ (v_i - v_j)` -- the same closed form as
+exactly `sum_{j != i} m_j * H_ij @ (v_i - v_j)` -- the same closed form as
 `_multiplyLaplacianBlock(diagBlock, Hw, v, ...)` once expanded algebraically
 -- but was derived by differentiating `warpOperationJVP`'s own position
 tangent a second time ("a JVP of that JVP"), then reusing
@@ -25,9 +28,15 @@ tangent a second time ("a JVP of that JVP"), then reusing
 `computeShiftingPairTerms` calls) through `warpOperationHVP`'s own
 adjacency/self-pair handling, not by transcribing `_multiplyLaplacianBlock`.
 Agreement here is therefore evidence the composed-JVP route reaches the same
-operator, not a tautology -- and, per the plan's step 5, whether it does so
-*without* needing the self-pair drop `computeImplicitShift` needs by hand is
-exactly the thing worth checking explicitly below.
+operator, not a tautology. (Whether the composed-JVP route needs the
+self-pair drop *at all* turns out to depend on how it's called: for this
+test's own `tangentQueryPositions == tangentReferencePositions` usage --
+the same particle moving in both roles -- dropping is a bitwise no-op, since
+the self term's `(v_i - v_i) = 0` factor already annihilates it; see
+`warpSPHCore/tests/operations/test_forward_mode_tier2_density_hvp_self_pair.py`
+for that check made explicit, and `wp_densityHVP.py`'s own docstring for why
+it's still required for the *asymmetric* tangent construction
+`implicitShiftingAutomatic.py` uses to isolate `diagBlock`.)
 """
 
 from __future__ import annotations

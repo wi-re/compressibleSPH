@@ -15,9 +15,12 @@ machinery this file still writes itself is what `warpOperationJVP`/HVP
 *don't* provide: which particles are boundary (zeroed rows/RHS) and what the
 Jacobi preconditioner's diagonal is -- built the same way `_buildSystem`
 does, just sourced from `warpOperationHVP` called with each coordinate basis
-vector (`tangentReferencePositions=0`, isolating `diagBlock_i = sum_j
-omega_j H_ij` from the general `HVP_i = sum_j omega_j H_ij @ (v_i - v_j)`
-formula) instead of assembling it from a dense per-pair `H` tensor.
+vector (`tangentReferencePositions=0`, isolating `diagBlock_i = sum_{j != i}
+omega_j H_ij` from the general `HVP_i = sum_{j != i} omega_j H_ij @ (v_i -
+v_j)` formula) instead of assembling it from a dense per-pair `H` tensor. The
+self-pair exclusion in both is an exact translation-invariance identity, not
+a numerical-safety measure -- see `wp_densityHVP.py`'s docstring
+(`warpSPHCore`).
 """
 
 from typing import Any, Tuple
