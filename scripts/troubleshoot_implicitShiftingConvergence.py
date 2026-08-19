@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Troubleshooting harness for implicit particle shifting's inner BiCGStab
+"""Troubleshooting harness for implicit particle shifting's inner Krylov
 solve (`modules/shifting/implicitShifting.computeImplicitShift`, and its
-composed-JVP twin `modules/shifting/implicitShiftingAutomatic.computeImplicitShiftAutomatic`).
+composed-JVP twin `modules/shifting/implicitShiftingAutomatic.computeImplicitShiftAutomatic`;
+solver selectable via `--solver`, BiCGStab by default).
 
 **Why this exists.** `warpSPHCore/warpier_forward_mode_plan.md`'s Status
 section documents that `tests/test_implicitShifting.py`'s convergence test is
@@ -18,16 +19,17 @@ the solve is trivial; by `jitter=0.01` it already hits the divergence
 threshold almost immediately, with the *unconverged* residual growing
 monotonically with jitter from there. Every existing test uses `jitter=0.1`,
 squarely in that regime -- and neither `computeImplicitShift` nor
-`computeImplicitShiftAutomatic` checks `bicgstabSolve`'s returned status, so
-a threshold-bailed-out `xk` gets used exactly as if it had converged.
+`computeImplicitShiftAutomatic` checks the Krylov solver's returned status,
+so a bailed-out `xk` gets used exactly as if it had converged.
 
 **What this script does, concretely.** For each jitter level: builds a
 jittered Cartesian lattice, assembles the exact same linear system
 `computeImplicitShift` solves internally (via the same `_buildSystem`/
 `_multiplyLaplacianBlock`/`computeShiftingPairTerms` production code, not a
-reimplementation), runs `bicgstabSolve`, and reports whether it actually
-converged (`iters >= 0`) or bailed out (`-10`/`-11`/`-12`, see
-`bicgstab.py`), plus the raw (possibly unconverged) final residual and the
+reimplementation), runs the selected Krylov solver (`--solver`,
+BiCGStab by default), and reports whether it actually converged
+(`iters >= 0`) or bailed out (`-10`..`-14`, see
+`bicgstab.py`/`gmres.py`), plus the raw (possibly unconverged) final residual and the
 largest per-particle shift relative to the divergence threshold. Optionally
 compares the composed-JVP matvec (`warpOperationHVP`) against the hand-built
 one on the same system, sweeps Jacobi-preconditioner choices (the production
@@ -41,6 +43,7 @@ Usage:
     python scripts/troubleshoot_implicitShiftingConvergence.py --compare-preconditioners --jitters 0.1
     python scripts/troubleshoot_implicitShiftingConvergence.py --compare-automatic --jitters 0.1
     python scripts/troubleshoot_implicitShiftingConvergence.py --no-threshold --maxiter 200 --jitters 0.1
+    python scripts/troubleshoot_implicitShiftingConvergence.py --solver both --jitters 0,0.05,0.1
 """
 
 from __future__ import annotations
@@ -69,9 +72,10 @@ from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.density import computeDensities
-from warpSPH.modules.shifting.implicitShifting import _multiplyLaplacianBlock, _buildSystem
+from warpSPH.modules.shifting.implicitShifting import _multiplyLaplacianBlock, _buildSystem, _buildDiagBlock
 from warpSPH.modules.shifting.wp_implicitShifting import computeShiftingPairTerms
 from warpSPH.modules.shifting.bicgstab import bicgstabSolve
+from warpSPH.modules.shifting.gmres import gmresSolve
 
 DTYPE = torch.float32
 
@@ -140,7 +144,9 @@ def buildSystem(state, config, domain, schemeConfig):
     """Reuses the exact production code `computeImplicitShift` calls
     internally -- same matvec, same RHS, same preconditioner-ingredient
     diagonal -- so this script's numbers are the real solver's numbers, not
-    a reimplementation that could silently diverge from it."""
+    a reimplementation that could silently diverge from it. (The harness's
+    states always have `kinds == 0`, so `computeImplicitShift`'s
+    boundary-`activeMask` on the matvec's `i`/`j`/`Hw` is the identity here.)"""
     dim = state.positions.shape[1]
     numParticles = state.positions.shape[0]
     rho0 = schemeConfig.fluid.restDensity
@@ -149,12 +155,14 @@ def buildSystem(state, config, domain, schemeConfig):
     state.densities = computeDensities(state, config, schemeConfig, adjacency)
 
     _K, J, H = computeShiftingPairTerms(state, domain, config.kernel, adjacency)
-    pairMask = adjacency.i != adjacency.j
-    i, j, J, H = adjacency.i[pairMask], adjacency.j[pairMask], J[pairMask], H[pairMask]
-    Hw, diagBlock, B, x0 = _buildSystem(state, config, schemeConfig, domain, adjacency, i, j, J, H,
-                                        rho0, dim, numParticles)
+    i_all, j_all = adjacency.i, adjacency.j
+    Hw_all, B, x0 = _buildSystem(state, config, schemeConfig, domain, adjacency, i_all, j_all, J, H,
+                                 rho0, dim, numParticles)
+    diagBlock, i, j, Hw = _buildDiagBlock(schemeConfig.shiftProperties.implicitOperator,
+                                          i_all, j_all, Hw_all, numParticles, dim,
+                                          state.positions.device, state.positions.dtype)
 
-    def matvec(x, Hw=Hw, i=i, j=j, diagBlock=diagBlock, numParticles=numParticles, dim=dim):
+    def matvec(x, diagBlock=diagBlock, i=i, j=j, Hw=Hw, numParticles=numParticles, dim=dim):
         return _multiplyLaplacianBlock(diagBlock, Hw, x, i, j, numParticles, dim)
 
     dx = config.dx.cpu().item() if isinstance(config.dx, torch.Tensor) else config.dx
@@ -178,9 +186,9 @@ def preconditionerDiagonal(sys: dict, kind: str, state, config, domain, schemeCo
     return torch.where(diag.abs() > 1e-8, 1.0 / diag, torch.zeros_like(diag))
 
 
-def runOnce(sys: dict, schemeConfig, precond: torch.Tensor, maxiter: int, useThreshold: bool, verbose: bool):
-    xk, iters, convergence = bicgstabSolve(
-        sys['matvec'], sys['B'], sys['x0'],
+def runOnce(sys: dict, schemeConfig, precond: torch.Tensor, maxiter: int, useThreshold: bool,
+            verbose: bool, solver: str = 'bicgstab', restart: int = 30):
+    common = dict(
         tol=schemeConfig.shiftProperties.implicitTolerance,
         rtol=schemeConfig.shiftProperties.implicitRelativeTolerance,
         maxiter=maxiter,
@@ -188,6 +196,11 @@ def runOnce(sys: dict, schemeConfig, precond: torch.Tensor, maxiter: int, useThr
         threshold=sys['threshold'] if useThreshold else None,
         dim=sys['dim'], verbose=verbose,
     )
+    if solver == 'gmres':
+        xk, iters, convergence = gmresSolve(sys['matvec'], sys['B'], sys['x0'],
+                                            restart=restart, **common)
+    else:
+        xk, iters, convergence = bicgstabSolve(sys['matvec'], sys['B'], sys['x0'], **common)
     resid = torch.linalg.norm(sys['matvec'](xk) - sys['B']).item()
     bnorm = torch.linalg.norm(sys['B']).item()
     maxShift = xk.view(-1, sys['dim']).norm(dim=-1).max().item()
@@ -195,7 +208,8 @@ def runOnce(sys: dict, schemeConfig, precond: torch.Tensor, maxiter: int, useThr
                maxShift=maxShift, xk=xk)
 
 
-ITER_LABEL = {-10: 'rho-breakdown', -11: 'omega-breakdown', -12: 'threshold-bailout'}
+ITER_LABEL = {-10: 'rho-breakdown', -11: 'omega-breakdown', -12: 'threshold-bailout',
+              -13: 'stagnation', -14: 'maxiter-budget'}
 
 
 def fmtIters(iters: int, maxiter: int) -> str:
@@ -217,7 +231,10 @@ def main():
     ap.add_argument('--maxiter', type=int, default=None, help='override implicitMaxSolverIter (config default: 64)')
     ap.add_argument('--no-threshold', action='store_true', help='disable the divergence-threshold bailout to see the true convergence trend')
     ap.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
-    ap.add_argument('--trace-jitter', type=float, default=None, help='print bicgstabSolve(verbose=True)\'s full per-iteration trace for this one jitter value')
+    ap.add_argument('--trace-jitter', type=float, default=None, help='print the solvers\' (verbose=True) full per-iteration trace for this one jitter value')
+    ap.add_argument('--solver', type=str, default='bicgstab', choices=['bicgstab', 'gmres', 'both'],
+                    help='which Krylov solver to run (default bicgstab; "both" prints one row per solver)')
+    ap.add_argument('--restart', type=int, default=30, help='GMRES restart length m (only used with --solver gmres/both)')
     ap.add_argument('--compare-preconditioners', action='store_true', help='also solve with a diffSPH-style self-Hessian-only Jacobi diagonal and with no preconditioner')
     ap.add_argument('--compare-automatic', action='store_true', help='also check warpOperationHVP\'s matvec against the hand-built one on the same system')
     args = ap.parse_args()
@@ -227,8 +244,11 @@ def main():
 
     for nx in args.nx:
         print(f"\n{'=' * 90}\nnx={nx}  dim={args.dim}  L={args.L}  device={device}\n{'=' * 90}")
-        header = f"{'jitter':>8s} {'status':>18s} {'rel_resid':>11s} {'raw_resid':>11s} {'|b|':>10s} {'max|xk|/dx':>10s} {'thresh/dx':>10s}"
+        header = f"{'solver':>10s} {'jitter':>8s} {'status':>18s} {'rel_resid':>11s} {'raw_resid':>11s} {'|b|':>10s} {'max|xk|/dx':>10s} {'thresh/dx':>10s}"
         print(header)
+
+        solvers = {'bicgstab': ['bicgstab'], 'gmres': ['gmres'],
+                   'both': ['bicgstab', 'gmres']}[args.solver]
 
         for jitter in jitters:
             state, config, domain = jitteredLatticeState(nx, args.dim, args.L, jitter, args.seed, device)
@@ -244,10 +264,12 @@ def main():
                 print(f"\n--- verbose trace: jitter={jitter} ---")
 
             precond = preconditionerDiagonal(sys, 'current', state, config, domain, schemeConfig)
-            r = runOnce(sys, schemeConfig, precond, maxiter, not args.no_threshold, verbose)
-            print(f"{jitter:8.3f} {fmtIters(r['iters'], maxiter):>18s} {r['relResid']:11.3e} "
-                 f"{r['resid']:11.3e} {r['bnorm']:10.3e} {r['maxShift']/sys['dx']:10.3f} "
-                 f"{sys['threshold']/sys['dx']:10.3f}")
+            for solver in solvers:
+                r = runOnce(sys, schemeConfig, precond, maxiter, not args.no_threshold,
+                            verbose, solver=solver, restart=args.restart)
+                print(f"{solver:>10s} {jitter:8.3f} {fmtIters(r['iters'], maxiter):>18s} {r['relResid']:11.3e} "
+                     f"{r['resid']:11.3e} {r['bnorm']:10.3e} {r['maxShift']/sys['dx']:10.3f} "
+                     f"{sys['threshold']/sys['dx']:10.3f}")
 
             if args.compare_preconditioners:
                 for kind, label in (('selfHessian', 'diffSPH-style (H_ii*omega)'), ('none', 'no preconditioner')):
@@ -270,13 +292,17 @@ def main():
                 print(f"    [automatic-vs-hand-built matvec @ xk]  max_abs_diff={diff:.3e}")
 
     print()
-    print("status legend: rho-breakdown/omega-breakdown/threshold-bailout are bicgstabSolve's")
-    print("  early-exit codes (-10/-11/-12, see bicgstab.py) -- neither computeImplicitShift nor")
-    print("  computeImplicitShiftAutomatic currently checks for these, so a bailed-out xk is used")
-    print("  exactly as if it had converged. 'N(maxiter)' means it ran the full iteration budget")
-    print("  without reaching tol/rtol either. Watch rel_resid: production tolerances target")
-    print("  ~1e-4 relative: at jitter=0.1 (what every existing test uses) rel_resid is typically")
-    print("  2-3 orders of magnitude above that on first release of this script.")
+    print("status legend: negative codes are the solvers' early-exit statuses (see")
+    print("  bicgstab.py/gmres.py): -10 rho-breakdown, -11 omega-breakdown (BiCGStab),")
+    print("  -12 threshold-bailout, -13 stagnation (GMRES), -14 max-iteration budget")
+    print("  exhausted. Neither computeImplicitShift nor computeImplicitShiftAutomatic")
+    print("  currently checks for these, so a bailed-out xk is used exactly as if it")
+    print("  had converged. raw_resid is this harness's own ||b - A xk|| recompute")
+    print("  (independent of the solvers' convergence lists; both solvers now append")
+    print("  that same value as their final history entry on every return). Watch")
+    print("  rel_resid: production tolerances target ~1e-4 relative: at jitter=0.1")
+    print("  (what every existing test uses) rel_resid is typically 2-3 orders of")
+    print("  magnitude above that.")
 
 
 if __name__ == "__main__":

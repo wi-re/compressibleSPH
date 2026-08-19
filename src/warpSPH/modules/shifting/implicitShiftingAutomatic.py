@@ -1,6 +1,8 @@
 """Phase 4 step 4 of `warpSPHCore/warpier_forward_mode_plan.md`: "swap the
-matvec, keep the solver". Same `bicgstabSolve` call, same relaxation/
-boundary/initializer handling as `implicitShifting.computeImplicitShift`,
+matvec, keep the solver". Same Krylov-solver call as
+`implicitShifting.computeImplicitShift` (selected by
+`ShiftingImplicitSolver`, BiCGStab by default), same relaxation/
+boundary/initializer handling,
 but the Newton matvec `Hess(C) @ x` comes from `warpSPHCore.warpOperationHVP`
 (Phase 4 step 3's composed-JVP-of-a-JVP) instead of `H`/
 `_multiplyLaplacianBlock`'s hand-assembled per-pair kernel Hessian +
@@ -30,9 +32,10 @@ from warpSPHCore import ParticleState, SupportScheme, OperationProperties, warpO
 from warpSPHCore.enumTypes import WarpOperation, OperationDirection
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitSolver
 
 from .bicgstab import bicgstabSolve
+from .gmres import gmresSolve
 from .delta import computeDeltaShift
 
 __all__ = ['computeImplicitShiftAutomatic']
@@ -126,8 +129,7 @@ def computeImplicitShiftAutomatic(
         if threshold is None:
             threshold = dx / 2
 
-        xk, solverIters, convergence = bicgstabSolve(
-            matvec, B, x0,
+        solverArgs = dict(
             tol=schemeConfig.shiftProperties.implicitTolerance,
             rtol=schemeConfig.shiftProperties.implicitRelativeTolerance,
             maxiter=schemeConfig.shiftProperties.implicitMaxSolverIter,
@@ -135,6 +137,11 @@ def computeImplicitShiftAutomatic(
             threshold=threshold,
             dim=dim,
         )
+        if schemeConfig.shiftProperties.implicitSolver == ShiftingImplicitSolver.gmres:
+            xk, solverIters, convergence = gmresSolve(
+                matvec, B, x0, restart=schemeConfig.shiftProperties.implicitRestart, **solverArgs)
+        else:
+            xk, solverIters, convergence = bicgstabSolve(matvec, B, x0, **solverArgs)
 
         update = -xk.view(numParticles, dim) * schemeConfig.shiftProperties.implicitRelaxation
         return update, adjacency

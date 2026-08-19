@@ -7,11 +7,12 @@ several of the dataclass's own field defaults (`computeMach` False->True,
 whether a caller constructs `ShiftProperties()` directly or via the builder.
 
 The `implicit*` fields configure `modules/shifting/implicitShifting.py`'s
-matrix-free BiCGStab solve, used when `scheme == ShiftingScheme.implicit`;
-they are ignored for `ShiftingScheme.deltaSPH`.
+matrix-free Krylov (BiCGStab/GMRES) solve, used when
+`scheme == ShiftingScheme.implicit`; they are ignored for
+`ShiftingScheme.deltaSPH`.
 """
 
-__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftProperties', 'buildDefaultShiftProperties']
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftingImplicitSolver', 'ShiftProperties', 'buildDefaultShiftProperties']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -70,6 +71,29 @@ class ShiftingImplicitOperator(Enum):
     legacyPairwise = 0
     exactHessian = 1
 
+
+class ShiftingImplicitSolver(Enum):
+    """Which matrix-free Krylov solver the implicit shifting Newton step
+    (`A @ dx = grad(C)`, `modules/shifting/implicitShifting.py` and its
+    `implicitShiftingAutomatic.py` twin) is driven with. Both share the same
+    `matvec`-closure + diagonal-`precond` interface and status-code
+    convention (`bicgstab.bicgstabSolve` / `gmres.gmresSolve`), so they are
+    drop-in for each other.
+
+    - `bicgstab` (default): the diffSPH-ported BiCGStab -- 2 matvecs/iterate,
+      with rho/rv/omega breakdown bailouts. Kept as the default for
+      continuity with diffSPH's own solve (the port is checked bit-identical
+      to it on the same linear system, see
+      `docs/regression/implicit_shifting_operator_choice.md`).
+    - `gmres`: restarted GMRES (length `implicitRestart`) -- 1 matvec/
+      iterate, no breakdown modes, monotone residual estimate within a cycle;
+      the robust choice for the `exactHessian` operator (symmetric,
+      indefinite, exact translation null space) and for nonsymmetric
+      `omega_j`-weighted systems, at the cost of an `m x n` Krylov basis.
+    """
+    bicgstab = 0
+    gmres = 1
+
 @dataclass
 class ShiftProperties:
     iterations: int = field(default=1, metadata={"description": "Number of iterations for shifting"})
@@ -92,11 +116,13 @@ class ShiftProperties:
 
     reuseNormals: bool = field(default=True, metadata={"description": "Whether to reuse normals from previous iteration for surface detection"})
 
-    implicitTolerance: float = field(default=1e-4, metadata={"description": "Absolute residual tolerance for the implicit shifting BiCGStab solve"})
-    implicitRelativeTolerance: float = field(default=1e-4, metadata={"description": "Relative residual tolerance for the implicit shifting BiCGStab solve"})
-    implicitMaxSolverIter: int = field(default=64, metadata={"description": "Maximum BiCGStab iterations for the implicit shifting solve"})
+    implicitTolerance: float = field(default=0.0, metadata={"description": "Absolute residual floor for the implicit shifting Krylov solve; 0.0 = relative tolerance only (this field was previously accepted by bicgstabSolve but never enforced, so 0.0 is the historical effective behavior)"})
+    implicitRelativeTolerance: float = field(default=1e-4, metadata={"description": "Relative residual tolerance for the implicit shifting Krylov (BiCGStab/GMRES) solve"})
+    implicitMaxSolverIter: int = field(default=64, metadata={"description": "Maximum Krylov (BiCGStab/GMRES) iterations for the implicit shifting solve"})
     implicitInitializer: ShiftingImplicitInitializer = field(default=ShiftingImplicitInitializer.zero, metadata={"description": "Initial guess for the implicit shifting solve"})
     implicitOperator: ShiftingImplicitOperator = field(default=ShiftingImplicitOperator.legacyPairwise, metadata={"description": "Which matrix the implicit shifting Newton solve assembles: legacyPairwise (default, empirically more globally convergent) or exactHessian (mathematically exact, comparison/opt-in) -- see ShiftingImplicitOperator's docstring"})
+    implicitSolver: ShiftingImplicitSolver = field(default=ShiftingImplicitSolver.bicgstab, metadata={"description": "Matrix-free Krylov solver for the implicit shifting solve: bicgstab (default, diffSPH port) or gmres (restarted, no breakdown modes) -- see ShiftingImplicitSolver's docstring"})
+    implicitRestart: int = field(default=30, metadata={"description": "Krylov restart length (GMRES(m)) for the implicit shifting solve; used only by ShiftingImplicitSolver.gmres"})
     implicitUsePreconditioner: bool = field(default=True, metadata={"description": "Whether to apply the Jacobi preconditioner in the implicit shifting solve"})
     implicitSolverThreshold: Optional[float] = field(default=None, metadata={"description": "Per-particle shift-magnitude divergence threshold for the implicit shifting solve; defaults to dx/2 when None"})
     implicitRelaxation: float = field(default=0.1, metadata={"description": "Damping factor applied to each implicit-shifting Newton step (1.0 = full step); the assembled system is a graph-Laplacian-style operator with an exact translation null space, so a full undamped step is only reliably stable extremely close to the solution. 0.1 was swept against a jittered-lattice convergence test (repeatable across runs; 0.15 was already occasionally unstable), matching this codebase's own IISPH Jacobi relaxation precedent"})

@@ -277,7 +277,13 @@ an assumption:
    `bicgstabSolve` (this codebase's port) produces bit-identical output to
    diffSPH's original `bicgstab_shifting` on the same linear system,
    including hitting the same divergence bailout at the same iteration.
-   Neither was the source of the discrepancy.
+   Neither was the source of the discrepancy. (That bit-identity statement
+   describes the original port; `bicgstabSolve` has since been hardened --
+   relative breakdown guards, true-residual-verified convergence, explicit
+   status codes, and a GMRES alternative behind
+   `ShiftingImplicitSolver` -- see the module docstring. The per-iterate
+   recurrence is unchanged, so non-pathological solves still follow the
+   same iterate sequence.)
 5. **diffSPH's real pipeline**, run end-to-end (not reimplemented) on the
    same random positions: clean, monotonic convergence, density std
    0.30 -> 0.0009 over 15-40 outer iterations, reproduced bit-for-bit

@@ -3,9 +3,11 @@ explicit, per-step anti-clustering nudge, this solves directly for the
 position shift that (locally) equalizes the SPH concentration field
 `C_i = sum_j omega_j * W_ij`, `omega_j = m_j/rho_j` (or `m_j/rho0`), via one
 Newton-style step on `grad C = 0`: `A @ dx = -grad(C)`, solved with a
-matrix-free, Jacobi-preconditioned BiCGStab (`bicgstab.bicgstabSolve`) over
-the neighbor graph. Ported from `diffSPH.modules.shifting.implicitShifting`;
-the per-pair kernel terms come from `wp_implicitShifting.computeShiftingPairTerms`.
+matrix-free, Jacobi-preconditioned Krylov solver over the neighbor graph --
+BiCGStab (`bicgstab.bicgstabSolve`) by default, restartable GMRES
+(`gmres.gmresSolve`) via `ShiftingImplicitSolver.gmres`. Ported from
+`diffSPH.modules.shifting.implicitShifting`; the per-pair kernel terms come
+from `wp_implicitShifting.computeShiftingPairTerms`.
 
 `A` is one of two matrices, selected by `ShiftingImplicitOperator` (see that
 enum's own docstring for the field-level summary; this is the full
@@ -143,10 +145,11 @@ from warpSPHCore import *
 
 from warpSPH.math import scatter_sum
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitOperator
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitOperator, ShiftingImplicitSolver
 
 from .wp_implicitShifting import computeShiftingPairTerms
 from .bicgstab import bicgstabSolve
+from .gmres import gmresSolve
 from .delta import computeDeltaShift
 
 __all__ = ['computeImplicitShift']
@@ -298,8 +301,7 @@ def computeImplicitShift(
         if threshold is None:
             threshold = dx / 2
 
-        xk, solverIters, convergence = bicgstabSolve(
-            matvec, B, x0,
+        solverArgs = dict(
             tol=schemeConfig.shiftProperties.implicitTolerance,
             rtol=schemeConfig.shiftProperties.implicitRelativeTolerance,
             maxiter=schemeConfig.shiftProperties.implicitMaxSolverIter,
@@ -307,6 +309,11 @@ def computeImplicitShift(
             threshold=threshold,
             dim=dim,
         )
+        if schemeConfig.shiftProperties.implicitSolver == ShiftingImplicitSolver.gmres:
+            xk, solverIters, convergence = gmresSolve(
+                matvec, B, x0, restart=schemeConfig.shiftProperties.implicitRestart, **solverArgs)
+        else:
+            xk, solverIters, convergence = bicgstabSolve(matvec, B, x0, **solverArgs)
 
         update = -xk.view(numParticles, dim) * schemeConfig.shiftProperties.implicitRelaxation
         return update, adjacency
