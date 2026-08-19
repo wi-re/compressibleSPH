@@ -89,6 +89,31 @@ derivation and evidence behind it):
   from the fixed point instead of extrapolating a locally-valid quadratic
   model into a regime where it no longer applies.
 
+  **This matches the source paper, not a drift away from it.** Rastelli,
+  Vacondio, Marongiu, Fourtakas & Rogers, "Implicit iterative particle
+  shifting for meshless numerical schemes using kernel basis functions",
+  CMAME 393 (2022) 114716 ("IIPS") derives *this* operator, not
+  `exactHessian`. Its Eq. (17)-(18) (1D) and Eq. (30)-(37) (2D) resolve
+  `d(grad C)_i/dx_j` for every `j` with one rule -- "the only term ...
+  non-null is the one in which j = k" -- applied uniformly including at
+  `j = i`. That's the `j != i` case's reasoning (only the explicit
+  neighbor-slot term survives) used where the `j = i` case actually needs
+  the *other* slot: `x_i` also appears, implicitly, in every other term of
+  the sum through the shared `x_i - x_k` argument, and differentiating that
+  shared slot instead is what produces the sign-flipped, self-excluded,
+  neighbor-summed diagonal this module's `exactHessian` bullet builds. The
+  paper's own assembled system, Eq. (21)/(42), therefore has a self-included,
+  uniform-sign diagonal (`H(0,h)`, literally `d^2W_ii/dx_i^2 * omega_i` in
+  their notation) -- `legacyPairwise`'s layout, entry for entry, not
+  `exactHessian`'s -- despite the surrounding text calling the procedure
+  "a Newton-Raphson algorithm". See
+  `docs/regression/implicit_shifting_operator_choice.md`'s "Comparison
+  against the source paper" section for the full derivation and why the
+  paper's own reported robustness (Figs. 5-9: convergence in 3-5
+  Newton-Raphson iterations even from `sigma/Delta = 0.25` initial disorder)
+  corroborates `legacyPairwise`'s bounded-diagonal conditioning specifically,
+  not `exactHessian`'s -- the paper's equations never assemble the latter.
+
   Sign note: diffSPH's own `computeShifting` also computes `update = -xk`,
   but its outer `solveShifting` applies it as `positions -= update`
   (`diffSPH/v2/modules/shifting.py:999`) -- the *opposite* of this

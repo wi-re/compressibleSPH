@@ -127,6 +127,125 @@ single shared `c_ij`). The accurate description is the one above: it's the
 kernel's own Hessian used as a matrix, and that alone is enough to explain
 why it's well-behaved regardless of particle configuration.
 
+## Comparison against the source paper
+
+`legacyPairwise` is not something that drifted away from IIPS somewhere in
+the diffSPH -> warpSPH port chain: it is what P. Rastelli, R. Vacondio, J.C.
+Marongiu, G. Fourtakas & B.D. Rogers, *"Implicit iterative particle shifting
+for meshless numerical schemes using kernel basis functions"*, Comput.
+Methods Appl. Mech. Engrg. 393 (2022) 114716 — the paper this module
+implements — actually derives and solves, in its own Eqs. (20)-(21) (1D)
+and (40)-(42) (2D). `exactHessian` is a correction to a gap in that
+derivation, found independently in this codebase and cross-checked against
+finite differences; it is not "the paper's method, implemented correctly"
+in the sense of matching what the paper's authors actually wrote down and
+tested.
+
+### Where the paper's own derivation drops the diagonal case
+
+IIPS defines `f_i(X) = dC_i(X)/dx` (a function of the *entire* position
+vector `X`, Eq. (13)) and Taylor-expands it in every particle coordinate
+`x_j` (Eq. (12)):
+
+```
+f_i(X̄) = f_i(X) + sum_j [df_i(X)/dx_j] (x̄_j - x_j) + O(...)
+```
+
+To evaluate `df_i/dx_j`, the paper substitutes the SPH form of `f_i`
+(Eq. (16)): `f_i(X) = sum_k [dW(x_i - x_k)/dx_k] omega_k`. Because `x_i`
+appears in *every* term of that sum (through the shared argument
+`x_i - x_k`), differentiating w.r.t. an arbitrary `x_j` genuinely splits
+into two different cases, depending on whether `j` is the row particle `i`
+itself or a neighbor `k != i`:
+
+- **`j != i` (off-diagonal).** Only the single term `k = j` depends on
+  `x_j`, through its explicit `x_k` slot. Differentiating that slot gives
+  `d^2W(x_i - x_j)/dx_j^2 * omega_j = H_ij * omega_j`. This is the case the
+  paper's Eq. (17)-(18) states and gets right.
+- **`j = i` (diagonal).** *Every* term in the sum depends on `x_i`, through
+  the shared `x_i` slot common to `x_i - x_k`. Differentiating that shared
+  slot instead of the explicit `x_k` slot flips the sign (translation
+  invariance: `d/da[W(a-b)] = -d/db[W(a-b)]`), and it does so once per
+  neighbor: `df_i/dx_i = -sum_{k != i} H_ik * omega_k`. This is the case
+  `exactHessian`'s derivation (module docstring, `implicitShifting.py`)
+  handles explicitly; the paper's Eq. (17)-(18) does not.
+
+Eq. (17)-(18) collapses both cases to a single rule — *"The only term in
+Eq. (17) which is non-null is the one in which j = k"* — and applies it
+uniformly to every `j`, diagonal included. That is the `j != i` reasoning
+applied where the `j = i` reasoning is actually required. The consequence,
+visible directly in the assembled matrix `A` of Eq. (21) (and its 2D
+counterpart Eq. (42)), is a diagonal built as `d^2W_ii/dx_i^2 * omega_i =
+H(0,h) * omega_i` — the kernel's own curvature at *zero* separation, using
+the *same* `+H` sign convention as every off-diagonal entry — rather than
+the sign-flipped, self-excluded, neighbor-summed quantity a complete chain
+rule produces. The 2D derivation (Eq. (30)-(37)) makes the identical move
+for both the second-derivative and cross-derivative blocks, so this is not
+a 1D-only shortcut that the 2D formulation happens to avoid.
+
+That single substitution is, entry for entry, the difference the "two
+matrices, side by side" table above already documents:
+
+| | paper's Eq. (21)/(42) diagonal | paper's Eq. (21)/(42) off-diagonal | matches |
+|---|---|---|---|
+| value | `H(0,h) * omega_i` | `+H_ij * omega_j` | — |
+| sign convention | same `+H` as off-diagonal | same `+H` as diagonal | `legacyPairwise` |
+
+The paper never assembles `exactHessian`'s `sum_{j != i} omega_j H_ij` /
+`-omega_j H_ij` structure at all. Despite the sentence immediately after
+Eq. (12) describing the procedure as "a Newton-Raphson procedure" (and the
+text after Eq. (19) reiterating "this effectively corresponds to a
+Newton-Raphson algorithm"), the linear system the paper actually writes
+down and solves is *not* the Newton Hessian of its own stated objective
+`grad(C) = 0`. In this codebase's terms it is `legacyPairwise` —
+diagonally-dominant, self-included, uniform-sign — and diffSPH's
+`getShiftingMatrices`, which `legacyPairwise` ports byte-for-byte,
+implements exactly that system. `legacyPairwise` is therefore best read as
+a faithful port of the paper, and `exactHessian` as a from-scratch,
+independently-derived fix to a gap in the paper's own math (Eqs. (17)-(18),
+(30)-(37)) that neither the paper nor diffSPH ever implemented.
+
+### Why the paper's reported results never surface `exactHessian`'s failure mode
+
+This also explains why the paper's own numerical tests (Section 4) never
+show the instability this investigation found when actually assembling
+`exactHessian`:
+
+- Their matrix has a **fixed, configuration-independent diagonal**,
+  `omega * H(0,h)` — the same property the "What `legacyPairwise` actually
+  represents" section above identifies as the reason it degrades gracefully
+  instead of blowing up. The paper's static test (Section 4.1) reports
+  convergence to Cartesian-grid-level accuracy in 3-5 Newton-Raphson
+  iterations, robustly across three resolutions and two initial-disorder
+  levels (`sigma/Delta = 0.10, 0.25`, Figs. 5, 9), and the kinematic test
+  (Section 4.2) reports similar robustness under continuous injected
+  disorder (Table 3). That is exactly the clean, monotone behavior a
+  bounded-diagonal operator produces, and exactly what this investigation's
+  A/B test reproduces for `legacyPairwise` — including the "does not depend
+  on beta / initializer" insensitivity documented in the section below,
+  which is itself a symptom of a diagonal that doesn't depend on the current
+  configuration.
+- The paper's initial disorder is a **bounded perturbation of a Cartesian
+  grid** (`sigma/Delta` up to 0.25 — still, by construction, a grid particle
+  displaced by a fraction of its own spacing), not literally uniform-random
+  placement in the domain. That is milder than the "fully random initial
+  positions" stress case
+  (`test_implicitShiftingConvergesFromFullyRandomPositions`) that exposed
+  `exactHessian` stalling/oscillating in this investigation. Even had the
+  paper's authors assembled the true Hessian, their own test cases may
+  simply never have been harsh enough to expose its unbounded-diagonal
+  failure mode — a crowded, near-coincident configuration is a much more
+  extreme regime than a 10-25%-of-spacing grid jitter.
+
+Net effect: the paper's empirical case for IIPS's robustness is evidence
+for the operator this codebase calls `legacyPairwise`, not for the
+mathematically "corrected" `exactHessian` this investigation additionally
+derived and validated against finite differences. Defaulting to
+`legacyPairwise` is therefore not merely an empirically-motivated
+workaround for a limitation the paper itself doesn't have — it is the
+operator the source paper's own convergence results (Figs. 5-9, Table 1-4)
+actually characterize.
+
 ## The evidence trail (and a self-correction worth keeping)
 
 Getting to the explanation above required ruling out several other
