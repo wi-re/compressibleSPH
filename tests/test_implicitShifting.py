@@ -71,7 +71,7 @@ def _relaxAndTrack(state, config, schemeConfig, rho0, outerIters):
     return history
 
 
-@pytest.mark.parametrize('scheme', [ShiftingScheme.deltaSPH, ShiftingScheme.implicit])
+@pytest.mark.parametrize('scheme', [ShiftingScheme.deltaSPH, ShiftingScheme.implicit, ShiftingScheme.dynamic])
 def test_shiftingConvergesToUniformDensity(scheme):
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
     dtype = torch.float32

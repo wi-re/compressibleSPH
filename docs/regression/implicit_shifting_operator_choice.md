@@ -345,6 +345,57 @@ operator choice above is what mattered.
   `exactHessian` once some convergence criterion is met) is a reasonable
   future direction that hasn't been explored.
 
+## Opting into the improved inner solve (fallback chain + `dynamic` scheme)
+
+The investigation above is about *which operator* to solve. A separate,
+orthogonal robustness problem is *what happens when the inner Krylov solve
+bails out*: the original `computeImplicitShift` consumed a bailed-out iterate
+(status `< 0` -- BiCGStab rho/omega breakdown, threshold bailout, or an
+exhausted iteration budget) exactly as if it had converged. The fix is an
+**opt-in** fallback chain, so the legacy path stays byte-identical for users
+who don't ask for it.
+
+**What the chain does.** On a primary-solver bailout, `solverDriver
+.solveImplicitSystem` (now the shared entry both `computeImplicitShift` and
+`computeImplicitShiftAutomatic` call) retries, and keeps the best iterate by
+its stamped true residual:
+  - `krylov`: retry with the *other* Krylov solver (BiCGStab<->GMRES) from a
+    clean start. This is the high-value fallback -- the two solvers fail in
+    different regimes. On the exact production operator at `jitter=0` (the
+    documented BiCGStab rho-breakdown case), BiCGStab bails at
+    `rel_resid ~ 6e-3` while the GMRES retry converges to `rel_resid ~ 3e-6`.
+  - `krylov_richardson`: `krylov`, plus a bounded Richardson
+    (`richardson.richardsonSolve`) polish from the best iterate, as a last
+    resort. Richardson is deliberately last: an eigenvalue probe shows the
+    production diagonal *diverges* as a Richardson step direction (so it uses
+    `M = I` with an auto-tuned, backtracking step size), it is much slower
+    than GMRES on the positive-definite `legacyPairwise` operator, and it does
+    not converge at all on the indefinite `exactHessian` operator. It is a
+    bounded, never-NaN backstop, not a primary.
+
+**How to opt in (pick one):**
+  - **Easiest -- use `ShiftingScheme.dynamic`.** This dispatches to
+    `computeDynamicImplicitShift`, the same implicit path with the `krylov`
+    fallback enabled by default. An explicit `implicitFallback` choice is
+    respected (it is never downgraded).
+    ```python
+    schemeConfig.shiftProperties.scheme = ShiftingScheme.dynamic
+    ```
+  - **Keep `ShiftingScheme.implicit`, enable the fallback explicitly.**
+    ```python
+    schemeConfig.shiftProperties.scheme = ShiftingScheme.implicit
+    schemeConfig.shiftProperties.implicitFallback = ShiftingImplicitFallback.krylov
+    # ...or ShiftingImplicitFallback.krylov_richardson to also add the
+    # bounded Richardson polish
+    ```
+  - **No change -- `ShiftingScheme.implicit` with the default
+    `implicitFallback=none`** runs exactly one solver and uses its result
+    unconditionally. This is the historical behavior, and it is what the
+    existing `test_implicitShifting.py` suite (and any legacy user) still sees.
+
+On any fallback activation a `UserWarning` is emitted with the primary's
+status and stamped residual, so a recovered inner solve is no longer silent.
+
 ## Reproducing this
 
 None of the ad hoc scripts used during this investigation

@@ -8,11 +8,18 @@ whether a caller constructs `ShiftProperties()` directly or via the builder.
 
 The `implicit*` fields configure `modules/shifting/implicitShifting.py`'s
 matrix-free Krylov (BiCGStab/GMRES) solve, used when
-`scheme == ShiftingScheme.implicit`; they are ignored for
-`ShiftingScheme.deltaSPH`.
+`scheme == ShiftingScheme.implicit` (or the improved `ShiftingScheme.dynamic`,
+which is the same path with the `implicitFallback` chain enabled by default);
+they are ignored for `ShiftingScheme.deltaSPH`. The `implicitFallback` field
+is the opt-in switch for the inner-solve fallback chain (default `none` = the
+historical single-solver behavior): set it to `krylov` or
+`krylov_richardson` on `ShiftingScheme.implicit`, or simply use
+`ShiftingScheme.dynamic`, to make a bailed-out primary solver retry the other
+Krylov solver (and optionally a bounded Richardson polish) instead of being
+used as-is.
 """
 
-__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftingImplicitSolver', 'ShiftProperties', 'buildDefaultShiftProperties']
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftingImplicitSolver', 'ShiftingImplicitFallback', 'ShiftProperties', 'buildDefaultShiftProperties']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -24,6 +31,7 @@ class ShiftingScheme(Enum):
     none = 0
     deltaSPH = 1
     implicit = 2
+    dynamic = 3
 
 
 class ShiftingProjectionScheme(Enum):
@@ -94,6 +102,32 @@ class ShiftingImplicitSolver(Enum):
     bicgstab = 0
     gmres = 1
 
+
+class ShiftingImplicitFallback(Enum):
+    """Fallback chain run when the primary Krylov solver (`implicitSolver`)
+    bails out (status `< 0`) in the implicit shifting Newton solve. Opt-in:
+    the default `none` runs exactly one solver and uses its result
+    unconditionally -- the historical behavior, which a bailed-out `xk` was
+    used exactly as if it had converged. See
+    `modules/shifting/solverDriver.py` for the chain semantics and
+    `modules/shifting/richardson.py` for why Richardson is a last resort.
+
+    - `none` (default): no fallback; a bailed-out iterate is used as-is.
+    - `krylov`: retry with the other Krylov solver (BiCGStab<->GMRES) from a
+      clean start and keep the better iterate by stamped residual. The
+      high-value fallback -- the two solvers fail on different regimes (e.g.
+      GMRES converges the near-breakdown cases BiCGStab bails on).
+    - `krylov_richardson`: `krylov`, plus a bounded Richardson polish from
+      the best iterate. Richardson is deliberately last (see richardson.py).
+
+    `ShiftingScheme.dynamic` presets this to at least `krylov` (an explicit
+    `krylov_richardson` is respected); `ShiftingScheme.implicit` leaves it at
+    whatever the config says, defaulting to `none`.
+    """
+    none = 0
+    krylov = 1
+    krylov_richardson = 2
+
 @dataclass
 class ShiftProperties:
     iterations: int = field(default=1, metadata={"description": "Number of iterations for shifting"})
@@ -122,6 +156,7 @@ class ShiftProperties:
     implicitInitializer: ShiftingImplicitInitializer = field(default=ShiftingImplicitInitializer.zero, metadata={"description": "Initial guess for the implicit shifting solve"})
     implicitOperator: ShiftingImplicitOperator = field(default=ShiftingImplicitOperator.legacyPairwise, metadata={"description": "Which matrix the implicit shifting Newton solve assembles: legacyPairwise (default, empirically more globally convergent) or exactHessian (mathematically exact, comparison/opt-in) -- see ShiftingImplicitOperator's docstring"})
     implicitSolver: ShiftingImplicitSolver = field(default=ShiftingImplicitSolver.bicgstab, metadata={"description": "Matrix-free Krylov solver for the implicit shifting solve: bicgstab (default, diffSPH port) or gmres (restarted, no breakdown modes) -- see ShiftingImplicitSolver's docstring"})
+    implicitFallback: ShiftingImplicitFallback = field(default=ShiftingImplicitFallback.none, metadata={"description": "Fallback chain for the implicit shifting solve when the primary Krylov solver bails out (status < 0): none (default, historical behavior) / krylov (retry the other Krylov solver) / krylov_richardson (krylov + bounded Richardson polish) -- see ShiftingImplicitFallback's docstring. ShiftingScheme.dynamic presets this to at least krylov"})
     implicitRestart: int = field(default=30, metadata={"description": "Krylov restart length (GMRES(m)) for the implicit shifting solve; used only by ShiftingImplicitSolver.gmres"})
     implicitUsePreconditioner: bool = field(default=True, metadata={"description": "Whether to apply the Jacobi preconditioner in the implicit shifting solve"})
     implicitSolverThreshold: Optional[float] = field(default=None, metadata={"description": "Per-particle shift-magnitude divergence threshold for the implicit shifting solve; defaults to dx/2 when None"})

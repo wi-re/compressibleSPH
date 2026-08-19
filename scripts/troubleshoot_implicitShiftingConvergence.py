@@ -18,9 +18,12 @@ equilibrium, the worse a local model the frozen matvec/RHS is. At `jitter=0`
 the solve is trivial; by `jitter=0.01` it already hits the divergence
 threshold almost immediately, with the *unconverged* residual growing
 monotonically with jitter from there. Every existing test uses `jitter=0.1`,
-squarely in that regime -- and neither `computeImplicitShift` nor
-`computeImplicitShiftAutomatic` checks the Krylov solver's returned status,
-so a bailed-out `xk` gets used exactly as if it had converged.
+squarely in that regime. (This was originally a silent gap: a bailed-out
+`xk` got used exactly as if it had converged. It is now closed by the opt-in
+fallback chain in `solverDriver.solveImplicitSystem` -- enabled by
+`shiftProperties.implicitFallback` or `ShiftingScheme.dynamic`, default
+`none` keeps the historical behavior. This harness still reports the raw
+solver status directly, *bypassing* that fallback, for diagnosis.)
 
 **What this script does, concretely.** For each jitter level: builds a
 jittered Cartesian lattice, assembles the exact same linear system
@@ -295,9 +298,12 @@ def main():
     print("status legend: negative codes are the solvers' early-exit statuses (see")
     print("  bicgstab.py/gmres.py): -10 rho-breakdown, -11 omega-breakdown (BiCGStab),")
     print("  -12 threshold-bailout, -13 stagnation (GMRES), -14 max-iteration budget")
-    print("  exhausted. Neither computeImplicitShift nor computeImplicitShiftAutomatic")
-    print("  currently checks for these, so a bailed-out xk is used exactly as if it")
-    print("  had converged. raw_resid is this harness's own ||b - A xk|| recompute")
+    print("  exhausted, -15 stagnation (Richardson). These statuses are acted on by")
+    print("  solverDriver.solveImplicitSystem once shiftProperties.implicitFallback is set:")
+    print("  the default `none` keeps the historical use-the-bailed-iterate behavior, while")
+    print("  `krylov` retries the other Krylov solver and `krylov_richardson` adds a bounded")
+    print("  Richardson polish (see docs/regression/implicit_shifting_operator_choice.md).")
+    print("  raw_resid is this harness's own ||b - A xk|| recompute")
     print("  (independent of the solvers' convergence lists; both solvers now append")
     print("  that same value as their final history entry on every return). Watch")
     print("  rel_resid: production tolerances target ~1e-4 relative: at jitter=0.1")

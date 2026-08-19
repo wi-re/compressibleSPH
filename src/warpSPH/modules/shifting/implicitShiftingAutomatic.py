@@ -25,17 +25,16 @@ a numerical-safety measure -- see `wp_densityHVP.py`'s docstring
 (`warpSPHCore`).
 """
 
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 import torch
 from torch.profiler import record_function
 from warpSPHCore import ParticleState, SupportScheme, OperationProperties, warpOperationJVP, warpOperationHVP
 from warpSPHCore.enumTypes import WarpOperation, OperationDirection
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitSolver
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitSolver, ShiftingImplicitFallback
 
-from .bicgstab import bicgstabSolve
-from .gmres import gmresSolve
+from .solverDriver import solveImplicitSystem
 from .delta import computeDeltaShift
 
 __all__ = ['computeImplicitShiftAutomatic']
@@ -48,6 +47,7 @@ def computeImplicitShiftAutomatic(
     domain: Any,
     adjacency: Any,
     iters: int = -1,
+    fallback_override: Optional[ShiftingImplicitFallback] = None,
 ):
     """Drop-in replacement for `implicitShifting.computeImplicitShift`, same
     signature and return value (`(delta, adjacency)`), Newton matvec/RHS
@@ -137,11 +137,13 @@ def computeImplicitShiftAutomatic(
             threshold=threshold,
             dim=dim,
         )
-        if schemeConfig.shiftProperties.implicitSolver == ShiftingImplicitSolver.gmres:
-            xk, solverIters, convergence = gmresSolve(
-                matvec, B, x0, restart=schemeConfig.shiftProperties.implicitRestart, **solverArgs)
-        else:
-            xk, solverIters, convergence = bicgstabSolve(matvec, B, x0, **solverArgs)
+        fallback = (fallback_override if fallback_override is not None
+                    else schemeConfig.shiftProperties.implicitFallback)
+        xk, solverIters, convergence = solveImplicitSystem(
+            matvec, B, x0, solverArgs,
+            primary_solver=schemeConfig.shiftProperties.implicitSolver,
+            restart=schemeConfig.shiftProperties.implicitRestart,
+            fallback=fallback)
 
         update = -xk.view(numParticles, dim) * schemeConfig.shiftProperties.implicitRelaxation
         return update, adjacency

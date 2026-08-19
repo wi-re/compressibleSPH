@@ -5,9 +5,16 @@ position shift that (locally) equalizes the SPH concentration field
 Newton-style step on `grad C = 0`: `A @ dx = -grad(C)`, solved with a
 matrix-free, Jacobi-preconditioned Krylov solver over the neighbor graph --
 BiCGStab (`bicgstab.bicgstabSolve`) by default, restartable GMRES
-(`gmres.gmresSolve`) via `ShiftingImplicitSolver.gmres`. Ported from
-`diffSPH.modules.shifting.implicitShifting`; the per-pair kernel terms come
-from `wp_implicitShifting.computeShiftingPairTerms`.
+(`gmres.gmresSolve`) via `ShiftingImplicitSolver.gmres`. Both calls run
+through `solverDriver.solveImplicitSystem`, which applies the *opt-in*
+fallback chain (`ShiftProperties.implicitFallback`, default `none` = the
+historical single-solver behavior) when the primary solver bails out
+(status `< 0`). `computeDynamicImplicitShift` (dispatched by
+`ShiftingScheme.dynamic`) is this same path with the `krylov` fallback
+enabled by default -- the improved inner-solve policy, distinct from the
+byte-identical legacy `computeImplicitShift`/`ShiftingScheme.implicit`.
+Ported from `diffSPH.modules.shifting.implicitShifting`; the per-pair kernel
+terms come from `wp_implicitShifting.computeShiftingPairTerms`.
 
 `A` is one of two matrices, selected by `ShiftingImplicitOperator` (see that
 enum's own docstring for the field-level summary; this is the full
@@ -138,21 +145,20 @@ that would raise unless `numPairs == numParticles`; that step is dropped
 here rather than ported as-is.
 """
 
-from typing import Any, Tuple
+from typing import Any, Optional, Tuple
 import torch
 from torch.profiler import record_function
 from warpSPHCore import *
 
 from warpSPH.math import scatter_sum
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitOperator, ShiftingImplicitSolver
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitOperator, ShiftingImplicitSolver, ShiftingImplicitFallback
 
 from .wp_implicitShifting import computeShiftingPairTerms
-from .bicgstab import bicgstabSolve
-from .gmres import gmresSolve
+from .solverDriver import solveImplicitSystem
 from .delta import computeDeltaShift
 
-__all__ = ['computeImplicitShift']
+__all__ = ['computeImplicitShift', 'computeDynamicImplicitShift']
 
 
 def _multiplyLaplacianBlock(
@@ -255,6 +261,7 @@ def computeImplicitShift(
     domain: Any,
     adjacency: AdjacencyList,
     iters: int = -1,
+    fallback_override: Optional[ShiftingImplicitFallback] = None,
 ):
     """Solves for the equilibrium implicit-shifting position delta in a
     single BiCGStab solve (`iters` is accepted, matching
@@ -309,11 +316,38 @@ def computeImplicitShift(
             threshold=threshold,
             dim=dim,
         )
-        if schemeConfig.shiftProperties.implicitSolver == ShiftingImplicitSolver.gmres:
-            xk, solverIters, convergence = gmresSolve(
-                matvec, B, x0, restart=schemeConfig.shiftProperties.implicitRestart, **solverArgs)
-        else:
-            xk, solverIters, convergence = bicgstabSolve(matvec, B, x0, **solverArgs)
+        fallback = (fallback_override if fallback_override is not None
+                    else schemeConfig.shiftProperties.implicitFallback)
+        xk, solverIters, convergence = solveImplicitSystem(
+            matvec, B, x0, solverArgs,
+            primary_solver=schemeConfig.shiftProperties.implicitSolver,
+            restart=schemeConfig.shiftProperties.implicitRestart,
+            fallback=fallback)
 
         update = -xk.view(numParticles, dim) * schemeConfig.shiftProperties.implicitRelaxation
         return update, adjacency
+
+
+def computeDynamicImplicitShift(
+    currentState: Any,
+    config: SimulationConfig,
+    schemeConfig: Any,
+    domain: Any,
+    adjacency: AdjacencyList,
+    iters: int = -1,
+):
+    """`ShiftingScheme.dynamic` entry point: `computeImplicitShift` with the
+    robust fallback chain enabled by default. If the config's
+    `implicitFallback` is at its default `none`, it is upgraded to `krylov`
+    for this call (an explicit `krylov_richardson` is respected, and an
+    explicit choice is never downgraded). This is the improved inner-solve
+    policy; the legacy `ShiftingScheme.implicit` path is left byte-identical
+    (its `implicitFallback` defaults to `none`). See
+    `configurations.moduleConfigurations.shifting.ShiftingImplicitFallback`
+    and `modules/shifting/solverDriver.py` for the chain semantics."""
+    fallback = schemeConfig.shiftProperties.implicitFallback
+    if fallback == ShiftingImplicitFallback.none:
+        fallback = ShiftingImplicitFallback.krylov
+    return computeImplicitShift(currentState, config, schemeConfig, domain, adjacency,
+                                iters=iters, fallback_override=fallback)
+

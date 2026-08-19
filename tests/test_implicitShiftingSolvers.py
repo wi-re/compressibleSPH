@@ -1,21 +1,28 @@
-"""Unit tests for the implicit-shifting matrix-free Krylov solvers
-(`modules/shifting/bicgstab.py::bicgstabSolve` and
-`modules/shifting/gmres.py::gmresSolve`).
+"""Unit tests for the implicit-shifting matrix-free solvers
+(`modules/shifting/bicgstab.py::bicgstabSolve`,
+`modules/shifting/gmres.py::gmresSolve`, and the opt-in last-resort
+`modules/shifting/richardson.py::richardsonSolve`).
 
 Dense CPU torch matrices, no warp/SPH involvement: the solvers take a
 `matvec` closure and nothing else, and the shifting pipeline's own coverage
-(`test_implicitShifting.py`, `test_implicitShiftingComparison.py`) sits on
-top of this. The case families mirror what the production solve actually
-sees (see `ShiftingImplicitOperator` and
-`docs/regression/implicit_shifting_operator_choice.md`): symmetric but
+(`test_implicitShifting.py`, `test_implicitShiftingComparison.py`,
+`test_implicitShiftingFallback.py`) sits on top of this. The case families
+mirror what the production solve actually sees (see `ShiftingImplicitOperator`
+and `docs/regression/implicit_shifting_operator_choice.md`): symmetric but
 indefinite, singular with a translation-style null space, nonsymmetric
 (non-uniform `omega_j`), and ill-conditioned (Jacobi-preconditioner path).
 
 Shared status-code contract: `iters >= 0` = converged at that iterate;
-`-10`/`-11` (BiCGStab only) rho/rv/omega breakdown; `-12` per-particle
-`|x|` threshold bailout; `-13` (GMRES) stagnation / non-finite least
-squares; `-14` max-iteration budget exhausted. `convergence[-1]` is always
-the verified true residual `||b - A x||` of the returned iterate.
+`-10`/`-11` (BiCGStab only) rho/rv/omega breakdown; `-12` per-particle `|x|`
+threshold bailout; `-13` (GMRES) stagnation / non-finite least squares;
+`-14` max-iteration budget exhausted; `-15` (Richardson) stagnation.
+`convergence[-1]` is always the verified true residual `||b - A x||` of the
+returned iterate.
+
+`richardsonSolve` is deliberately NOT in the Krylov `SOLVERS` list below: its
+interface differs (no `precond` -- the production Jacobi diagonal diverges as
+a Richardson step direction, see its module docstring -- and it adds
+`omega`/`tune_omega`), so it is tested by its own dedicated cases.
 """
 
 import pytest
@@ -23,6 +30,7 @@ import torch
 
 from warpSPH.modules.shifting.bicgstab import bicgstabSolve
 from warpSPH.modules.shifting.gmres import gmresSolve
+from warpSPH.modules.shifting.richardson import richardsonSolve
 
 SOLVERS = [bicgstabSolve, gmresSolve]
 SOLVER_IDS = ['bicgstab', 'gmres']
@@ -281,13 +289,162 @@ def test_solversAgreeOnSpd():
 
 
 def test_configPlumbingDefaults():
-    from warpSPH.configurations.moduleConfigurations.shifting import ShiftProperties, ShiftingImplicitSolver
+    from warpSPH.configurations.moduleConfigurations.shifting import (
+        ShiftProperties, ShiftingImplicitSolver, ShiftingImplicitFallback)
     p = ShiftProperties()
     assert p.implicitSolver is ShiftingImplicitSolver.bicgstab
     assert p.implicitTolerance == 0.0  # relative-only: the historical effective behavior
     assert p.implicitRestart == 30
+    # the fallback chain is opt-in: the default must be `none` (legacy behavior)
+    assert p.implicitFallback is ShiftingImplicitFallback.none
+    p.implicitFallback = ShiftingImplicitFallback.krylov
+    assert p.implicitFallback.name == 'krylov'
     p.implicitSolver = ShiftingImplicitSolver.gmres
     assert p.implicitSolver.name == 'gmres'
+
+
+# ---------------------------------------------------------------------------
+# richardsonSolve (modules/shifting/richardson.py) -- the opt-in last-resort
+# fallback. Dedicated cases (see the module docstring for why it is not in the
+# Krylov SOLVERS list). The behavior mirrors an eigenvalue probe of the
+# production operator: it converges on the positive-definite `legacyPairwise`
+# regime, makes substantial (but slow) progress on an ill-conditioned
+# singular system, and bails cleanly (finite, no NaN) on an indefinite one.
+# ---------------------------------------------------------------------------
+
+def test_richardsonConvergesSpd():
+    n = 200
+    A = _randomSpd(n)
+    g = torch.Generator(device='cpu').manual_seed(20)
+    b = A @ torch.randn(n, generator=g)
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=5000)
+    assert iters >= 0, f'richardson did not converge (iters={iters})'
+    assert _trueResid(A, b, x) < 1e-6 * torch.linalg.norm(b).item()
+    # the final history entry is the verified true residual of the return
+    assert hist[-1].item() == pytest.approx(_trueResid(A, b, x), rel=1e-6)
+
+
+def test_richardsonConvergesNegDefinite():
+    # A = -SPD: the step sign must be auto-detected as negative (backtracking
+    # step search), and convergence still holds for the negative-definite case
+    n = 100
+    A = -_randomSpd(n)
+    g = torch.Generator(device='cpu').manual_seed(21)
+    b = A @ torch.randn(n, generator=g)
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=5000)
+    assert iters >= 0, f'richardson did not converge on neg-def (iters={iters})'
+    assert _trueResid(A, b, x) < 1e-6 * torch.linalg.norm(b).item()
+    assert hist[-1].item() == pytest.approx(_trueResid(A, b, x), rel=1e-6)
+
+
+def test_richardsonConvergesWellConditionedSingular():
+    # the `legacyPairwise` regime: singular PSD with an exact translation null
+    # space (b in range(A)). n=16 keeps the spectral gap wide enough that
+    # Richardson finishes; the solution is determined up to the null space, so
+    # the residual is the right thing to check
+    n = 16
+    A = _translationLaplacian(n)
+    g = torch.Generator(device='cpu').manual_seed(22)
+    xTrue = torch.randn(n, generator=g)
+    xTrue = xTrue - xTrue.mean()
+    b = A @ xTrue
+    x, iters, _ = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-4, maxiter=5000)
+    assert iters >= 0, f'richardson did not converge on singular (iters={iters})'
+    assert _trueResid(A, b, x) < 1e-4 * torch.linalg.norm(b).item()
+
+
+def test_richardsonMakesProgressOnIllConditioned():
+    # an n=100 Laplacian is far too ill-conditioned for Richardson to finish in
+    # a moderate budget -- the documented last-resort behavior: substantial
+    # residual reduction, a negative status, and a finite iterate (never a NaN
+    # or a hang)
+    n = 100
+    A = _translationLaplacian(n)
+    g = torch.Generator(device='cpu').manual_seed(23)
+    xTrue = torch.randn(n, generator=g)
+    xTrue = xTrue - xTrue.mean()
+    b = A @ xTrue
+    bnorm = torch.linalg.norm(b).item()
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=200)
+    assert iters < 0
+    assert torch.isfinite(x).all()
+    assert hist[-1].item() < 0.1 * bnorm, 'must make substantial progress even when it cannot finish'
+
+
+def test_richardsonIndefiniteBailsFinite():
+    # symmetric indefinite: no Richardson step size converges -> a negative
+    # status (stagnation), a finite iterate, and a valid stamped residual
+    n = 100
+    A = _symmetricIndefinite(n)
+    g = torch.Generator(device='cpu').manual_seed(24)
+    b = A @ torch.randn(n, generator=g)
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-8, maxiter=200)
+    assert iters < 0
+    assert torch.isfinite(x).all()
+    assert hist[-1].item() == pytest.approx(_trueResid(A, b, x), rel=1e-6)
+
+
+def test_richardsonStatusBudgetExhausted():
+    # rtol below fp32 machine precision: unreachable, so the solve must burn
+    # its budget and report -14 (not a converged-style status)
+    n = 100
+    A = _randomSpd(n)
+    b = A @ torch.randn(n)
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-9, maxiter=5)
+    assert iters == -14
+    assert hist[-1].item() == pytest.approx(_trueResid(A, b, x), rel=1e-6)
+
+
+def test_richardsonStatusThresholdBailout():
+    # 2x2 whose exact solution (10, -5) violates threshold=5 (|10| > 5): the
+    # solve must bail with -12 (it cannot converge while staying under the
+    # threshold) and stamp the true residual
+    A = torch.tensor([[1.0, 0.5], [0.5, 1.0]])
+    b = torch.tensor([10.0, 0.0])
+    x, iters, hist = richardsonSolve(_matvec(A), b, x0=torch.zeros(2), tol=0.0, rtol=0.0,
+                                     maxiter=200, threshold=5.0, dim=1,
+                                     tune_omega=False, omega=0.5)
+    assert iters == -12
+    assert hist[-1].item() == pytest.approx(_trueResid(A, b, x), rel=1e-5)
+
+
+def test_richardsonZeroRhs():
+    A = _randomSpd(32)
+    b = torch.zeros(32)
+    x, iters, hist = richardsonSolve(_matvec(A), b)
+    assert iters == 0
+    assert torch.equal(x, b)
+    assert hist == []
+
+
+def test_richardsonExplicitOmegaSkipsTuning():
+    # passing omega explicitly (tune_omega=False) uses it verbatim; 0.5/rho(A)
+    # is inside the Richardson window for this SPD system, so it converges
+    n = 100
+    A = _randomSpd(n)
+    g = torch.Generator(device='cpu').manual_seed(25)
+    b = A @ torch.randn(n, generator=g)
+    omega = 0.5 / torch.linalg.norm(A, ord=2).item()
+    x, iters, _ = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=5000,
+                                  tune_omega=False, omega=omega)
+    assert iters >= 0
+    assert _trueResid(A, b, x) < 1e-6 * torch.linalg.norm(b).item()
+
+
+def test_richardsonWarmStartNoSlowerThanCold():
+    # the outer solveShifting loop re-solves a nearly-identical system every
+    # iteration: a warm start (the previous solve's answer) must never be worse
+    # than a cold start
+    n = 100
+    A = _randomSpd(n)
+    g = torch.Generator(device='cpu').manual_seed(26)
+    b = A @ torch.randn(n, generator=g)
+    xWarm = torch.linalg.solve(A, 1.01 * b)  # the "previous iteration's" answer
+    _x, iCold, _ = richardsonSolve(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=5000)
+    x, iWarm, _ = richardsonSolve(_matvec(A), b, x0=xWarm, rtol=1e-6, maxiter=5000)
+    assert iCold >= 0 and iWarm >= 0
+    assert iWarm <= iCold, f'warm start ({iWarm}) slower than cold ({iCold})'
+    assert _trueResid(A, b, x) < 1e-6 * torch.linalg.norm(b).item()
 
 
 if __name__ == '__main__':
