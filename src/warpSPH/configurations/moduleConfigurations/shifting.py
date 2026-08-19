@@ -11,7 +11,7 @@ matrix-free BiCGStab solve, used when `scheme == ShiftingScheme.implicit`;
 they are ignored for `ShiftingScheme.deltaSPH`.
 """
 
-__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftProperties', 'buildDefaultShiftProperties']
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftProperties', 'buildDefaultShiftProperties']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -35,6 +35,40 @@ class ShiftingImplicitInitializer(Enum):
     zero = 0
     deltaPlus = 1
     deltaMinus = 2
+
+
+class ShiftingImplicitOperator(Enum):
+    """Which matrix `implicitShifting.computeImplicitShift` assembles and
+    solves `A @ dx = -grad(C)` against, `C_i = sum_j omega_j W_ij`. See
+    `modules/shifting/implicitShifting.py`'s module docstring for the full
+    derivation and the empirical evidence behind the default choice.
+
+    - `legacyPairwise` (default): ported byte-for-byte from diffSPH's
+      original `getShiftingMatrices`/`bicgstab_shifting` (self-pair included
+      with its raw value, off-diagonal block *not* negated). Provably *not*
+      the true Hessian of `C` (222% relative Frobenius error against a
+      finite-difference `Hess(C)` on a 36-particle test case, vs. 1.7e-4 for
+      `exactHessian`), but empirically far more globally convergent from
+      random/far-from-equilibrium starts -- confirmed by A/B testing both
+      operators, sign-matched, through this codebase's own solver/clamp/
+      relaxation pipeline: `legacyPairwise` converges cleanly and
+      monotonically from fully-random initial positions where `exactHessian`
+      stalls or oscillates on the same seeds.
+    - `exactHessian`: the exact Newton Hessian of `C` (self-pair dropped --
+      an exact translation-invariance identity, see the module docstring --
+      diagonal block `sum_{j!=i} H_ij`, off-diagonal `-H_ij`). Mathematically
+      correct and locally quadratically convergent once near the solution,
+      but (per Newton's method's well-known limits on non-convex objectives)
+      not reliably stable far from it even when damped
+      (`implicitRelaxation`) and step-clamped (`ShiftProperties.threshold`).
+      Kept as an explicit opt-in for comparison against the default, and
+      because `implicitShiftingAutomatic.computeImplicitShiftAutomatic`'s
+      autodiff-sourced Hessian only ever represents this formulation (there
+      is no automatic-differentiation counterpart to `legacyPairwise`, since
+      it is not an actual Hessian of anything).
+    """
+    legacyPairwise = 0
+    exactHessian = 1
 
 @dataclass
 class ShiftProperties:
@@ -62,6 +96,7 @@ class ShiftProperties:
     implicitRelativeTolerance: float = field(default=1e-4, metadata={"description": "Relative residual tolerance for the implicit shifting BiCGStab solve"})
     implicitMaxSolverIter: int = field(default=64, metadata={"description": "Maximum BiCGStab iterations for the implicit shifting solve"})
     implicitInitializer: ShiftingImplicitInitializer = field(default=ShiftingImplicitInitializer.zero, metadata={"description": "Initial guess for the implicit shifting solve"})
+    implicitOperator: ShiftingImplicitOperator = field(default=ShiftingImplicitOperator.legacyPairwise, metadata={"description": "Which matrix the implicit shifting Newton solve assembles: legacyPairwise (default, empirically more globally convergent) or exactHessian (mathematically exact, comparison/opt-in) -- see ShiftingImplicitOperator's docstring"})
     implicitUsePreconditioner: bool = field(default=True, metadata={"description": "Whether to apply the Jacobi preconditioner in the implicit shifting solve"})
     implicitSolverThreshold: Optional[float] = field(default=None, metadata={"description": "Per-particle shift-magnitude divergence threshold for the implicit shifting solve; defaults to dx/2 when None"})
     implicitRelaxation: float = field(default=0.1, metadata={"description": "Damping factor applied to each implicit-shifting Newton step (1.0 = full step); the assembled system is a graph-Laplacian-style operator with an exact translation null space, so a full undamped step is only reliably stable extremely close to the solution. 0.1 was swept against a jittered-lattice convergence test (repeatable across runs; 0.15 was already occasionally unstable), matching this codebase's own IISPH Jacobi relaxation precedent"})

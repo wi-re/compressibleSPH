@@ -16,7 +16,7 @@ import torch
 from warpSPH.utils import buildDomainDescription
 from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
-from warpSPH.configurations.moduleConfigurations.shifting import ShiftingScheme
+from warpSPH.configurations.moduleConfigurations.shifting import ShiftingScheme, ShiftingImplicitOperator
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.density import computeDensities
 from warpSPH.modules.shifting import solveShifting
@@ -108,6 +108,63 @@ def test_shiftingConvergesToUniformDensity(scheme):
         f'over {len(history) - 1} steps (history={history})')
     assert min(history[1:]) <= history[0], (
         f'{scheme}: never improved on the initial configuration (history={history})')
+
+
+def _fullyRandomParticles(nx, dim, L, device, dtype, seed):
+    domain = buildDomainDescription(l=L, dim=dim, periodic=True, device=device, dtype=dtype)
+    config, _integrator = buildConfig(dim=dim, nx=nx, domain=domain, device=device,
+                                       dtype=dtype, dx=L / nx, cflFactor=0.3)
+    template = sampleRegularParticles(nx=nx, domain=domain, targetNeighbors=config.targetNeighbors)
+    n = template.positions.shape[0]
+
+    gen = torch.Generator(device='cpu').manual_seed(seed)
+    positions = (torch.rand(template.positions.shape, generator=gen).to(device=device, dtype=dtype) - 0.5) * L \
+        + (domain.min + domain.max) / 2
+
+    state = ParticleState(
+        positions=positions, supports=template.supports, masses=template.masses,
+        kinds=torch.zeros(n, device=device, dtype=torch.int32),
+        densities=torch.ones(n, device=device, dtype=dtype),
+    )
+    state.velocities = torch.zeros_like(state.positions)
+    return state, config
+
+
+@pytest.mark.parametrize('seed', [1234, 42, 7])
+def test_implicitShiftingConvergesFromFullyRandomPositions(seed):
+    """Harsher than `test_shiftingConvergesToUniformDensity`'s jittered
+    lattice: particles start fully randomly scattered (Poisson-disk-less, no
+    lattice structure at all), the case that motivated
+    `ShiftingImplicitOperator.legacyPairwise` becoming the default -- see
+    `implicitShifting.py`'s module docstring. The old default,
+    `exactHessian`, stalls/oscillates on this case even with the
+    `wrapper.py` step clamp and default `implicitRelaxation`; this only
+    exercises the new default, since `exactHessian`'s instability here is
+    the known, documented, accepted tradeoff, not a regression to guard.
+    """
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    dtype = torch.float32
+    dim, nx, L = 2, 16, 1.0
+
+    state, config = _fullyRandomParticles(nx=nx, dim=dim, L=L, device=device, dtype=dtype, seed=seed)
+
+    schemeConfig = WeaklyCompressibleSPHConfig()
+    schemeConfig.shiftProperties.scheme = ShiftingScheme.implicit
+    schemeConfig.shiftProperties.iterations = 1
+    schemeConfig.shiftProperties.active = True
+    schemeConfig.surfaceDetectionConfig.active = False  # see test_shiftingConvergesToUniformDensity
+    assert schemeConfig.shiftProperties.implicitOperator == ShiftingImplicitOperator.legacyPairwise
+    rho0 = schemeConfig.fluid.restDensity
+
+    history = _relaxAndTrack(state, config, schemeConfig, rho0, outerIters=25)
+
+    assert history[-1] < 0.35 * history[0], (
+        f'seed={seed}: relative density std only went from {history[0]:.4f} to {history[-1]:.4f} '
+        f'over {len(history) - 1} steps (history={history})')
+    # Monotonic within noise: no big rebound partway through (the failure
+    # mode `exactHessian` exhibits on this same case).
+    assert max(history) < 1.5 * history[0], (
+        f'seed={seed}: density std spiked above 1.5x its initial value mid-relaxation (history={history})')
 
 
 if __name__ == '__main__':

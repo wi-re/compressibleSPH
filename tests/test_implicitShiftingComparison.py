@@ -24,6 +24,7 @@ import torch
 from warpSPH.utils import buildDomainDescription
 from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
+from warpSPH.configurations.moduleConfigurations.shifting import ShiftingImplicitOperator
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.density import computeDensities
 from warpSPH.modules.shifting.implicitShifting import computeImplicitShift
@@ -55,6 +56,14 @@ def _schemeConfig():
     schemeConfig = WeaklyCompressibleSPHConfig()
     schemeConfig.shiftProperties.active = True
     schemeConfig.surfaceDetectionConfig.active = False  # periodic, no real free surface -- see test_implicitShifting.py
+    # computeImplicitShiftAutomatic's autodiff-sourced Hessian only ever
+    # represents ShiftingImplicitOperator.exactHessian (there's no automatic-
+    # differentiation counterpart to the default `legacyPairwise` operator,
+    # since it isn't an actual Hessian of anything -- see implicitShifting.py's
+    # module docstring). Pin it explicitly so this cross-check keeps comparing
+    # the two Hessian code paths against each other, not against a different
+    # operator entirely now that legacyPairwise is the default.
+    schemeConfig.shiftProperties.implicitOperator = ShiftingImplicitOperator.exactHessian
     return schemeConfig
 
 

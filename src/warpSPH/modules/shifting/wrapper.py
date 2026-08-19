@@ -144,7 +144,7 @@ def solveShifting(
                         update[lMin < 0.4] = 0
                         update[fs > 0.5] = 0
                 
-            # update = torch.clamp(update, -shiftingThreshold * spacing, shiftingThreshold * spacing)
+            update = torch.clamp(update, -shiftingThreshold * spacing, shiftingThreshold * spacing)
             update[systemState.kinds != 0] = 0
 
             systemState.positions += update# * dt
