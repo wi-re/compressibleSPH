@@ -109,3 +109,47 @@ def test_densityPositionHVP_matches_implicitShiftings_ownHessianMatvec():
                                  tangentQueryPositions=v, tangentReferencePositions=v)
 
     torch.testing.assert_close(automatic, reference, rtol=1e-4, atol=1e-6)
+
+
+def test_automaticHessianMatvec_isSymmetric():
+    """Phase 4 step 5's other pitfall check ("is the resulting operator
+    symmetric without anyone having to work out the `-omega_k H_ik`
+    off-diagonal sign by hand?"), tested directly on the composed operator
+    rather than inferred from its bit-close agreement with a known-symmetric
+    hand-built reference above -- the plan's own standing preference (see
+    Phase 3's own "verify empirically rather than assume") for checking a
+    symmetry claim rather than assuming it transfers.
+
+    `implicitShiftingAutomatic.py`'s own matvec closure calls
+    `warpOperationHVP` with `tangentQueryPositions == tangentReferencePositions
+    == x` (the same particles moving together) -- exactly Hess(C) applied to
+    `x`, with no explicit diagonal/off-diagonal block construction anywhere
+    in that call. `<matvec(a), b> == <a, matvec(b)>` for two *independent*
+    random directions is therefore a check on the composed JVP-of-a-JVP
+    itself, not on any hand-written assembly (there isn't one to get wrong
+    here)."""
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    dtype = torch.float32  # matches this file's other test; warpSPHCore's precision is set at import
+    dim, nx, L, rho0 = 2, 8, 1.0, 1000.0
+
+    state, config, domain = _jitteredLatticeState(nx=nx, dim=dim, L=L, device=device, dtype=dtype,
+                                                    jitter=0.1, seed=1234)
+    n = state.positions.shape[0]
+    adjacency = buildVerletList(state, domain, config.verletScale, SupportScheme.SuperSymmetric, None)
+    omega = state.masses / rho0
+    omegaState = ParticleState(positions=state.positions, supports=state.supports, masses=omega,
+                               kinds=state.kinds, densities=None)
+    props = OperationProperties(kernel=config.kernel, operation=WarpOperation.Density,
+                                supportMode=SupportScheme.Gather, operationMode=OperationDirection.AllToAll)
+
+    def matvec(x):
+        return warpOperationHVP(omegaState, props, domain, adjacency=adjacency,
+                                tangentQueryPositions=x, tangentReferencePositions=x)
+
+    gen = torch.Generator(device='cpu').manual_seed(2468)
+    a = torch.randn(n, dim, generator=gen).to(device=device, dtype=dtype)
+    b = torch.randn(n, dim, generator=gen).to(device=device, dtype=dtype)
+
+    lhs = (matvec(a) * b).sum()
+    rhs = (a * matvec(b)).sum()
+    torch.testing.assert_close(lhs, rhs, rtol=1e-4, atol=1e-6)
