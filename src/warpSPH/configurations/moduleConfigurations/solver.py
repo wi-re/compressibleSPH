@@ -32,10 +32,7 @@ class PressureSolverType(Enum):
     bicg = 2            # bi-conjugate gradient -- needs the adjoint matvec A^T
     bicgStab = 3        # bi-conjugate gradient stabilized
     gmres = 4           # (restarted) generalized minimal residual
-    # NOTE: `minres` (minimum residual -- the recommended next Krylov option for
-    # this symmetric negative-semi-definite operator) is designed but not yet
-    # implemented; see the "BiCGStab deep-dive" section of
-    # INCOMPRESSIBLE_SOLVER_PLAN.md for the full design + prototype results.
+    minres = 5          # minimum residual -- for this symmetric (not necessarily definite) operator
 
 
 @dataclass
@@ -44,7 +41,7 @@ class RelaxedJacobiSolverConfig:
     maxIterations: int = field(default=10, metadata={"description": "Maximum number of iterations (used by both the relaxed-Jacobi and the Krylov paths)"})
     tolerance: float = field(default=1e-3, metadata={"description": "Tolerance for the relaxed Jacobi solver (mean |residual|; ignored by the Krylov paths)"})
     relaxationFactor: float = field(default=0.5, metadata={"description": "Relaxation factor for the relaxed Jacobi solver (ignored by the Krylov paths)"})
-    solverType: PressureSolverType = field(default=PressureSolverType.relaxedJacobi, metadata={"description": "Pressure solver: relaxedJacobi (default) or a Krylov method (cg/bicg/bicgStab/gmres)"})
+    solverType: PressureSolverType = field(default=PressureSolverType.relaxedJacobi, metadata={"description": "Pressure solver: relaxedJacobi (default) or a Krylov method (cg/bicg/bicgStab/gmres/minres)"})
     rtol: float = field(default=1e-5, metadata={"description": "Relative residual tolerance for the Krylov solvers (converge when ||r|| < atol + rtol*||b||)"})
     atol: float = field(default=0.0, metadata={"description": "Absolute residual floor for the Krylov solvers (0 = relative tolerance only)"})
     restart: int = field(default=30, metadata={"description": "GMRES restart length (ignored by the other solvers)"})

@@ -9,7 +9,7 @@ scalar pressure ``p`` so that
 with the IISPH diagonal ``dt_scale * computeAlpha`` as a Jacobi-style
 preconditioner and ``b`` the variant's source term. This module builds exactly
 those operators as closures and hands them to the Krylov solvers in
-``modules/shifting`` (BiCGStab, GMRES, and -- once added -- CG, BiCG). The
+``modules/shifting`` (BiCGStab, GMRES, CG, BiCG, MINRES). The
 relaxed-Jacobi path in ``divergenceFree.py`` is left untouched and remains the
 default (``PressureSolverType.relaxedJacobi``).
 
@@ -34,6 +34,7 @@ from ..shifting.bicgstab import bicgstabSolve
 from ..shifting.gmres import gmresSolve
 from ..shifting.cg import cgSolve
 from ..shifting.bicg import bicgSolve
+from ..shifting.minres import minresSolve
 from ...configurations import PressureSolverType
 
 __all__ = [
@@ -202,6 +203,13 @@ def solvePressureKrylov(
         x, status, conv = bicgSolve(matvec, matvecT, b, x0, tol=atol, rtol=rtol,
                                     maxiter=maxiter, precond=precond, dim=1,
                                     verbose=verbose)
+    elif solverType == PressureSolverType.minres:
+        # MINRES needs symmetry, not positive definiteness: no sign flip, and
+        # the flat 1/D diagonal is passed as-is -- minresSolve turns it into
+        # its symmetrizing congruence (d = 1/sqrt(|precond|)) internally.
+        x, status, conv = minresSolve(matvec, b, x0, tol=atol, rtol=rtol,
+                                      maxiter=maxiter, precond=precond, dim=1,
+                                      verbose=verbose)
     else:
         raise ValueError(f'Unrecognized pressure solver type: {solverType}')
 
