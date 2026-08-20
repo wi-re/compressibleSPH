@@ -50,6 +50,12 @@ enters as ``u~0 = x0 / d``. All Lanczos/LQ bookkeeping lives in the
 transformed space; the threshold check and the returned ``x`` are in the
 original space. On a uniform lattice ``D`` is a scalar, so the congruence
 degenerates to a scaling (harmless); on deformed states it does real work.
+The per-step residual/breakdown tests compare the d-weighted (transformed)
+residual against ``dmin * atol`` (``||r|| <= ||d * r|| / dmin``), while the
+final convergence verification checks the original-space ``||b - A x||``
+against ``atol`` itself -- comparing the d-scaled residual to an
+original-space floor would read as an instant false "breakdown" under a
+strong preconditioner (the whole transformed operator sits below that floor).
 
 Memory: the Lanczos basis ``V`` (``n x min(maxiter, n)`` vectors) is kept for
 the full recombination -- intrinsic to MINRES (restarting would lose the
@@ -120,6 +126,18 @@ def minresSolve(
         # zero diagonal entry (the IISPH builder already clamps away from 0)
         d = 1.0 / torch.sqrt(precond.abs().clamp(min=eps))
 
+    # All the per-step tests below (initial residual, the beta breakdown
+    # check, the rho estimate) run in the congruence-transformed space, where
+    # the residual is d-weighted: ||r_orig|| <= ||d * r_orig|| / dmin, so the
+    # transformed-space tolerance is dmin * atol (dmin == 1 when precond is
+    # None). This keeps the family contract -- converge when ||b - A x|| <
+    # atol in the ORIGINAL space (the final verification below uses atol
+    # itself) -- instead of comparing the d-scaled residual against an
+    # original-space floor, which a strong preconditioner (d << 1) would trip
+    # instantly as a false "breakdown".
+    dmin = float(d.min()) if d.numel() > 0 else 1.0
+    atol_t = dmin * atol
+
     # --- symmetrizing congruence (see module docstring) ----------------------
     c = d * b
     u0 = xk0 / d
@@ -146,7 +164,7 @@ def minresSolve(
         r0 = c - amat(u0)
     beta1 = torch.linalg.norm(r0)
     convergence.append(beta1)
-    if beta1 < atol:
+    if beta1 < atol_t:
         if verbose:
             print(f'\t[  0] already converged, |r| = {beta1}')
         return xk0, 0, convergence
@@ -207,12 +225,12 @@ def minresSolve(
         alpha_j = torch.dot(v, w)
         w = w - alpha_j * v
         beta_j = torch.linalg.norm(w)
-        if (not bool(torch.isfinite(beta_j))) or beta_j < atol:
+        if (not bool(torch.isfinite(beta_j))) or beta_j < atol_t:
             # breakdown: the Krylov subspace is (approximately) A-invariant
             # with the residual still above tolerance -- the current iterate
             # is the best MINRES can do here
             if verbose:
-                print(f'\t[{j:3d}] Lanczos breakdown: beta = {beta_j} < {atol}')
+                print(f'\t[{j:3d}] Lanczos breakdown: beta = {beta_j} < {atol_t}')
             return finish(x_prev, -13)
         if j < kmax:
             v_prev = v
@@ -271,7 +289,7 @@ def minresSolve(
 
         # FULL recombination (not an incremental update): x_j = x0 + V_j y_j
         x_orig = d * (u0 + V[:, :j] @ y)
-        if rho < atol:
+        if rho < atol_t:
             # the estimate is exact in exact arithmetic; in fp32 it can
             # under-report once orthogonality is lost, so verify with the true
             # residual before declaring convergence (one extra matvec)

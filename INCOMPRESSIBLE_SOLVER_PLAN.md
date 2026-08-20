@@ -5,7 +5,7 @@ to the DFSPH incompressible scheme (today a matrix-free **relaxed Jacobi**),
 reusing the existing matrix-free Krylov library from the implicit-shifting
 work, with **relaxed-Jacobi kept as the byte-identical shipped default**.
 Written up here (rather than only in an ephemeral plan) so it can be picked
-up and followed structurally in a later session. **Implemented** — Phases 0–5
+up and followed structurally in a later session. **Implemented** — Phases 0–6
 are in (see *Status* below); the relaxed-Jacobi default is byte-identical and
 the incompressible Krylov tests are green.
 
@@ -48,9 +48,13 @@ trajectories: the Phase-1 "~1e-3 @ 200 iters" was BiCGStab-fp32's
 orthogonality loss at κ(M⁻¹A) ≈ 1.1e8 (not the gauge mode, not a matvec
 limitation), and CG is much stronger than expected on this state. Landed: the
 opt-in `krylovFp64` bookkeeping flag (matvec stays fp32; ~10x better residual
-for BiCGStab/CG). Designed, **not yet implemented**: **Phase 6 — MINRES**,
-the recommended next solver, with a full handoff spec in the deep-dive
-section. Test module is now 14 tests, all green.
+for BiCGStab/CG). **Phase 6 — MINRES** is now **implemented** (session 3):
+Givens-LQ Lanczos MINRES (`modules/shifting/minres.py`), symmetrizing
+congruence preconditioning, `PressureSolverType.minres = 5`, dispatch in
+`krylov.py` (no sign flip), 9.7e-4 @200 (best of all methods), per-iterate
+verification against a dense-`lstsq` reference
+(`test_minresGivensMatchesDenseLstsq`). The full handoff spec remains in the
+deep-dive section below (historical). Test module is now 16 tests, all green.
 
 ## BiCGStab deep-dive (session 2)
 
@@ -138,7 +142,8 @@ Take-aways:
   branch, import) was **reverted** so the tree is green without `minres.py`;
   a NOTE comment in the enum points here.
 
-**Phase 6 handoff — MINRES (next session).**
+**Phase 6 handoff — MINRES.** *(Status: implemented in session 3 — see the
+*Status* section above; the spec below is the historical handoff document.)*
 Rationale: best measured method (table above); the operator is symmetric to
 fp32, so MINRES's symmetry assumption holds (the same guarantee that makes
 BiCG's `Aᵀ = A` placeholder exact); no sign flip needed (MINRES handles NSD);
@@ -225,6 +230,18 @@ Design (decided — implement as specified):
      preconditioner scale — a factor ~680 on this state). The repo `cgSolve`
      was correct all along: the probe CG matched it exactly once fixed
      (4.8e-3 @ 200).
+- **Phase-6 implementation bug** (in the repo code, caught by
+  `test_minresReducesResidual`, fixed): the per-step β/ρ tests compared the
+  d-weighted (congruence-transformed) residual against the original-space
+  `atol` floor (`rtol·‖b‖`). Under the IISPH preconditioner (d ≈ 0.038 on
+  this state) the whole transformed operator (norm ~1.2e-5) sits *below* that
+  floor (~1.9e-5), so MINRES read as an instant Lanczos breakdown (status −13
+  at iteration 0, residual untouched). Fixed by testing the transformed-space
+  quantities against `dmin·atol` (`‖r‖ ≤ ‖d⊙r‖/dmin`); the final convergence
+  verification still checks the original-space residual against `atol`. General
+  trap for any preconditioned symmetric Krylov method: the
+  convergence/breakdown floor must live in the same space as the residual it
+  is compared against.
 - `/tmp` artifacts (ephemeral, safe to delete): `bicgstab_probe.py`,
   `minres_selftest.py`, `cg_debug.py`, `linearity_debug.py`,
   `bicgstab_probe.log`.
@@ -432,7 +449,7 @@ additive behind the enum; nothing changes for existing users.
 | 3 | **CG** (gated on Phase-0 probe) | ✅ Done |
 | 4 | **BiCG** (last — needs `Aᵀ`) | ✅ Done |
 | 5 | Comparison harness, regression guard, docs | ✅ Done (14 tests green; `docs/regression/` note) |
-| 6 | **MINRES** (symmetric minimum residual; session-2 finding) | 📐 Designed, not implemented — handoff spec in the *BiCGStab deep-dive* section |
+| 6 | **MINRES** (symmetric minimum residual; session-2 finding) | ✅ Done (Givens-LQ core + symmetrizing-congruence preconditioning; 16 tests green; `docs/regression/` note updated) |
 
 ## Phases
 

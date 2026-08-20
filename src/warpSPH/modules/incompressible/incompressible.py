@@ -84,7 +84,7 @@ def solveIncompressible(
             print(f'[IS] Source term: {sourceTerm.mean().cpu().item():.6g}, min: {sourceTerm.min().cpu().item():.6g}, max: {sourceTerm.max().cpu().item():.6g} abs mean: {sourceTerm.abs().mean().cpu().item():.6g}')
             print(f'[IS] Mean density error: {(particles.densities - schemeConfig.fluid.restDensity).abs().mean().cpu().item():.6g}')
 
-        # Opt-in Krylov pressure solvers (BiCGStab/GMRES/CG/BiCG) share the same
+        # Opt-in Krylov pressure solvers (BiCGStab/GMRES/CG/BiCG/MINRES) share the same
         # matrix-free operator and IISPH-diagonal preconditioner as the relaxed
         # Jacobi path below, which stays the byte-identical default
         # (solverType == relaxedJacobi). The constant-density variant scales the

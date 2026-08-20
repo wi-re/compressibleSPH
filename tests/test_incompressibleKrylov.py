@@ -1,6 +1,7 @@
 """End-to-end tests for the opt-in Krylov pressure solvers in the DFSPH
-incompressible solve (BiCGStab / GMRES / CG / BiCG), plus the Phase-0 operator
-probe and the relaxed-Jacobi regression guard. See ``INCOMPRESSIBLE_SOLVER_PLAN.md``.
+incompressible solve (BiCGStab / GMRES / CG / BiCG / MINRES), plus the Phase-0
+operator probe and the relaxed-Jacobi regression guard. See
+``INCOMPRESSIBLE_SOLVER_PLAN.md``.
 
 One divergence-free TGV case is built once (session scope) and shared. The
 pressure operator is matrix-free, so the tests that need the operator matrix
@@ -33,6 +34,7 @@ from warpSPH.modules.incompressible.incompressible import solveIncompressible
 from warpSPH.modules.incompressible.krylov import (
     buildIISPHMatvec, buildIISPHPrecond, solvePressureKrylov,
 )
+from warpSPH.modules.shifting.minres import minresSolve
 from warpSPH.modules.incompressible.wp_alpha import computeAlpha
 from warpSPH.modules.momentum.incompressible import computeMomentumIncompressible
 from warpSPH.modules.pressure.iisph import computePressureAccelIISPH
@@ -120,7 +122,7 @@ def _run(case, solverType, maxIter=200, rtol=1e-5, variant='divergenceFree'):
 
 def test_pressureSolverTypeAndDefault():
     names = [e.name for e in PressureSolverType]
-    assert names == ['relaxedJacobi', 'cg', 'bicg', 'bicgStab', 'gmres']
+    assert names == ['relaxedJacobi', 'cg', 'bicg', 'bicgStab', 'gmres', 'minres']
     # The default must stay relaxedJacobi so the historical path is unchanged.
     assert RelaxedJacobiSolverConfig().solverType is PressureSolverType.relaxedJacobi
     assert IncompressibleSPHConfig().solverConfig.divergenceFreeSolver.solverType is \
@@ -244,17 +246,117 @@ def test_bicgRuns(incompCase):
     assert torch.isfinite(a_p).all()
 
 
+def test_minresReducesResidual(incompCase):
+    # MINRES is the best measured method (symmetric; it handles the NSD operator
+    # directly, so no sign flip). At the default 200-iteration budget its
+    # residual drops well below the 1e-2 floor the other solvers use; measured
+    # ~1e-3 on this state.
+    _, pressure, errors = _run(incompCase, PressureSolverType.minres)
+    assert torch.isfinite(pressure).all()
+    assert _relResid(incompCase, pressure) < 2e-3
+
+
+def _minresDenseLstsq(A, b, x0, maxiter, atol):
+    """Reference MINRES: Lanczos + a dense per-step ``lstsq`` on the normal
+    equation. ``M_j = [T_j; beta_j e_j^T]`` is (j+1) x j with T_j tridiagonal
+    (diag alpha_i, off-diag beta_i) and the last row beta_j in column j-1; the
+    RHS is beta_1 e_1 with beta_1 = ||r0||. Returns (x, status, estimates) with
+    the same convention as ``minresSolve`` (estimates[0] = ||r0||, per-step
+    recurrence residual, final status a 0-based iter or -13/-14)."""
+    n = b.shape[0]
+    kmax = max(1, min(int(maxiter), n))
+    r = b - A @ x0
+    beta1 = float(torch.linalg.norm(r))
+    estimates = [beta1]
+    if beta1 < atol:
+        return x0.clone(), 0, estimates
+    v = r / beta1
+    vs = [v]                 # vs[i] = v_{i+1}
+    alphas = []              # alphas[i] = alpha_{i+1}
+    betas = [0.0]            # betas[k] = beta_k = ||w_k||; beta_0 = 0
+    x_prev = x0
+    for j in range(1, kmax + 1):
+        w = A @ v - (betas[j - 1] * vs[j - 2] if j >= 2 else 0.0)
+        alpha = float(v @ w)
+        alphas.append(alpha)
+        w = w - alpha * v
+        beta = float(torch.linalg.norm(w))
+        if not math.isfinite(beta) or beta < atol:
+            return x_prev, -13, estimates
+        betas.append(beta)
+        if j < kmax:
+            v = w / beta
+            vs.append(v)
+        M = torch.zeros(j + 1, j, dtype=A.dtype, device=A.device)
+        for i in range(j):
+            M[i, i] = alphas[i]
+            M[i + 1, i] = betas[i + 1]      # subdiag, incl. last row beta_j
+            if i < j - 1:
+                M[i, i + 1] = betas[i + 1]  # superdiag beta_1..beta_{j-1}
+        e = torch.zeros(j + 1, dtype=A.dtype, device=A.device)
+        e[0] = beta1
+        y, *_ = torch.linalg.lstsq(M, e)
+        est = float(torch.linalg.norm(M @ y - e))
+        estimates.append(est)
+        x_prev = x0 + torch.stack([vs[i] * y[i] for i in range(j)], dim=0).sum(dim=0)
+        if est < atol:
+            return x_prev, j - 1, estimates
+    return x_prev, -14, estimates
+
+
+def test_minresGivensMatchesDenseLstsq():
+    # Phase-6 mandate: the shipped Givens-LQ MINRES core must agree per-iterate
+    # with a dense-``lstsq`` reference on a random SPD and a random NSD+gauge
+    # 30x30 system (estimates to ~1e-10, residual estimate monotone
+    # non-increasing, final iterate to ~1e-9). This is the line-by-line port
+    # check for the Givens update, which must not be transcribed from memory.
+    dt = torch.float64
+    n = 30
+    eye = torch.eye(n, dtype=dt)
+    torch.manual_seed(0)
+    R = torch.randn(n, n, dtype=dt)
+    A_spd = R.T @ R + n * eye
+    b_spd = torch.randn(n, dtype=dt)
+    B = torch.randn(n, n, dtype=dt)
+    A0 = -(B.T @ B + eye)
+    P1 = eye / n
+    A_nsd = (eye - P1) @ A0 @ (eye - P1)   # NSD with a constant gauge null space
+    b_nsd = torch.randn(n, dtype=dt)
+    b_nsd -= b_nsd.mean()
+    x0 = torch.zeros(n, dtype=dt)
+    rtol = 1e-10
+    for name, A, b in (('SPD', A_spd, b_spd), ('NSD+gauge', A_nsd, b_nsd)):
+        atol = rtol * float(torch.linalg.norm(b))
+        xg, statusg, convg = minresSolve(lambda p: A @ p, b, x0, rtol=rtol, maxiter=n)
+        xr, statusr, convr = _minresDenseLstsq(A, b, x0, maxiter=n, atol=atol)
+        # minresSolve stamps the final verified true residual, so its recurrence
+        # estimates are convg[:-1] and must line up with the dense estimates
+        assert len(convg) - 1 == len(convr), \
+            f'{name}: history lengths differ ({len(convg)} vs {len(convr)})'
+        for eg, er in zip(convg[:-1], convr):
+            assert abs(float(eg) - er) <= 1e-10 * max(abs(er), 1e-15), \
+                f'{name}: Givens vs dense estimates diverged'
+        for c1, c2 in zip(convg[:-2], convg[:-1]):
+            assert float(c2) <= float(c1) + 1e-12 * float(convg[0]), \
+                f'{name}: MINRES residual estimate not monotone'
+        xdiff = float(torch.linalg.norm(xg - xr)) / max(float(torch.linalg.norm(xr)), 1.0)
+        assert xdiff < 1e-9, f'{name}: Givens vs dense solution diverged: {xdiff}'
+
+
 def test_krylovSolversAgree(incompCase):
     # BiCGStab and GMRES are the robust pair; their solutions should be close
     # (same operator, same preconditioner), a strong check that both are solving
-    # the same A p = b.
+    # the same A p = b. MINRES (symmetric, no sign flip) is compared too.
     _, pStab, _ = _run(incompCase, PressureSolverType.bicgStab)
     _, pGmres, _ = _run(incompCase, PressureSolverType.gmres)
+    _, pMinres, _ = _run(incompCase, PressureSolverType.minres)
     # compare after removing the gauge (the pressure is defined up to a constant)
-    d = (pStab - pStab.mean()) - (pGmres - pGmres.mean())
-    scale = float((pStab - pStab.mean()).norm())
+    ref = pStab - pStab.mean()
+    scale = float(ref.norm())
     assert scale > 0
-    assert float(d.norm()) / scale < 0.5
+    for p, name in ((pGmres, 'gmres'), (pMinres, 'minres')):
+        d = ref - (p - p.mean())
+        assert float(d.norm()) / scale < 0.5, f'{name} disagrees with bicgStab'
 
 
 def test_incompressibleVariantRuns(incompCase):
