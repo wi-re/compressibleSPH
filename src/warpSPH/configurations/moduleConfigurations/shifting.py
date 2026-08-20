@@ -16,10 +16,15 @@ historical single-solver behavior): set it to `krylov` or
 `krylov_richardson` on `ShiftingScheme.implicit`, or simply use
 `ShiftingScheme.dynamic`, to make a bailed-out primary solver retry the other
 Krylov solver (and optionally a bounded Richardson polish) instead of being
-used as-is.
+used as-is. `implicitPreconditioner` selects the inner-solve preconditioner
+(default `scalar` = the historical Jacobi diagonal; `block` inverts the full
+`dim x dim` diagonal blocks and is the general form though a wash for the
+current operators; `off` disables it), and `implicitNullSpaceLift` is an
+opt-in Tikhonov lift of the operator's near-null-space eigenvalues (default
+`0.0` = off; aimed at the indefinite `exactHessian` operator).
 """
 
-__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftingImplicitSolver', 'ShiftingImplicitFallback', 'ShiftProperties', 'buildDefaultShiftProperties']
+__all__ = ['ShiftingScheme', 'ShiftingProjectionScheme', 'ShiftingImplicitInitializer', 'ShiftingImplicitOperator', 'ShiftingImplicitSolver', 'ShiftingImplicitFallback', 'ShiftingImplicitPreconditioner', 'ShiftProperties', 'buildDefaultShiftProperties']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -128,6 +133,33 @@ class ShiftingImplicitFallback(Enum):
     krylov = 1
     krylov_richardson = 2
 
+
+class ShiftingImplicitPreconditioner(Enum):
+    """Preconditioner applied inside the implicit-shifting Krylov solve
+    (`modules/shifting/bicgstab.py`/`gmres.py`, which each accept either a
+    flat diagonal vector -- applied elementwise -- or a callable `M^-1`),
+    built from the assembled operator's diagonal blocks in
+    `modules/shifting/preconditioner.py`.
+
+    - `off`: no preconditioner (`precond=None`).
+    - `scalar` (default, historical behavior): scalar Jacobi, `M = diag(A)` --
+      the flat `[n*dim]` vector of `1/diag`. Byte-identical to the pre-enum
+      production path (the old `implicitUsePreconditioner=True`).
+    - `block`: block Jacobi, `M = block-diag(diagBlock)`, each block the full
+      `dim x dim` diagonal block, applied via a batched inverse (a callable
+      `M^-1`). The general form for a block-structured operator. On the
+      *current* implicit-shifting operators it is a wash, not a win (see
+      `docs/regression/implicit_shifting_operator_choice.md`): for
+      `legacyPairwise` the diagonal blocks are isotropic (`c*I`, the kernel
+      Hessian at the self-point of a radial kernel), so it is bit-identical to
+      `scalar`; for `exactHessian` it is slightly worse. For `dim == 1` it
+      reduces to `scalar`.
+    """
+    off = 0
+    scalar = 1
+    block = 2
+
+
 @dataclass
 class ShiftProperties:
     iterations: int = field(default=1, metadata={"description": "Number of iterations for shifting"})
@@ -158,7 +190,8 @@ class ShiftProperties:
     implicitSolver: ShiftingImplicitSolver = field(default=ShiftingImplicitSolver.bicgstab, metadata={"description": "Matrix-free Krylov solver for the implicit shifting solve: bicgstab (default, diffSPH port) or gmres (restarted, no breakdown modes) -- see ShiftingImplicitSolver's docstring"})
     implicitFallback: ShiftingImplicitFallback = field(default=ShiftingImplicitFallback.none, metadata={"description": "Fallback chain for the implicit shifting solve when the primary Krylov solver bails out (status < 0): none (default, historical behavior) / krylov (retry the other Krylov solver) / krylov_richardson (krylov + bounded Richardson polish) -- see ShiftingImplicitFallback's docstring. ShiftingScheme.dynamic presets this to at least krylov"})
     implicitRestart: int = field(default=30, metadata={"description": "Krylov restart length (GMRES(m)) for the implicit shifting solve; used only by ShiftingImplicitSolver.gmres"})
-    implicitUsePreconditioner: bool = field(default=True, metadata={"description": "Whether to apply the Jacobi preconditioner in the implicit shifting solve"})
+    implicitPreconditioner: ShiftingImplicitPreconditioner = field(default=ShiftingImplicitPreconditioner.scalar, metadata={"description": "Preconditioner for the implicit shifting Krylov solve: scalar (default, historical scalar-Jacobi diagonal) / block (invert the full dim x dim diagonal blocks; the general block-structured form, a wash for the current operators -- see ShiftingImplicitPreconditioner's docstring) / off (none). Replaces the old boolean implicitUsePreconditioner (True==scalar, False==off)"})
+    implicitNullSpaceLift: float = field(default=0.0, metadata={"description": "Tikhonov lift added to the implicit shifting operator's diagonal blocks (A -> A + lift*I); 0.0 (default) = off. Lifting the exactHessian operator's near-zero (translation-null-space) eigenvalues improves its conditioning for the Krylov solve at an O(lift) solution bias, so it is an opt-in aimed at that operator only -- the default legacyPairwise operator is well-conditioned and needs it not"})
     implicitSolverThreshold: Optional[float] = field(default=None, metadata={"description": "Per-particle shift-magnitude divergence threshold for the implicit shifting solve; defaults to dx/2 when None"})
     implicitRelaxation: float = field(default=0.1, metadata={"description": "Damping factor applied to each implicit-shifting Newton step (1.0 = full step); the assembled system is a graph-Laplacian-style operator with an exact translation null space, so a full undamped step is only reliably stable extremely close to the solution. 0.1 was swept against a jittered-lattice convergence test (repeatable across runs; 0.15 was already occasionally unstable), matching this codebase's own IISPH Jacobi relaxation precedent"})
 

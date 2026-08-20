@@ -31,6 +31,7 @@ import torch
 from warpSPH.modules.shifting.bicgstab import bicgstabSolve
 from warpSPH.modules.shifting.gmres import gmresSolve
 from warpSPH.modules.shifting.richardson import richardsonSolve
+from warpSPH.modules.shifting.preconditioner import buildScalarJacobiPrecond, buildBlockJacobiPrecond
 
 SOLVERS = [bicgstabSolve, gmresSolve]
 SOLVER_IDS = ['bicgstab', 'gmres']
@@ -172,6 +173,90 @@ def test_jacobiPreconditionerSpeedsUp(solver, sid):
     assert iPre < iNone or iNone < 0, f'{sid}: preconditioner not faster ({iPre} vs {iNone})'
 
 
+# ---------------------------------------------------------------------------
+# Preconditioner builders (modules/shifting/preconditioner.py) + the solvers'
+# callable-precond path. The block builder is the dim-general [n, dim, dim]
+# form; on the current operators it is a wash for scalar (see
+# docs/regression/implicit_shifting_operator_choice.md), so these cases check
+# correctness + robustness, not a convergence win.
+# ---------------------------------------------------------------------------
+
+def test_scalarJacobiMatchesInline():
+    g = torch.Generator(device='cpu').manual_seed(0)
+    diagBlock = torch.randn(10, 2, 2, generator=g)
+    diagComponents = torch.diagonal(diagBlock, dim1=-2, dim2=-1).flatten()
+    expected = torch.where(diagComponents.abs() > 1e-8, 1.0 / diagComponents, torch.zeros_like(diagComponents))
+    assert torch.equal(buildScalarJacobiPrecond(diagBlock), expected)
+    # all-~0 diagonal -> None (the historical `precond = None` branch)
+    assert buildScalarJacobiPrecond(torch.zeros(5, 3, 3)) is None
+
+
+def test_blockJacobiDim1ReducesToScalar():
+    g = torch.Generator(device='cpu').manual_seed(1)
+    d = torch.linspace(0.1, 3.0, 12)
+    diagBlock = d.view(-1, 1, 1)
+    r = torch.randn(12, generator=g)
+    assert torch.allclose(buildBlockJacobiPrecond(diagBlock)(r), buildScalarJacobiPrecond(diagBlock) * r)
+
+
+def test_blockJacobiAppliesBlockInverse():
+    n, dim, seed = 6, 3, 2
+    g = torch.Generator(device='cpu').manual_seed(seed)
+    blocks = torch.stack([torch.randn(dim, dim, generator=g) for _ in range(n)])
+    r = torch.randn(n * dim, generator=g).view(n, dim)
+    got = buildBlockJacobiPrecond(blocks)(r.flatten()).view(n, dim)
+    # the (tiny) ridge is negligible for these well-conditioned blocks
+    exp = torch.stack([torch.linalg.inv(blocks[i]) @ r[i] for i in range(n)])
+    assert torch.allclose(got, exp, atol=1e-4)
+
+
+def test_blockJacobiNoneOnZeroBlocks():
+    assert buildBlockJacobiPrecond(torch.zeros(4, 2, 2)) is None
+
+
+def test_blockJacobiFiniteOnRankDeficientBlocks():
+    # exactHessian-style: rank-deficient / indefinite blocks must invert
+    # stably (via the scale-aware ridge) rather than producing Inf/NaN
+    blocks = torch.stack([
+        torch.tensor([[1.0, 1.0], [1.0, 1.0]]),   # rank 1 (null direction [1,-1])
+        torch.tensor([[2.0, 0.0], [0.0, 0.0]]),   # rank 1
+        torch.tensor([[-1.0, 0.5], [0.5, -0.3]]),  # indefinite
+    ])
+    out = buildBlockJacobiPrecond(blocks)(torch.randn(6))
+    assert torch.isfinite(out).all()
+
+
+@pytest.mark.parametrize('solver, sid', zip(SOLVERS, SOLVER_IDS))
+def test_solverCallablePrecondMatchesVector(solver, sid):
+    # a callable `precond` must take over `psolve` and behave exactly like the
+    # equivalent flat-vector `precond` (same preconditioned solve)
+    n = 100
+    g = torch.Generator(device='cpu').manual_seed(7)
+    d = torch.linspace(1e-2, 1.0, n)
+    A = torch.diag(d)
+    b = A @ torch.randn(n, generator=g)
+    vpre = 1.0 / d
+    _xv, iv, _ = solver(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=1000, precond=vpre)
+    _xc, ic, _ = solver(_matvec(A), b, x0=torch.zeros(n), rtol=1e-6, maxiter=1000, precond=(lambda r: vpre * r))
+    assert iv == ic
+    assert torch.allclose(_xv, _xc)
+
+
+@pytest.mark.parametrize('solver, sid', zip(SOLVERS, SOLVER_IDS))
+def test_solverConvergesWithBlockPrecond(solver, sid):
+    n, dim, seed = 40, 3, 8
+    g = torch.Generator(device='cpu').manual_seed(seed)
+    blocks = torch.stack([_randomSpd(dim, seed=seed + i) for i in range(n)])
+    A = torch.zeros(n * dim, n * dim)
+    for i in range(n):
+        A[i * dim:(i + 1) * dim, i * dim:(i + 1) * dim] = blocks[i]
+    b = A @ torch.randn(n * dim, generator=g)
+    _x, it, _ = solver(_matvec(A), b, x0=torch.zeros(n * dim), rtol=1e-6, maxiter=1000,
+                       precond=buildBlockJacobiPrecond(blocks))
+    assert it >= 0
+    assert _trueResid(A, b, _x) < 1e-4 * float(torch.linalg.norm(b))
+
+
 @pytest.mark.parametrize('solver, sid', zip(SOLVERS, SOLVER_IDS))
 def test_statusZeroRhs(solver, sid):
     A = _randomSpd(32)
@@ -290,13 +375,17 @@ def test_solversAgreeOnSpd():
 
 def test_configPlumbingDefaults():
     from warpSPH.configurations.moduleConfigurations.shifting import (
-        ShiftProperties, ShiftingImplicitSolver, ShiftingImplicitFallback)
+        ShiftProperties, ShiftingImplicitSolver, ShiftingImplicitFallback, ShiftingImplicitPreconditioner)
     p = ShiftProperties()
     assert p.implicitSolver is ShiftingImplicitSolver.bicgstab
     assert p.implicitTolerance == 0.0  # relative-only: the historical effective behavior
     assert p.implicitRestart == 30
     # the fallback chain is opt-in: the default must be `none` (legacy behavior)
     assert p.implicitFallback is ShiftingImplicitFallback.none
+    # the preconditioner defaults to the historical scalar Jacobi, and the
+    # null-space lift is off (0.0)
+    assert p.implicitPreconditioner is ShiftingImplicitPreconditioner.scalar
+    assert p.implicitNullSpaceLift == 0.0
     p.implicitFallback = ShiftingImplicitFallback.krylov
     assert p.implicitFallback.name == 'krylov'
     p.implicitSolver = ShiftingImplicitSolver.gmres

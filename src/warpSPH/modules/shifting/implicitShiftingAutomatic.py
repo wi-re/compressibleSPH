@@ -32,10 +32,11 @@ from warpSPHCore import ParticleState, SupportScheme, OperationProperties, warpO
 from warpSPHCore.enumTypes import WarpOperation, OperationDirection
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
-from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitSolver, ShiftingImplicitFallback
+from ...configurations.moduleConfigurations.shifting import ShiftingImplicitInitializer, ShiftingImplicitSolver, ShiftingImplicitFallback, ShiftingImplicitPreconditioner
 
 from .solverDriver import solveImplicitSystem
 from .delta import computeDeltaShift
+from .preconditioner import buildScalarJacobiPrecond, buildBlockJacobiPrecond
 
 __all__ = ['computeImplicitShiftAutomatic']
 
@@ -92,6 +93,13 @@ def computeImplicitShiftAutomatic(
             for d in range(dim)
         ], dim=2)
 
+        # opt-in Tikhonov lift of the operator's near-null-space eigenvalues
+        # (A -> A + lift*I); see computeImplicitShift for the rationale.
+        # 0.0 (default) = off.
+        nullLift = schemeConfig.shiftProperties.implicitNullSpaceLift
+        if nullLift > 0:
+            diagBlock = diagBlock + nullLift * torch.eye(dim, device=device, dtype=dtype).unsqueeze(0)
+
         initializer = schemeConfig.shiftProperties.implicitInitializer
         if initializer in (ShiftingImplicitInitializer.deltaPlus, ShiftingImplicitInitializer.deltaMinus):
             delta, _ = computeDeltaShift(currentState, config, schemeConfig, domain, adjacency, iters=1)
@@ -106,10 +114,13 @@ def computeImplicitShiftAutomatic(
             B.view(numParticles, dim)[boundary] = 0
             x0.view(numParticles, dim)[boundary] = 0
 
-        diagComponents = torch.diagonal(diagBlock, dim1=-2, dim2=-1).flatten()
-        precond = torch.where(diagComponents.abs() > 1e-8, 1.0 / diagComponents, torch.zeros_like(diagComponents))
-        if not torch.any(diagComponents.abs() > 1e-8):
+        precondMode = schemeConfig.shiftProperties.implicitPreconditioner
+        if precondMode == ShiftingImplicitPreconditioner.off:
             precond = None
+        elif precondMode == ShiftingImplicitPreconditioner.block:
+            precond = buildBlockJacobiPrecond(diagBlock)
+        else:
+            precond = buildScalarJacobiPrecond(diagBlock)
 
         def matvec(x: torch.Tensor) -> torch.Tensor:
             v = x.view(numParticles, dim)
@@ -133,7 +144,7 @@ def computeImplicitShiftAutomatic(
             tol=schemeConfig.shiftProperties.implicitTolerance,
             rtol=schemeConfig.shiftProperties.implicitRelativeTolerance,
             maxiter=schemeConfig.shiftProperties.implicitMaxSolverIter,
-            precond=precond if schemeConfig.shiftProperties.implicitUsePreconditioner else None,
+            precond=precond,
             threshold=threshold,
             dim=dim,
         )

@@ -32,7 +32,7 @@ the final entry -- as for `bicgstabSolve` -- always the verified true
 residual `||b - A xk||` of the returned iterate.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 import torch
 
 __all__ = ['gmresSolve']
@@ -46,7 +46,7 @@ def gmresSolve(
     rtol: float = 1e-5,
     atol: float = 0.0,
     maxiter: Optional[int] = None,
-    precond: Optional[torch.Tensor] = None,
+    precond: Union[torch.Tensor, Callable[[torch.Tensor], torch.Tensor], None] = None,
     verbose: bool = False,
     threshold: Optional[float] = None,
     dim: int = 1,
@@ -74,7 +74,12 @@ def gmresSolve(
 
     m = max(1, min(int(restart), n - 1))
     eps = torch.finfo(xk.dtype).eps
-    psolve = (lambda x: precond * x) if precond is not None else (lambda x: x)
+    if precond is None:
+        psolve = (lambda x: x)
+    elif callable(precond):
+        psolve = precond
+    else:
+        psolve = (lambda x: precond * x)
 
     def finish(x: torch.Tensor, status: int) -> Tuple[torch.Tensor, int, List[torch.Tensor]]:
         # stamp every returned iterate with its verified true residual, so

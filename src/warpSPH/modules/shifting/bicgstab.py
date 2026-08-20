@@ -46,7 +46,7 @@ changes below only alter what happens near breakdown and what is reported:
   `iteration`.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 import torch
 
 __all__ = ['bicgstabSolve']
@@ -67,7 +67,7 @@ def bicgstabSolve(
     rtol: float = 1e-5,
     atol: float = 0.0,
     maxiter: Optional[int] = None,
-    precond: Optional[torch.Tensor] = None,
+    precond: Union[torch.Tensor, Callable[[torch.Tensor], torch.Tensor], None] = None,
     verbose: bool = False,
     threshold: Optional[float] = None,
     dim: int = 1,
@@ -95,7 +95,12 @@ def bicgstabSolve(
     rhotol = eps ** 2
     omegatol = rhotol
 
-    psolve = (lambda x: precond * x) if precond is not None else (lambda x: x)
+    if precond is None:
+        psolve = (lambda x: x)
+    elif callable(precond):
+        psolve = precond
+    else:
+        psolve = (lambda x: precond * x)
 
     # zero x0 is the common production case: A @ 0 == 0, skip the matvec
     if x0 is None or not x0.any():

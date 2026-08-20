@@ -302,8 +302,8 @@ checks, not just the final A/B number.
 
 ## Initializer and preconditioner: investigated, not the answer
 
-Two further levers were swept once `legacyPairwise` became the default, in
-case either explained additional headroom:
+Four further levers were investigated once `legacyPairwise` became the
+default, in case any explained additional headroom:
 
 - **`implicitUsePreconditioner`** (Jacobi): on vs. off gives bit-identical
   output on the fully-random stress case. Traced to why: the solver's
@@ -311,15 +311,44 @@ case either explained additional headroom:
   these far-from-equilibrium starts that the preconditioner's effect on
   convergence *rate* never gets a chance to matter before the bailout
   returns the current iterate.
+- **Block Jacobi** (invert the full `d x d` diagonal block rather than just
+  its `d` diagonal entries): probed directly on the assembled production
+  operator (both modes, jitter 0.05/0.1, 2D lattice). For `legacyPairwise`
+  (default) it is *bit-identical* to scalar Jacobi -- the diagonal block is
+  `-omega_i * kernelHessian(x_i, x_i)`, the kernel Hessian at the self-point,
+  which is isotropic (`c * I_d`) for any radial kernel, so the block has no
+  intra-particle off-diagonals to exploit and inverting it adds nothing. For
+  `exactHessian` the blocks are non-isotropic (a sum of neighbor Hessians),
+  but inverting them *slightly worsens* the preconditioned spectrum
+  (spectral radius of `I - M^-1 A` goes 6.55 -> 6.94 at jitter=0.05), because
+  the coupling that controls convergence is the *inter*-particle off-diagonal,
+  which no diagonal/block-diagonal preconditioner captures. Net: scalar Jacobi
+  is already the optimal diagonal preconditioner for this operator; robustness
+  comes from the operator choice above and the opt-in fallback chain, not the
+  preconditioner.
+  It is nonetheless shipped as the general form --
+  `implicitPreconditioner=block`, off by default (`scalar`) -- for a genuinely
+  block-structured operator; see `modules/shifting/preconditioner.py`.
 - **`implicitInitializer`** (seeding the Newton solve with a delta-SPH
   shift, `deltaPlus`/`deltaMinus`, instead of zero): <1% difference for
   `legacyPairwise` (already convergent enough that the initial guess barely
-  matters), and does **not** rescue `exactHessian` either — all three
+  matters), and does **not** rescue `exactHessian` either -- all three
   initializers left it stalled on all tested seeds, some finishing worse
   than they started.
+- **`implicitNullSpaceLift`** (Tikhonov lift `A -> A + lift*I`, default `0.0`
+  = off): the one change that *can* help the `exactHessian` operator, whose
+  spectrum has an exact translation null space (near-zero eigenvalues) that
+  makes the Krylov solve ill-conditioned. The lift raises those eigenvalues at
+  an O(lift) solution bias, so it is an opt-in for that operator only -- the
+  well-conditioned `legacyPairwise` default needs it not. It is a
+  *regularization* of the operator, not a preconditioner, and it does not fix
+  `exactHessian`'s indefiniteness -- only the near-singularity.
 
-Neither is a path to further improvement on this specific problem; the
-operator choice above is what mattered.
+None is a path to further improvement on the default (`legacyPairwise`)
+problem; the operator choice above is what mattered. Block Jacobi and the
+null-space lift are shipped as opt-ins (off by default) for the general /
+`exactHessian` cases, documented as a wash and a niche regularization
+respectively -- not as improvements to the default path.
 
 ## Practical notes for picking a mode
 

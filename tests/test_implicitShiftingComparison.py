@@ -39,7 +39,7 @@ import torch
 from warpSPH.utils import buildDomainDescription
 from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
-from warpSPH.configurations.moduleConfigurations.shifting import ShiftingImplicitOperator
+from warpSPH.configurations.moduleConfigurations.shifting import ShiftingImplicitOperator, ShiftingImplicitSolver
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.density import computeDensities
 from warpSPH.modules.shifting.delta import computeDeltaShift
@@ -227,3 +227,56 @@ def test_threeWayShiftComparison_allRelaxTowardUniformDensity():
     # loop too (same check as test_automaticImplicitShift_convergesLikeHandBuilt,
     # confirming that comparison isn't an artifact of running it in isolation).
     assert abs(automaticHistory[-1] - handBuiltHistory[-1]) < 0.1 * handBuiltHistory[0]
+
+
+def test_nullSpaceLiftIsAppliedAndFinite():
+    """The opt-in `implicitNullSpaceLift` (A -> A + lift*I) is off by default
+    (see the config test) and aimed at the near-singular `exactHessian`
+    operator -- this file's case. The pure-torch preconditioner/solver tests in
+    test_implicitShiftingSolvers.py don't exercise this one-liner, so verify it
+    end-to-end on the real pipeline:
+      - a small lift perturbs the update by O(lift) (the Tikhonov bias) --
+        visible above fp32 noise but small;
+      - a large lift dominates the operator (lift*I >> A), so both Krylov
+        solvers converge to the same well-conditioned answer;
+      - the identical one-liner in `computeImplicitShiftAutomatic` stays
+        finite and applied there too.
+    """
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    dtype = torch.float32
+    dim, nx, L = 2, 8, 1.0
+    state, config, domain = _jitteredLatticeState(nx=nx, dim=dim, L=L, device=device, dtype=dtype,
+                                                   jitter=0.1, seed=1234)
+    schemeConfig = _schemeConfig()  # exactHessian
+    adjacency = buildVerletList(state, domain, config.verletScale, SupportScheme.SuperSymmetric, None)
+    state.densities = computeDensities(state, config, schemeConfig, adjacency)
+
+    def run(shiftFn, lift):
+        sc = _schemeConfig()
+        sc.shiftProperties.implicitNullSpaceLift = lift
+        return shiftFn(_cloneState(state), config, sc, domain, adjacency, iters=1)[0]
+
+    # small lift: applied (change exceeds fp32 noise) but O(lift) (small)
+    u0 = run(computeImplicitShift, 0.0)
+    uSmall = run(computeImplicitShift, 1e-2)
+    assert torch.isfinite(u0).all() and torch.isfinite(uSmall).all()
+    diff = torch.linalg.norm(uSmall - u0)
+    u0norm = torch.linalg.norm(u0)
+    assert diff > 1e-4 * u0norm, f'lift=1e-2 had no visible effect (diff={diff})'
+    assert diff < 0.1 * u0norm, f'lift=1e-2 perturbed the update more than O(lift) (diff/||u0||={diff / u0norm})'
+
+    # large lift: the operator is dominated by lift*I (well-conditioned), so
+    # both Krylov solvers converge to the same Tikhonov answer
+    scB = _schemeConfig(); scB.shiftProperties.implicitNullSpaceLift = 10.0
+    scB.shiftProperties.implicitSolver = ShiftingImplicitSolver.bicgstab
+    scG = _schemeConfig(); scG.shiftProperties.implicitNullSpaceLift = 10.0
+    scG.shiftProperties.implicitSolver = ShiftingImplicitSolver.gmres
+    uB = computeImplicitShift(_cloneState(state), config, scB, domain, adjacency, iters=1)[0]
+    uG = computeImplicitShift(_cloneState(state), config, scG, domain, adjacency, iters=1)[0]
+    torch.testing.assert_close(uB, uG, rtol=1e-3, atol=1e-6)
+
+    # the automatic path shares the identical lift one-liner: finite + applied
+    a0 = run(computeImplicitShiftAutomatic, 0.0)
+    aSmall = run(computeImplicitShiftAutomatic, 1e-2)
+    assert torch.isfinite(a0).all() and torch.isfinite(aSmall).all()
+    assert torch.linalg.norm(aSmall - a0) > 1e-4 * torch.linalg.norm(a0), 'automatic lift had no visible effect'
