@@ -137,12 +137,22 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'maxIterations': config.solverConfig.pressureSolver.maxIterations,
                 'tolerance': config.solverConfig.pressureSolver.tolerance,
                 'relaxationFactor': config.solverConfig.pressureSolver.relaxationFactor,
+                'solverType': config.solverConfig.pressureSolver.solverType.name,
+                'rtol': config.solverConfig.pressureSolver.rtol,
+                'atol': config.solverConfig.pressureSolver.atol,
+                'restart': config.solverConfig.pressureSolver.restart,
+                'krylovFp64': config.solverConfig.pressureSolver.krylovFp64,
             },
             'divergenceFreeSolver': {
                 'minIterations': config.solverConfig.divergenceFreeSolver.minIterations,
                 'maxIterations': config.solverConfig.divergenceFreeSolver.maxIterations,
                 'tolerance': config.solverConfig.divergenceFreeSolver.tolerance,
                 'relaxationFactor': config.solverConfig.divergenceFreeSolver.relaxationFactor,
+                'solverType': config.solverConfig.divergenceFreeSolver.solverType.name,
+                'rtol': config.solverConfig.divergenceFreeSolver.rtol,
+                'atol': config.solverConfig.divergenceFreeSolver.atol,
+                'restart': config.solverConfig.divergenceFreeSolver.restart,
+                'krylovFp64': config.solverConfig.divergenceFreeSolver.krylovFp64,
             },
             'integrateRho': config.solverConfig.integrateRho
         }
@@ -198,18 +208,35 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         )
     config.gravityConfig = dictToGravityConfiguration(configDict['gravityConfig']) if configDict.get('gravityConfig') is not None else buildDefaultGravityConfiguration()
     solverConfigDict = configDict.get('solverConfig', {})
+    psDict = solverConfigDict.get('pressureSolver', {})
+    dfDict = solverConfigDict.get('divergenceFreeSolver', {})
+
+    def _solverType(d):
+        v = d.get('solverType', PressureSolverType.relaxedJacobi)
+        return PressureSolverType[v] if isinstance(v, str) else v
+
     config.solverConfig = IncompressibleSolverConfig(
         pressureSolver=RelaxedJacobiSolverConfig(
-            minIterations=solverConfigDict.get('pressureSolver', {}).get('minIterations', buildDefaultPSConfig().minIterations),
-            maxIterations=solverConfigDict.get('pressureSolver', {}).get('maxIterations', buildDefaultPSConfig().maxIterations),
-            tolerance=solverConfigDict.get('pressureSolver', {}).get('tolerance', buildDefaultPSConfig().tolerance),
-            relaxationFactor=solverConfigDict.get('pressureSolver', {}).get('relaxationFactor', buildDefaultPSConfig().relaxationFactor),
+            minIterations=psDict.get('minIterations', buildDefaultPSConfig().minIterations),
+            maxIterations=psDict.get('maxIterations', buildDefaultPSConfig().maxIterations),
+            tolerance=psDict.get('tolerance', buildDefaultPSConfig().tolerance),
+            relaxationFactor=psDict.get('relaxationFactor', buildDefaultPSConfig().relaxationFactor),
+            solverType=_solverType(psDict),
+            rtol=psDict.get('rtol', buildDefaultPSConfig().rtol),
+            atol=psDict.get('atol', buildDefaultPSConfig().atol),
+            restart=psDict.get('restart', buildDefaultPSConfig().restart),
+            krylovFp64=psDict.get('krylovFp64', buildDefaultPSConfig().krylovFp64),
         ),
         divergenceFreeSolver=RelaxedJacobiSolverConfig(
-            minIterations=solverConfigDict.get('divergenceFreeSolver', {}).get('minIterations', buildDefaultDFConfig().minIterations),
-            maxIterations=solverConfigDict.get('divergenceFreeSolver', {}).get('maxIterations', buildDefaultDFConfig().maxIterations),
-            tolerance=solverConfigDict.get('divergenceFreeSolver', {}).get('tolerance', buildDefaultDFConfig().tolerance),
-            relaxationFactor=solverConfigDict.get('divergenceFreeSolver', {}).get('relaxationFactor', buildDefaultDFConfig().relaxationFactor),
+            minIterations=dfDict.get('minIterations', buildDefaultDFConfig().minIterations),
+            maxIterations=dfDict.get('maxIterations', buildDefaultDFConfig().maxIterations),
+            tolerance=dfDict.get('tolerance', buildDefaultDFConfig().tolerance),
+            relaxationFactor=dfDict.get('relaxationFactor', buildDefaultDFConfig().relaxationFactor),
+            solverType=_solverType(dfDict),
+            rtol=dfDict.get('rtol', buildDefaultDFConfig().rtol),
+            atol=dfDict.get('atol', buildDefaultDFConfig().atol),
+            restart=dfDict.get('restart', buildDefaultDFConfig().restart),
+            krylovFp64=dfDict.get('krylovFp64', buildDefaultDFConfig().krylovFp64),
         ),
         integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho)
     )

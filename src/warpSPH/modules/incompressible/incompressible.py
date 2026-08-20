@@ -32,6 +32,8 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
+from ...configurations import PressureSolverType
+from .krylov import solvePressureKrylov
 
 __all__ = ['solveIncompressible']
 
@@ -82,6 +84,16 @@ def solveIncompressible(
             print(f'[IS] Source term: {sourceTerm.mean().cpu().item():.6g}, min: {sourceTerm.min().cpu().item():.6g}, max: {sourceTerm.max().cpu().item():.6g} abs mean: {sourceTerm.abs().mean().cpu().item():.6g}')
             print(f'[IS] Mean density error: {(particles.densities - schemeConfig.fluid.restDensity).abs().mean().cpu().item():.6g}')
 
+        # Opt-in Krylov pressure solvers (BiCGStab/GMRES/CG/BiCG) share the same
+        # matrix-free operator and IISPH-diagonal preconditioner as the relaxed
+        # Jacobi path below, which stays the byte-identical default
+        # (solverType == relaxedJacobi). The constant-density variant scales the
+        # operator by dt**2 and clamps the pressure non-negative (gauge='nonnegative').
+        psSolver = schemeConfig.solverConfig.pressureSolver
+        if psSolver.solverType != PressureSolverType.relaxedJacobi:
+            return solvePressureKrylov(
+                particles, config, schemeConfig, adjacency, sourceTerm, dt**2,
+                psSolver, gauge='nonnegative', verbose=verbose)
 
         alphas = dt**2 * computeAlpha(
                 currentState = particles,

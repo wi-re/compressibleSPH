@@ -5,14 +5,229 @@ to the DFSPH incompressible scheme (today a matrix-free **relaxed Jacobi**),
 reusing the existing matrix-free Krylov library from the implicit-shifting
 work, with **relaxed-Jacobi kept as the byte-identical shipped default**.
 Written up here (rather than only in an ephemeral plan) so it can be picked
-up and followed structurally in a later session. **Not started — no code
-changes have been made yet.**
+up and followed structurally in a later session. **Implemented** — Phases 0–5
+are in (see *Status* below); the relaxed-Jacobi default is byte-identical and
+the incompressible Krylov tests are green.
 
 The solver set is deliberately **one solver per phase (Phases 1–4)** so any
 solver can be targeted independently whenever its time comes. **BiCG is
 Phase 4 (last)** because it is the only method that needs the operator
 **transpose** `Aᵀ` (a real derivation); CG / BiCGStab / GMRES only ever apply
 the existing matrix-free forward `matvec`, so they slot in directly.
+
+## Status (as of implementation)
+
+**All phases are in.** `PressureSolverType` + config fields, `krylov.py`
+(matvec/precond/matvecT builders + `solvePressureKrylov` dispatch), the enum
+branches in `divergenceFree.py` / `incompressible.py`, `modules/shifting/cg.py`
+and `bicg.py`, and `tests/test_incompressibleKrylov.py` (12 tests, all green).
+The relaxed-Jacobi path is untouched (the branch is skipped for the default),
+confirmed by the `test_relaxedJacobiRegression` fingerprint.
+
+**Phase-0 operator probe (measured, fp32, 2D TGV lattice, `nx=24`, N=576):**
+
+| property | value | implication |
+|---|---|---|
+| symmetry `‖A−Aᵀ‖/‖A‖` | **9.6e-07** | the operator **is symmetric** (to fp32) → the BiCG `Aᵀ=A` placeholder is *exact* |
+| symmetric-part eigenvalues | min −4.7e-3, max +2.0e-10 | **negative-semi-definite** with a near-zero **gauge mode** |
+| definiteness | indefinite only via the ~1e-10 gauge mode | CG/BiCG get a **sign-flip** (solve `−A p = −b`) in `krylov.py` |
+| condition number (sym part) | **2.4e7** | ill-conditioned → Krylov needs many iters; ~1e-3 relative residual at 200 iters |
+| row diagonal dominance | −0.71 (min) | **not** diagonally dominant → the damped relaxed-Jacobi can diverge here (pre-existing) |
+| `computeAlpha` vs true `Diag(A)` | rel-L2 **3.3e-7** | the IISPH diagonal is the **exact** operator diagonal → the Jacobi preconditioner is well-founded |
+
+This resolves the two open questions: the operator is **symmetric** (so CG is
+viable with the sign-flip, and BiCG's self-adjoint matvec is exact — no
+Phase-4 derivation needed for symmetry), and it is **negative-semi-definite**
+(not SPD), so BiCGStab/GMRES remain the robust all-round choices and CG/BiCG
+are the weaker ones (BiCG is the least robust on the gauge-mode spectrum).
+
+**Session-2 update (BiCGStab deep-dive).** The "BiCGStab deep-dive" section
+below refines the per-method picture with full 1200-iteration true-residual
+trajectories: the Phase-1 "~1e-3 @ 200 iters" was BiCGStab-fp32's
+*stagnation shoulder* (it diverges by 1200 iters), the cause is fp32
+orthogonality loss at κ(M⁻¹A) ≈ 1.1e8 (not the gauge mode, not a matvec
+limitation), and CG is much stronger than expected on this state. Landed: the
+opt-in `krylovFp64` bookkeeping flag (matvec stays fp32; ~10x better residual
+for BiCGStab/CG). Designed, **not yet implemented**: **Phase 6 — MINRES**,
+the recommended next solver, with a full handoff spec in the deep-dive
+section. Test module is now 14 tests, all green.
+
+## BiCGStab deep-dive (session 2)
+
+**Question.** BiCGStab (the recommended Krylov option) reached only ~1e-3
+relative residual at 200 iters on the seeded TGV state. Is that conditioning,
+a bug, or fixable? What other solvers fit this operator?
+
+**Setup.** Probe (`/tmp/bicgstab_probe.py`, ephemeral — numbers recorded
+below): the session's seeded state (TGV 2D, `nx=32`, N=1024, random `v*`,
+`x0=0`, `b = -div(v*)`, `‖b‖ = 1.87`), `A` densely assembled, and hand-rolled
+Krylov loops recording the **true** residual `‖b − A x‖/‖b‖` along the way
+(repo solvers verify the true residual only on return). matvec ~0.9 ms (GPU),
+so 1200-iter trajectories take seconds.
+
+**Hypotheses and verdicts.**
+- **H1 — structural gauge floor** (`A·1 = 0` ⇒ no iterate can beat
+  `√n·|mean(b)|`): **refuted.** `mean(b) = −5.3e-9` → floor 9.1e-8 relative.
+  (The commented-out `sourceTerm -= sourceTerm.mean()` at
+  `divergenceFree.py:76` is not needed on this state; it may matter on
+  non-periodic states — left untouched.)
+- **H2 — fp32 recurrence precision loss**: **confirmed.** BiCGStab-fp32
+  stagnates at ~1.9e-3 by 400 iters and *diverges* (4e+04) by 1200;
+  BiCGStab with **fp64 bookkeeping over the same fp32 matvec** reaches 1.1e-4
+  at 800. Mechanism: `κ(M⁻¹A) ≈ 1.1e8 > eps_fp32⁻¹ ≈ 8.4e6`, so BiCGStab's
+  shadow orthogonality `r0ᵀrk = 0` (which `α = ρ/rv` relies on) is destroyed
+  by round-off → garbage updates.
+- **H3 — pure conditioning**: real but not the whole story. On this *uniform
+  lattice* `D = diag(A) = −1.471e-3` is **constant**, so the Jacobi
+  preconditioner degenerates to a scalar and `κ(M⁻¹A)` = the raw `κ(A) ≈
+  1.1e8`. On deformed states the diagonal varies and the preconditioner does
+  real work, but the operator is an elliptic discretization with a gauge mode,
+  so large κ is expected anyway.
+
+**Spectrum (measured, gauge mode excluded).**
+- `A` (sym part): `[−8.29e-3, +2.75e-10]` — NSD, gauge mode slightly positive.
+- `M⁻¹A` (M = D): quantiles `[4.97e-8, 4.49e-3, 4.21e-2, 1.17, 5.64]`.
+  Optimal Jacobi `ω = 2/(λmax+λmin) ≈ 0.355` with `ρ_opt ≈ 1` (~7000 iters to
+  1e-5). Production `ω = 0.5` → spectral radius of `I − ω M⁻¹A` =
+  `|1 − 0.5·5.64| = 1.82 > 1` → **relaxed-Jacobi diverges on this state**
+  (consistent with the fingerprint test where the errors grow).
+
+**True-residual trajectories (rel to ‖b‖, x0 = 0, 1200-iter budget).**
+
+| method | 200 | 400 | 800 | 1200 |
+|---|---|---|---|---|
+| BiCGStab fp32 | 1.0e-3 | 1.7e-3 | **1.9e-3 (stagnant)** | **4e+04 (diverged)** |
+| BiCGStab fp64 (fp32 matvec) | 8.8e-4 | 3.5e-4 | **1.1e-4** | breakdown ~1200 |
+| BiCGStab fp32 + residual deflation | 1.3e-3 | 6.1e-4 | 1.9e-3 | 1.9e-3 (no help — H1 refuted) |
+| CG (repo left-precond, fp32) | 4.8e-3 | 2.6e-3 | 3.7e-5 | 3.9e-5 |
+| CG fp64 | 4.8e-3 | 2.4e-3 | 3.1e-5 | **3.6e-6** |
+| GMRES(30) fp32 = fp64 | 2.8e-3 | 1.2e-3 | 6.1e-4 | 4.0e-4 (still drifting down; most robust) |
+| MINRES (prototype, unpreconditioned) | 9.7e-4 | 2.2e-4 | **3.5e-5 (fp32)** | **1.0e-5 (fp64); monotone, no breakdown** |
+
+Take-aways:
+- **CG is much better than the Phase-1 note suggested** on this state:
+  `b = −div(v*)` is high-frequency (Rayleigh quotient on A = −5.9e-3, close to
+  the largest |λ| = 8.3e-3), so PCG sees a far smaller effective κ than the
+  worst-case 1.1e8. CG's real risk is states where `b` excites the
+  small-eigenvalue part (or the slightly-positive gauge eigenvalue +2.75e-10
+  makes `−A` marginally indefinite → `cgSolve`'s −16 bail).
+- **GMRES(30) is the most robust** (no breakdown, fp32 == fp64) but the
+  slowest of the good methods at 1200 iters.
+- **BiCGStab-fp32 is the worst at long budgets**: it *looks* fine at 200 iters
+  (1.0e-3, the number the Phase-1 tests recorded) but that is the shoulder of
+  its stagnation curve; longer runs return a diverged iterate. Its fp32
+  "floor" is precision, not conditioning.
+- **MINRES is the structurally right method for this operator** (symmetric,
+  NSD, gauge-singular — exactly MINRES's design domain): it minimizes the true
+  residual every step, has no shadow orthogonality to lose, and was the best
+  and cleanest of all runs. → **Phase 6, handoff below.**
+
+**Implemented in this session (in the tree, tested):**
+- `RelaxedJacobiSolverConfig.krylovFp64: bool = False` (opt-in; both solver
+  sub-configs; dict round-trip in `configurations/incompressible.py`).
+- `solvePressureKrylov` wraps all four Krylov branches in fp64 bookkeeping
+  when set: `b`/`precond`/`x0` → fp64, `matvec = λ p: matvec(p.to(fp32)).double()`,
+  and the returned iterate is cast back to the production dtype before the
+  gauge fix / final accel. The relaxed-Jacobi path never touches this code
+  (branch guard `solverType != relaxedJacobi` in both variants).
+- Tests: `test_krylovFp64ConfigRoundTrip`,
+  `test_krylovFp64DoesNotWorsenResidual` (asserts fp64 ≤ 1.5× fp32 residual at
+  200 iters **and** the dtype cast-back). Full module **14 passed**;
+  `test_runner`/`test_caseSpec`/`test_physics` green.
+- The MINRES wiring that was started (enum value `minres = 5`, dispatch
+  branch, import) was **reverted** so the tree is green without `minres.py`;
+  a NOTE comment in the enum points here.
+
+**Phase 6 handoff — MINRES (next session).**
+Rationale: best measured method (table above); the operator is symmetric to
+fp32, so MINRES's symmetry assumption holds (the same guarantee that makes
+BiCG's `Aᵀ = A` placeholder exact); no sign flip needed (MINRES handles NSD);
+robust in fp32 (no breakdown at 1200 iters; fp32/fp64 within ~3×).
+
+Design (decided — implement as specified):
+1. **Interface** (mirror the siblings in `modules/shifting/`):
+   `minresSolve(matvec, b, x0=None, tol=0.0, rtol=1e-5, atol=0.0,
+   maxiter=None, precond=None, verbose=False, threshold=None, dim=1) ->
+   (x, status, convergence)`. `atol = max(atol, tol, rtol*‖b‖)` floor;
+   `convergence` = per-step recurrence residual, final entry the **verified
+   true residual** `‖b − A x‖` (the `finish()` pattern from `bicgstabSolve`).
+   Status codes from the family: `>=0` converged at iter; `−12` per-particle
+   `|x|` threshold; `−13` Lanczos breakdown / stagnation (β_k → 0 with the
+   residual still above tolerance — the Krylov subspace is invariant);
+   `−14` max-iter budget.
+2. **Preconditioning — symmetrizing congruence (not similarity, not left
+   preconditioning):** MINRES requires a symmetric operator. Given the flat
+   diagonal `precond = 1/D` (`D = diag A`, negative here), set
+   `d = sqrt(|D|) = 1/sqrt(|precond|)` (elementwise; `precond=None` ⇒ `d = 1`)
+   and solve `Ã ũ = c` with `Ã v := d ⊙ (A (d ⊙ v))` (symmetric when A is;
+   NSD is fine for MINRES), `c = d ⊙ b`, then `u = d ⊙ ũ` (verified:
+   `Ãũ = c ⟹ A(d⊙ũ) = b`). `x0` enters as `ũ0 = x0 / d`. All bookkeeping
+   (Lanczos vectors, LQ scalars) lives in the transformed space; the threshold
+   check and the returned `x` are in the original space (`d ⊙ ũ`).
+3. **MINRES core (Lanczos + LQ of the tridiagonal):**
+   - Lanczos: `w = Ã v_k − β_{k−1} v_{k−1}`, `α_k = v_k·w`, `w −= α_k v_k`,
+     `β_k = ‖w‖`, `v_{k+1} = w/β_k` (keep `v_prev`, the `V` list, `β_prev`).
+   - Normal equation: `M_k = [T_k; β_k e_kᵀ]` is **(k+1)×k** (T_k tridiagonal:
+     diag α_i, off-diag β_i; last row has β_k at col k−1);
+     `y_k = argmin ‖M_k y − β1 e1'‖`; **`x_k = x0 + V_k y_k` is the FULL
+     solution at step k — not an incremental `x += V_k y_k`** (`y_k[:k−1] ≠
+     y_{k−1}`; the prototype's first bug). Recurrence residual `‖r_k‖ =
+     ‖M_k y_k − β1 e1'‖` (exact in exact arithmetic; monotone
+     non-increasing).
+   - **Implementation choice:** the prototype used `torch.linalg.lstsq(M_k, c)`
+     per step (O(k³)/step, O(k⁴) total) — verified correct (SPD self-test →
+     1.6e-15; NSD+gauge self-test → 3.2e-10; monotone). Shipping that for v1
+     is fine (converges in a few hundred iters; the matvec dominates), but a
+     Givens-LQ version (two 2×2 rotations per step, O(k)/step, O(n) memory) is
+     the production form. **Do NOT transcribe the Givens update from memory** —
+     fetch Trefethen's `minres.m` (www.math.utah.edu/~trefethen/minres.m) and
+     port it line-by-line, then assert against the dense-lstsq version on a
+     random SPD and a random NSD+gauge 30×30 system in a test (both must agree
+     to ~1e-10 per iterate and the residual must be monotone non-increasing).
+4. **Wiring:** `PressureSolverType.minres = 5` in
+   `configurations/moduleConfigurations/solver.py` (replace the NOTE comment);
+   `from ..shifting.minres import minresSolve` + an `elif` branch in
+   `krylov.py`'s `solvePressureKrylov` — **no sign flip** (unlike CG/BiCG),
+   pass `precond` through (the congruence uses it). The enum round-trips by
+   name (`PressureSolverType[v]` in `dictToIncompressibleSPHConfig`), so no
+   serialization change is needed.
+5. **Tests** (`tests/test_incompressibleKrylov.py`): extend the
+   `test_pressureSolverTypeAndDefault` name list with `'minres'`;
+   `test_minresReducesResidual` (finite pressure, `_relResid < 2e-3` at 200
+   iters — measured 9.7e-4); add MINRES to the gauge-removed agreement check
+   (`test_krylovSolversAgree`); the dense-SPD/NSD self-test if the Givens
+   version is shipped.
+6. **Docs:** update the per-method table + usage notes in
+   `docs/regression/incompressible_pressure_solver_choice.md`; flip the
+   Phase-6 row in the Status table below.
+
+**Other findings (for the record).**
+- The repo `gmresSolve` solves its (tiny) Hessenberg least-squares via the
+  **normal equations** (`Hc.T @ Hc`) — conditioning² in fp32; a minor weakness
+  (GMRES was still the most robust here). Optional follow-up: switch to
+  `torch.linalg.lstsq`.
+- `bicgstabSolve`/`gmresSolve` record the *recurrence* residual per iterate
+  (true residual only on return). The Phase-1 "1.1e-3 @ 200" number was the
+  verified return value; the trajectories above show what happens *after* 200
+  (fp32 BiCGStab diverges). At long fp32 budgets the status code is the only
+  reliable signal.
+- Prototype bugs hit while investigating (all in throwaway scripts, **not** in
+  the repo code — recorded so Phase 6 doesn't repeat them):
+  1. MINRES `x` update must be `x0 + V_k y_k` (full), not incremental.
+  2. `M_k` must be (k+1)×k — the prototype first assembled it transposed.
+  3. `torch.linalg.qr` defaults to *reduced* mode (Q (k+1)×k, not (k+1)×(k+1));
+     the LQ needs `mode='complete'` (or skip QR — use lstsq).
+  4. In the LQ residual `z = Q̂ᵀ β1 e1`, the prototype used the wrong factor
+     orientation (`Q.T @ e1` instead of `Q @ e1`) — silent and divergent.
+  5. A "quick" PCG probe mixed the x/r preconditioning (x step `p`, r step
+     `A M⁻¹p`) — inconsistent unless `M = I`; and the left-preconditioned CG
+     α is `(r, M⁻¹r)/(p, Ap)`, **not** `(r, r)/(p, Ap)` (off by the
+     preconditioner scale — a factor ~680 on this state). The repo `cgSolve`
+     was correct all along: the probe CG matched it exactly once fixed
+     (4.8e-3 @ 200).
+- `/tmp` artifacts (ephemeral, safe to delete): `bicgstab_probe.py`,
+  `minres_selftest.py`, `cg_debug.py`, `linearity_debug.py`,
+  `bicgstab_probe.log`.
 
 ## Why
 
@@ -127,6 +342,11 @@ report as solver quality and use for the comparison harness.
   family* the shifting work probed (`exactHessian`) and found
   nonsymmetric/indefinite with a translation null space.
 
+  **Measured (Phase 0, this pressure operator, fp32):** `‖A−Aᵀ‖/‖A‖ ≈ 1e-6`
+  (symmetric to precision) and **negative-semi-definite** with a gauge mode —
+  the *pressure* operator turns out to be more benign than the `exactHessian`
+  shifting operator. See *Status*.
+
 Consequences (this drives the phase order):
 - **CG** needs SPD. The null space is harmless (converges on the
   null-orthogonal complement; re-center the result). But nonsymmetry/
@@ -161,7 +381,10 @@ Therefore BiCG's `matvecT` must be **derived**, in descending preference:
 
 Because (1) is real deriving work and (2)/(3) are the realistic near-term
 paths, **BiCG is scheduled last** and can be delivered at whatever fidelity the
-probe warrants.
+probe warrants. **Probe outcome:** this operator is symmetric to fp32, so (2)
+`matvecT = matvec` is *exact* (not an approximation) and `buildIISPHMatvecT`
+ships as the self-adjoint alias. BiCG's residual weakness is the
+indefinite/gauge-mode spectrum, not the adjoint.
 
 ### Cost / memory (matrix-free property is preserved)
 
@@ -203,12 +426,13 @@ additive behind the enum; nothing changes for existing users.
 
 | Phase | Solver / work | Status |
 |---|---|---|
-| 0 | Foundations: glue, enum, operator probe, baseline capture | ⏸ Not started |
-| 1 | **BiCGStab** (first solver; validates the glue) | ⏸ Not started |
-| 2 | **GMRES** | ⏸ Not started |
-| 3 | **CG** (gated on Phase-0 probe) | ⏸ Not started |
-| 4 | **BiCG** (last — needs `Aᵀ`) | ⏸ Not started |
-| 5 | Comparison harness, regression guard, docs | ⏸ Not started |
+| 0 | Foundations: glue, enum, operator probe, baseline capture | ✅ Done |
+| 1 | **BiCGStab** (first solver; validates the glue) | ✅ Done |
+| 2 | **GMRES** | ✅ Done |
+| 3 | **CG** (gated on Phase-0 probe) | ✅ Done |
+| 4 | **BiCG** (last — needs `Aᵀ`) | ✅ Done |
+| 5 | Comparison harness, regression guard, docs | ✅ Done (14 tests green; `docs/regression/` note) |
+| 6 | **MINRES** (symmetric minimum residual; session-2 finding) | 📐 Designed, not implemented — handoff spec in the *BiCGStab deep-dive* section |
 
 ## Phases
 
@@ -359,17 +583,24 @@ and the adjoint derivation is isolated.
 
 ## Risks / open questions
 
-- **Is the discrete operator SPD?** Unknown until Phase-0c runs. If not, CG is
-  benchmark-only (still shipped) and BiCGStab/GMRES are the real answers — this
-  is the likely outcome given the shifting experience.
-- **BiCG adjoint fidelity** is the main open technical item; Phase 4 resolves
-  it against the probe. If no clean discrete adjoint exists, BiCG ships at
-  self-adjoint-approximation (or test-only) fidelity — acceptable, and it is the
-  least-attractive method anyway (BiCGStab dominates it).
-- **`/ρ` weighting + BCs** can push the operator indefinite; the probe's
-  `λ_min < 0` would confirm it (and rule out CG even if symmetry looks fine).
-- **Warm start** (`x0 = previous pressure`) should help convergence (as it does
-  for the Jacobi); verify it actually does in the comparison table.
+- **Is the discrete operator SPD?** **Resolved (Phase 0):** symmetric but
+  **negative-semi-definite** (gauge mode), not SPD. CG is therefore viable
+  (with the sign-flip in `krylov.py`) but slow on the ill-conditioned spectrum;
+  BiCGStab/GMRES remain the robust choices.
+- **BiCG adjoint fidelity** **Resolved (Phase 0):** the operator is symmetric,
+  so the self-adjoint `matvecT = matvec` placeholder is exact. BiCG is still the
+  least robust method (indefinite/gauge-mode spectrum), as anticipated.
+- **Conditioning + fp32 precision** (refined in session 2): the raw
+  `κ(A) ≈ 1.1e8` (on a uniform lattice the Jacobi preconditioner degenerates
+  to a scalar, so the methods face the raw condition number). The Phase-1
+  "1e-3 @ 200 iters" was **not** the conditioning limit — it was BiCGStab's
+  fp32 orthogonality loss (κ > eps_fp32⁻¹). With the opt-in `krylovFp64`
+  flag BiCGStab reaches 1.1e-4 at 800 iters, and CG reaches 3.9e-5 at 1200
+  iters even in fp32 (b is high-frequency on this state). See the *BiCGStab
+  deep-dive* section.
+- **Warm start** (`x0 = previous pressure`) is wired through
+  `solvePressureKrylov`; on the seeded single-shot test states it is a cold
+  start (zero previous pressure).
 
 ## Verification (per phase)
 

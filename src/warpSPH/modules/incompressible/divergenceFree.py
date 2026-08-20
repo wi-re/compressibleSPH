@@ -31,6 +31,8 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
+from ...configurations import PressureSolverType
+from .krylov import solvePressureKrylov
 
 from typing import Any, Optional, Union
 
@@ -75,6 +77,16 @@ def solveDivergenceFree(
         if verbose:
             print(f'Divergence Free Solver')
             print(f'[DF] Source term: {sourceTerm.mean().cpu().item():.6g}, min: {sourceTerm.min().cpu().item():.6g}, max: {sourceTerm.max().cpu().item():.6g}')
+
+        # Opt-in Krylov pressure solvers (BiCGStab/GMRES/CG/BiCG) share the same
+        # matrix-free operator and IISPH-diagonal preconditioner as the relaxed
+        # Jacobi path below, which stays the byte-identical default
+        # (solverType == relaxedJacobi).
+        dfSolver = schemeConfig.solverConfig.divergenceFreeSolver
+        if dfSolver.solverType != PressureSolverType.relaxedJacobi:
+            return solvePressureKrylov(
+                particles, config, schemeConfig, adjacency, sourceTerm, dt,
+                dfSolver, gauge='center', verbose=verbose)
 
         alphas = dt * computeAlpha(
                 currentState = particles,
