@@ -1,81 +1,84 @@
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType equilateralBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType triangleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType circleBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType squareBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa -45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 0 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 0.5 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --obstacleActive --obstacleType wallBottom --offsetX 1.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --maxExtent 0.25 --aoa 45 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.4166666666666667 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.25 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.3333333333333333 --fluidWidth 0.08333333333333333 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.4166666666666667 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.25 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.5 --fluidWidth 0.08333333333333333 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.4166666666666667 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.25 --caseName dambreak --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 6.0 --W 4.0 --fillRatio 0.6666666666666666 --fluidWidth 0.08333333333333333 --caseName dambreak --nx 256 --targetDt 0.0002
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeequilateralBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypetriangleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypecircleBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypeellipsoidBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypesquareBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTyperoundedBoxBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypehexagonBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypestarBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.0.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX0.5.json
+python run_sweep.py sweeps/dambreak/obstacleTypewallBottom_offsetX1.0.json
+python run_sweep.py sweeps/dambreak/noObstacle_fillRatio0.333.json
+python run_sweep.py sweeps/dambreak/noObstacle_fillRatio0.5.json
+python run_sweep.py sweeps/dambreak/noObstacle_fillRatio0.667.json

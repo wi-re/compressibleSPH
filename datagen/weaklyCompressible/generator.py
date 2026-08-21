@@ -7,46 +7,22 @@ timestamp and the obstacle description, and collecting the trajectory, video and
 end frames into `compressed/`.
 
     python datagen/weaklyCompressible/generator.py --nx 128 --plot --store
-    python datagen/weaklyCompressible/generator.py --config sweeps/obstacle.yaml
+    python datagen/weaklyCompressible/generator.py --config sweeps/dambreak/some_config.json
+
+This only runs `dambreakCase`. For a config from a different sweep family
+(e.g. `sweeps/impact/*.json`, written by `obstacle_init.ipynb`), use
+`run_sweep.py` instead -- it dispatches on the family and also archives.
 """
 
 from warpSPHBootstrap import bootstrap
 
 bootstrap(precision='float32')
 
-import os                                                   # noqa: E402
-import shutil                                               # noqa: E402
+from utils import archive                                   # noqa: E402
 
 from warpSPH.cases.dambreak import dambreakCase             # noqa: E402
 from warpSPH.runner import buildArgumentParser, run, specFromArgs  # noqa: E402
 from warpSPH.utils import getCurrentTimestamp               # noqa: E402
-
-
-def archive(result, caseName: str, destination: str = 'compressed') -> None:
-    """Move the trajectory and copy the renders into a flat dataset directory."""
-    exportPath = result.exportPath
-    if exportPath is None:
-        return
-    os.makedirs(destination, exist_ok=True)
-    tag = f'{caseName}_{os.path.basename(exportPath)}'
-
-    trajectory = os.path.join(exportPath, 'trajectory.h5')
-    if os.path.exists(trajectory):
-        shutil.move(trajectory, os.path.join(destination, f'trajectory_{tag}.hdf5'))
-
-    if result.videoPath and os.path.exists(result.videoPath):
-        shutil.copy(result.videoPath, os.path.join(destination, f'video_{tag}.mp4'))
-
-    imagePath = result.ctx.imagePath
-    if imagePath and os.path.isdir(imagePath):
-        frames = sorted((f for f in os.listdir(imagePath)
-                         if f.startswith('frame_') and f.endswith('.png')),
-                        key=lambda name: int(name.split('_')[1].split('.')[0]))
-        if frames:
-            shutil.copy(os.path.join(imagePath, frames[0]),
-                        os.path.join(destination, f'first_frame_{tag}.png'))
-            shutil.copy(os.path.join(imagePath, frames[-1]),
-                        os.path.join(destination, f'last_frame_{tag}.png'))
 
 
 def main():

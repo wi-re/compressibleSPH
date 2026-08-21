@@ -1,44 +1,252 @@
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 180 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 180 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.375 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.375 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallTop --offsetX -1.5 --W 6.0 --fillRatio 0.25 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --enableFreestream --freeStreamVelocity 1.0 --caseName openChannel --nx 256 --targetDt 0.0002
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallBottom_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeequilateralTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypetriangleTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypecircleTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypeellipsoidTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypesquareTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTyperoundedBoxTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypehexagonTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypestarTop_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/openChannel/obstacleTypewallTop_aoa45.0_freeStreamVelocity2.0.json

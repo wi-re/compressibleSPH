@@ -1,17 +1,90 @@
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 90 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 180 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.375 --aoa -45 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.375 --aoa -30 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.375 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -30 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --fullyPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0 --caseName fullyPeriodic --nx 256 --targetDt 0.0002
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeequilateralMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypetriangleMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypecircleMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypesquareMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehexagonMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypestarMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypewallMiddle_aoa45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_aspectRatio2.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_aspectRatio0.5.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_aspectRatio1.0.json
+python run_sweep.py sweeps/fullyPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_aspectRatio2.0.json

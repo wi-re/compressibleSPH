@@ -1,26 +1,90 @@
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.125 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.125 --aoa -90 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.125 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType equilateralMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.125 --aoa 90 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType triangleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType circleMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -90 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType ellipsoidMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.125 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -30 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType squareMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -30 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 30 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallBottom --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -45 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa -30 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
-python generator.py --plot --tLimit 8.0 --obstacleActive --obstacleType wallMiddle --offsetX -1.5 --W 6.0 --fillRatio 1.0 --fluidWidth 1.0 --maxExtent 0.25 --aoa 0 --semiPeriodic --disableGravity --enableFreestream --freeStreamVelocity 1.0  --caseName semiPeriodic --nx 256 --targetDt 0.0002
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeequilateralMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypetriangleMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypecircleMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypeellipsoidMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypesquareMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTyperoundedBoxMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehexagonMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypestarMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypewallMiddle_aoa45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa-45.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa0.0_freeStreamVelocity2.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity0.5.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity1.0.json
+python run_sweep.py sweeps/semiPeriodic/obstacleTypehorseshoeMiddle_aoa45.0_freeStreamVelocity2.0.json

@@ -199,6 +199,91 @@ def buildPresetObstacles(maxExtent: float, offsetX: float, L: float, fillRatio: 
             "obstacleType": "box",
             "aoa": 90.0 + angle,
         },
+        # `buildObstacleSDF` has always supported these four shapes, but no
+        # preset ever exposed them, so no sweep matrix ever swept them either.
+        "roundedBoxBottom": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + maxExtent / 3,
+            "aspectRatio": 1.0,
+            "obstacleType": "roundedBox",
+            "aoa": 0.0,
+        },
+        "roundedBoxMiddle": {
+            "maxExtent": maxExtent / 3,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight / 2,
+            "aspectRatio": 1.0,
+            "obstacleType": "roundedBox",
+            "aoa": angle,
+        },
+        "roundedBoxTop": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight,
+            "aspectRatio": 1.0,
+            "obstacleType": "roundedBox",
+            "aoa": angle,
+        },
+        "hexagonBottom": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL,
+            "aspectRatio": 1.0,
+            "obstacleType": "hexagon",
+            "aoa": 0.0,
+        },
+        "hexagonMiddle": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight / 2,
+            "aspectRatio": 1.0,
+            "obstacleType": "hexagon",
+            "aoa": angle,
+        },
+        "hexagonTop": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight,
+            "aspectRatio": 1.0,
+            "obstacleType": "hexagon",
+            "aoa": angle,
+        },
+        "starBottom": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL,
+            "aspectRatio": 1.0,
+            "obstacleType": "star",
+            "aoa": 0.0,
+        },
+        "starMiddle": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight / 2,
+            "aspectRatio": 1.0,
+            "obstacleType": "star",
+            "aoa": angle,
+        },
+        "starTop": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight,
+            "aspectRatio": 1.0,
+            "obstacleType": "star",
+            "aoa": angle,
+        },
+        # Concave and orientation-dependent (the aperture faces `aoa`), unlike
+        # the other, convex shapes -- Bottom/Top presets would just bury the
+        # opening in the floor/ceiling, so only the submerged preset is useful.
+        "horseshoeMiddle": {
+            "maxExtent": maxExtent / 2,
+            "offsetX": offsetX,
+            "offsetY": -domainL + fillHeight / 2,
+            "aspectRatio": 1.0,
+            "obstacleType": "horseshoe",
+            "aoa": angle,
+        },
     }
     return obstacles
 
@@ -268,7 +353,7 @@ def buildObstacleSDF(
     if obstacleType == "equilateralTriangle":
         return lambda x: getSDF("equilateralTriangle")["function"](trs(x), maxExtent)
     if obstacleType == "hexagon":
-        return lambda x: getSDF("hexagon")["function"](trs(x), torch.tensor(1 / 4, device=x.device, dtype=x.dtype))
+        return lambda x: getSDF("hexagon")["function"](trs(x), torch.tensor(maxExtent, device=x.device, dtype=x.dtype))
     if obstacleType == "horseshoe":
         aperture = np.pi / 4
         return lambda x: getSDF("horseshoe")["function"](
