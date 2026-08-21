@@ -26,7 +26,8 @@ import torch
 from warpSPH.cases.tgv import tgvCase
 from warpSPH.runner import buildContext, CaseSpec
 from warpSPH.configurations import (
-    IncompressibleSPHConfig, PressureSolverType, RelaxedJacobiSolverConfig,
+    IncompressibleSPHConfig, PressureSolverType, JacobiRelaxationMode,
+    RelaxedJacobiSolverConfig,
     incompressibleConfigToDict, dictToIncompressibleSPHConfig,
 )
 from warpSPH.modules.incompressible.divergenceFree import solveDivergenceFree
@@ -47,10 +48,16 @@ SEED = 0
 VELOCITY_SCALE = 0.05
 
 
-def _buildCase(nx=NX, velocityScale=VELOCITY_SCALE, seed=SEED):
+def _buildCase(nx=NX, velocityScale=VELOCITY_SCALE, seed=SEED,
+               kernel='Wendland2', n_h=4.0, device=None, dim=2):
+    # kernel / n_h (support radius in cell units -> target neighbor count) /
+    # dim default to the tgv case's own defaults; the probe script
+    # (scripts/probe_relaxedJacobiOmega.py) sweeps them.
     spec = (CaseSpec(caseName='tgv', scheme='divergenceFree',
                      params=dict(tgvCase.params)).merged(**tgvCase.defaults)
-            .merged(nx=nx))
+            .merged(nx=nx, kernel=kernel, n_h=n_h, dim=dim))
+    if device is not None:
+        spec = spec.merged(device=device)
     ctx = buildContext(tgvCase, spec)
     tgvCase.configureScheme(ctx)
     system = tgvCase.buildSystem(ctx)
@@ -450,3 +457,100 @@ def test_krylovFp64DoesNotWorsenResidual(incompCase):
     # budget (on this state it does ~10x better; the 1.5x margin keeps the
     # assertion robust across seeds/devices)
     assert rel[True] <= 1.5 * rel[False], f'fp64 {rel[True]} vs fp32 {rel[False]}'
+
+
+# --- Optimal-step relaxed Jacobi (relaxationMode='optimal') ------------------
+# The fixed-omega path converges only for omega < 2/rho(D^-1 A) (see the
+# divergenceFree.py docstring); rho ~= 5.64 on this operator family (window
+# omega < 0.355), so the historical omega=0.5 default diverges. `optimal`
+# replaces omega with the exact per-step residual minimizer (same matvec
+# cost, no stability window, monotonically decreasing residual). See the
+# "Relaxed Jacobi: the omega stability window" section of
+# docs/regression/incompressible_pressure_solver_choice.md.
+
+
+def test_relaxationModeDefaultAndRoundTrip():
+    # the default must stay fixed so the historical path is unchanged
+    assert RelaxedJacobiSolverConfig().relaxationMode is JacobiRelaxationMode.fixed
+    assert IncompressibleSPHConfig().solverConfig.divergenceFreeSolver.relaxationMode is \
+        JacobiRelaxationMode.fixed
+    assert IncompressibleSPHConfig().solverConfig.pressureSolver.relaxationMode is \
+        JacobiRelaxationMode.fixed
+    cfg = IncompressibleSPHConfig()
+    cfg.solverConfig.divergenceFreeSolver.relaxationMode = JacobiRelaxationMode.optimal
+    d = incompressibleConfigToDict(cfg)
+    assert d['solverConfig']['divergenceFreeSolver']['relaxationMode'] == 'optimal'
+    rt = dictToIncompressibleSPHConfig(d)
+    assert rt.solverConfig.divergenceFreeSolver.relaxationMode is JacobiRelaxationMode.optimal
+    # a dict missing the new key falls back to the default
+    d2 = incompressibleConfigToDict(IncompressibleSPHConfig())
+    del d2['solverConfig']['divergenceFreeSolver']['relaxationMode']
+    rt2 = dictToIncompressibleSPHConfig(d2)
+    assert rt2.solverConfig.divergenceFreeSolver.relaxationMode is JacobiRelaxationMode.fixed
+
+
+def test_optimalStepJacobiMonotoneAndWindowFree(incompCase):
+    """optimal step: monotonically decreasing residual over the full budget,
+    and it works with relaxationFactor=0.5 -- outside the fixed stability
+    window, where the fixed path diverges (that is the point of the mode)."""
+    case = incompCase
+    scfg = case.schemeConfig.solverConfig.divergenceFreeSolver
+    scfg.solverType = PressureSolverType.relaxedJacobi
+    scfg.relaxationMode = JacobiRelaxationMode.optimal
+    scfg.minIterations, scfg.maxIterations = 0, 64
+    scfg.tolerance, scfg.relaxationFactor = 1e-9, 0.5
+    try:
+        case.state.pressures.zero_()
+        dvdt = torch.zeros_like(case.state.velocities)
+        _, pressure, errors, _ = solveDivergenceFree(
+            case.state, case.config, case.schemeConfig, case.adjacency, dvdt, case.dt)
+        assert torch.isfinite(pressure).all()
+        assert len(errors) == 64  # tol=1e-9 never met: full budget
+        # monotone (tiny fp32 wiggle tolerated)
+        for k in range(1, len(errors)):
+            assert errors[k] <= errors[k - 1] * 1.01, f'non-monotone at {k}: {errors}'
+        # substantial reduction over the budget
+        assert errors[-1] < 0.5 * errors[0]
+    finally:
+        scfg.relaxationMode = JacobiRelaxationMode.fixed
+
+
+def test_optimalStepAtLeastAsGoodAsInWindowFixed(incompCase):
+    """optimal step must be at least as good as in-window fixed omega=0.3 at
+    the same budget (it is the per-step residual minimizer; the 1.15x margin
+    keeps the assertion robust across fp32 rounding)."""
+    case = incompCase
+    scfg = case.schemeConfig.solverConfig.divergenceFreeSolver
+    scfg.solverType = PressureSolverType.relaxedJacobi
+    scfg.minIterations, scfg.maxIterations = 0, 64
+    scfg.tolerance, scfg.relaxationFactor = 1e-9, 0.3
+    dvdt = torch.zeros_like(case.state.velocities)
+    try:
+        case.state.pressures.zero_()
+        _, _, err_fixed, _ = solveDivergenceFree(
+            case.state, case.config, case.schemeConfig, case.adjacency, dvdt, case.dt)
+        scfg.relaxationMode = JacobiRelaxationMode.optimal
+        case.state.pressures.zero_()
+        _, _, err_opt, _ = solveDivergenceFree(
+            case.state, case.config, case.schemeConfig, case.adjacency, dvdt, case.dt)
+    finally:
+        scfg.relaxationMode = JacobiRelaxationMode.fixed
+    assert len(err_opt) == len(err_fixed) == 64
+    assert err_opt[-1] <= 1.15 * err_fixed[-1], \
+        f'optimal {err_opt[-1]} worse than in-window fixed-0.3 {err_fixed[-1]}'
+
+
+def test_optimalStepRejectedForConstantDensitySolver(incompCase):
+    """the constant-density solver clamps pressures non-negative, which breaks
+    the exact residual recurrence the optimal step needs: it must refuse."""
+    case = incompCase
+    scfg = case.schemeConfig.solverConfig.pressureSolver
+    scfg.solverType = PressureSolverType.relaxedJacobi
+    scfg.relaxationMode = JacobiRelaxationMode.optimal
+    dvdt = torch.zeros_like(case.state.velocities)
+    try:
+        with pytest.raises(ValueError, match='optimal'):
+            solveIncompressible(case.state, case.config, case.schemeConfig,
+                                case.adjacency, dvdt, case.dt)
+    finally:
+        scfg.relaxationMode = JacobiRelaxationMode.fixed

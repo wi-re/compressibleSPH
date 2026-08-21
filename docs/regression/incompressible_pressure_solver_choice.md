@@ -50,15 +50,100 @@ diagonal as a **symmetrizing congruence** (`d = 1/√|precond|`, solve
 
 Two consequences worth stating:
 
-- **The damped relaxed-Jacobi can diverge here.** The operator is not
-  diagonally dominant, so `I − ω D⁻¹ A` is not contractive at the production
-  `ω = 0.5` on these (un-relaxed / random-velocity) states. That is the
-  pre-existing behaviour of the default path, not something the Krylov change
-  introduced; the regression guard below pins it. On a fully relaxed, physical
-  state (the production TGV run) the Jacobi does converge.
+- **The damped relaxed-Jacobi can diverge here** — the fixed-ω update has a
+  hard stability window `ω < 2/ρ(D⁻¹A)`, measured `≈ 0.355` on this operator
+  family, so any ω above it (e.g. the dataclass default 0.5) diverges
+  regardless of the state. The full analysis, the measured μ, and the
+  implemented `relaxationMode: optimal` stabilization are in the section
+  below.
 - **BiCG's `Aᵀ` is not the issue.** Because the operator is symmetric, the
   self-adjoint placeholder `buildIISPHMatvecT` (`Aᵀ = A`) is *exact*. BiCG's
   residual weakness is the indefinite/gauge-mode spectrum, not the adjoint.
+
+## Relaxed Jacobi: the omega stability window and `relaxationMode: optimal`
+
+(2026-08-20 addendum) The relaxed-Jacobi default's sensitivity to
+`relaxationFactor` is now understood exactly. The update
+`p ← p + ω D⁻¹ r` has error-iteration matrix `I − ω D⁻¹ A`; because the
+operator is symmetric NSD with a gauge null space, `D⁻¹ A` is similar to the
+symmetric `|D|^(−1/2)(−A)|D|^(−1/2) ≥ 0`, so its spectrum lies in `[0, μ]`
+(gauge mode at 0) and the iteration is stable **iff** `0 < ω < 2/μ`, with
+`μ = ρ(D⁻¹ A)`.
+
+Measured on the dense operator (fp64, N=1024, `nx=32`): `μ ≈ 5.636` — the
+spectral top is a *degenerate high-frequency lattice cluster* (top five
+eigenvalues all ≈ 5.636), local in nature and essentially insensitive to
+smooth grid deformation (5.6364 uniform → 5.6369 after 0.5-cell TGV
+advection → 5.6379 after a full-cell advection; `nx=24`: 5.670), and
+`dt`-invariant (μ is a ratio, so the dt/dt² variants share it). The window
+is therefore `ω < 0.355` across the family: the dataclass default `ω=0.5`
+**always diverges** (residual → 1e15 in 60 steps), the scheme-builder
+default `ω=0.3` sits inside with ~15% margin, and **inside the window the
+fixed-ω performance is flat** (0.3 vs `1/μ` vs `0.8·2/μ`: within ~3% at
+every checkpoint) — there is no performance benefit to tuning ω, only the
+stability margin matters. (The operator depends on particle
+positions/densities, not velocities, so the felt "state dependence" is
+really grid deformation; the smooth deformations measured above barely move
+μ. Strongly deformed / free-surface states could push μ up and shrink the
+window below a configured ω — that is the residual risk for fixed mode.)
+
+Two stabilizations were evaluated:
+
+- **Power-iteration spectral estimate + fixed ω** — *rejected*. μ must be
+  estimated matrix-free (power iteration on the symmetric similar form), but
+  the degenerate top cluster makes the Rayleigh quotient converge slowly:
+  5 iterations underestimates μ by ~36% (→ ω = 0.44 → **divergence**),
+  10 by ~9%, 20 by ~1%. That is 8–60% extra matvecs on the 32–64-step
+  production budget for an estimate that is fatal when short and, when
+  good, only beats ω=0.3 by <2%. (This is also why the earlier
+  `modules/shifting/richardson.py` backtracking approach felt hacky: the
+  power-iteration seed is unreliable on this spectrum and the trial/halving
+  loop papered over it.)
+- **`relaxationMode: optimal`** — *implemented*. Each step uses the exact
+  1-D residual minimizer `ω_k = (r · A D⁻¹ r)/‖A D⁻¹ r‖²` in
+  `p ← p + ω_k D⁻¹ r`, advancing the residual by the exact recurrence
+  `r ← r − ω_k A D⁻¹ r` (re-verified against the true `b − A p` every 16
+  steps to bound fp32 drift). It costs the same single accel+shift pair per
+  step as a fixed step (`A(D⁻¹r)` replaces `A p`) — zero overhead — and the
+  residual decreases monotonically by construction: no stability window, no
+  tuning, no initialization. It works even with `relaxationFactor=0.5` set
+  (outside the fixed window); the measured `ω_k` (0.21 → 0.43 over the run)
+  even exceeds the fixed window edge 0.355 while still descending, because
+  it minimizes the true residual rather than the error. Measured (N=1024,
+  64 steps, zero start): final relative residual 4.8% vs 5.2% for in-window
+  fixed ω=0.3, monotone throughout. Opt-in:
+  `config.solverConfig.divergenceFreeSolver.relaxationMode = 'optimal'`
+  (YAML: `relaxationMode: optimal`); the default `fixed` keeps the
+  historical path byte-for-byte (the regression guard still pins it). It is
+  defined only for the divergenceFree (IISPH) solver — the constant-density
+  variant clamps pressures non-negative each step, which breaks the exact
+  residual recurrence (it raises `ValueError`).
+
+Practical guidance for the Jacobi path: keep `fixed` with
+`relaxationFactor` ≤ 0.3 (the builder default) for historical behaviour;
+use `optimal` whenever a state might push the window below the configured
+ω, or if ω is raised toward 0.5. For actually *solving* (rather than
+smoothing) the system the Krylov options above remain the right tool:
+Jacobi in either mode is a smoother — the smallest non-gauge eigenvalue of
+`D⁻¹A` is ~5e-8 (spread ~1e8), so no constant-ω Jacobi converges this
+system fast.
+
+Reproduce and extend these measurements with
+`scripts/probe_relaxedJacobiOmega.py`: it builds the same TGV start state
+as the unit tests, assembles the production operator densely, and sweeps
+kernel, support radius (neighbor count), dimension (2D/3D), and resolution
+(plus optional grid deformation), reporting the `D⁻¹A` spectrum (μ, window,
+gauge mode, spread, the degenerate top cluster, power-iteration estimates)
+and the fixed-ω / optimal convergence trajectories (tables + `--csv`).
+
+Dimension dependence (first sweep, 2026-08-21): the same n_h=4 in 3D means
+~4× more neighbors (422–515 vs 99 in 2D), and μ tracks that —
+Wendland2 μ=13.5–14.3, window **≈ 0.14–0.15** (vs 0.355 in 2D), so the
+builder default ω=0.3 *diverges* in 3D; across kernels the 3D windows are
+B7 0.330 (only one that covers ω=0.3), Wendland4 0.214, QuarticSpline 0.166,
+Wendland2 0.149. The window is roughly 40–55% of the 2D value at the same
+n_h for every kernel, and μ is again nearly resolution-independent
+(13.5 @ nx3=8 → 14.3 @ nx3=12).
 
 ## Per-method behaviour (divergence-free variant, N=1024, `‖b‖≈1.87`)
 
@@ -102,8 +187,11 @@ to an original-space floor reads as an instant false "breakdown" under this
 preconditioner, whose scale d ≈ 0.038 puts the whole transformed operator
 below the raw floor).
 
-Practical guidance today: keep `relaxedJacobi` as the default; for Krylov use
-`minres` (best residual per iteration, monotone, no divergence risk) — with
+Practical guidance today: keep `relaxedJacobi` as the default — with
+`relaxationMode: fixed` (historical behaviour; keep `relaxationFactor` ≤ 0.3,
+see the ω-window section above) or `relaxationMode: optimal` (window-free,
+monotone, same cost) — and for Krylov use `minres` (best residual per
+iteration, monotone, no divergence risk) — with
 `krylovFp64: true` for longer budgets; `bicgStab` with **`krylovFp64: true`**
 or `gmres` are the robust alternatives; `cg` (with `krylovFp64: true`) wins
 only when the budget is 1000+ iters and the tightest residual matters
@@ -121,6 +209,13 @@ an 8-iteration relaxed-Jacobi run on the seeded state (error sequence + pressure
 mean) and re-runs it to confirm determinism. Because the Krylov branch is only
 taken when `solverType != relaxedJacobi` (the default is `relaxedJacobi`), this
 pins that the historical path was not altered by adding the opt-in solvers.
+The optimal-step mode is pinned by
+`test_optimalStepJacobiMonotoneAndWindowFree` (monotone over a full 64-step
+budget with `relaxationFactor=0.5` set — outside the fixed window),
+`test_optimalStepAtLeastAsGoodAsInWindowFixed`, and
+`test_optimalStepRejectedForConstantDensitySolver`; the default stays `fixed`
+(`test_relaxationModeDefaultAndRoundTrip`), so the fingerprint above is
+unaffected.
 
 ## How to read / extend
 
@@ -131,6 +226,10 @@ pins that the historical path was not altered by adding the opt-in solvers.
   Set `krylovFp64: true` on the same sub-config to run the recurrence in fp64
   (matvec stays fp32) — recommended for `minres`/`bicgStab`/`cg` at budgets
   beyond a few hundred iters on this operator.
+- On the relaxed-Jacobi path, set
+  `relaxationMode: optimal` on the same sub-config for the window-free
+  per-step exact step (see the ω-window section above); `fixed` (default)
+  needs `relaxationFactor` kept below the window edge `2/ρ(D⁻¹A) ≈ 0.355`.
 - The operator probe is `test_operatorIsSymmetricNegativeSemiDefinite` (it
   assembles `A` densely on the small case via `_assembleA`); re-run it if the
   pressure operators (`pressure/iisph.py`, `incompressible/drift.py`) change,

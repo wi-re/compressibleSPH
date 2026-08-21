@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -35,12 +35,32 @@ class PressureSolverType(Enum):
     minres = 5          # minimum residual -- for this symmetric (not necessarily definite) operator
 
 
+class JacobiRelaxationMode(Enum):
+    """How the relaxed-Jacobi path chooses its per-step relaxation size
+    (only used when ``solverType`` is ``relaxedJacobi``).
+
+    The update is ``p <- p + omega * D^-1 * r`` with ``D = diag(A)``. Because
+    ``D^-1 A`` is similar to the symmetric ``|D|^-1/2 (-A) |D|^-1/2 >= 0``,
+    ``fixed`` converges iff ``omega < 2/rho(D^-1 A)`` -- a state-dependent
+    stability window (measured ~0.355 on the TGV operator family, so the
+    historical omega=0.5 default diverges and 0.3 sits inside with ~15%
+    margin). ``optimal`` removes the window entirely: each step uses the
+    exact residual minimizer ``omega_k = (r . A D^-1 r)/||A D^-1 r||^2``,
+    which costs the same single matvec as the fixed step and decreases the
+    residual monotonically for any starting size. See
+    ``docs/regression/incompressible_pressure_solver_choice.md``.
+    """
+    fixed = 0    # default: constant relaxationFactor (byte-identical history)
+    optimal = 1  # per-step exact residual-minimizing size (IISPH solver only)
+
+
 @dataclass
 class RelaxedJacobiSolverConfig:
     minIterations: int = field(default=1, metadata={"description": "Minimum number of iterations for the relaxed Jacobi solver"})
     maxIterations: int = field(default=10, metadata={"description": "Maximum number of iterations (used by both the relaxed-Jacobi and the Krylov paths)"})
     tolerance: float = field(default=1e-3, metadata={"description": "Tolerance for the relaxed Jacobi solver (mean |residual|; ignored by the Krylov paths)"})
-    relaxationFactor: float = field(default=0.5, metadata={"description": "Relaxation factor for the relaxed Jacobi solver (ignored by the Krylov paths)"})
+    relaxationFactor: float = field(default=0.5, metadata={"description": "Relaxation factor for the relaxed Jacobi solver (ignored by the Krylov paths and by relaxationMode='optimal')"})
+    relaxationMode: JacobiRelaxationMode = field(default=JacobiRelaxationMode.fixed, metadata={"description": "Relaxation mode for the relaxed-Jacobi path: fixed (constant relaxationFactor, byte-identical default) or optimal (per-step exact residual-minimizing step; same matvec count, monotonically decreasing residual, no stability window; divergenceFree/IISPH solver only)"})
     solverType: PressureSolverType = field(default=PressureSolverType.relaxedJacobi, metadata={"description": "Pressure solver: relaxedJacobi (default) or a Krylov method (cg/bicg/bicgStab/gmres/minres)"})
     rtol: float = field(default=1e-5, metadata={"description": "Relative residual tolerance for the Krylov solvers (converge when ||r|| < atol + rtol*||b||)"})
     atol: float = field(default=0.0, metadata={"description": "Absolute residual floor for the Krylov solvers (0 = relative tolerance only)"})

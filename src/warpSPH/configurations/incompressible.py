@@ -137,6 +137,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'maxIterations': config.solverConfig.pressureSolver.maxIterations,
                 'tolerance': config.solverConfig.pressureSolver.tolerance,
                 'relaxationFactor': config.solverConfig.pressureSolver.relaxationFactor,
+                'relaxationMode': config.solverConfig.pressureSolver.relaxationMode.name,
                 'solverType': config.solverConfig.pressureSolver.solverType.name,
                 'rtol': config.solverConfig.pressureSolver.rtol,
                 'atol': config.solverConfig.pressureSolver.atol,
@@ -148,6 +149,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'maxIterations': config.solverConfig.divergenceFreeSolver.maxIterations,
                 'tolerance': config.solverConfig.divergenceFreeSolver.tolerance,
                 'relaxationFactor': config.solverConfig.divergenceFreeSolver.relaxationFactor,
+                'relaxationMode': config.solverConfig.divergenceFreeSolver.relaxationMode.name,
                 'solverType': config.solverConfig.divergenceFreeSolver.solverType.name,
                 'rtol': config.solverConfig.divergenceFreeSolver.rtol,
                 'atol': config.solverConfig.divergenceFreeSolver.atol,
@@ -215,12 +217,17 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         v = d.get('solverType', PressureSolverType.relaxedJacobi)
         return PressureSolverType[v] if isinstance(v, str) else v
 
+    def _relaxationMode(d):
+        v = d.get('relaxationMode', JacobiRelaxationMode.fixed)
+        return JacobiRelaxationMode[v] if isinstance(v, str) else v
+
     config.solverConfig = IncompressibleSolverConfig(
         pressureSolver=RelaxedJacobiSolverConfig(
             minIterations=psDict.get('minIterations', buildDefaultPSConfig().minIterations),
             maxIterations=psDict.get('maxIterations', buildDefaultPSConfig().maxIterations),
             tolerance=psDict.get('tolerance', buildDefaultPSConfig().tolerance),
             relaxationFactor=psDict.get('relaxationFactor', buildDefaultPSConfig().relaxationFactor),
+            relaxationMode=_relaxationMode(psDict),
             solverType=_solverType(psDict),
             rtol=psDict.get('rtol', buildDefaultPSConfig().rtol),
             atol=psDict.get('atol', buildDefaultPSConfig().atol),
@@ -232,6 +239,7 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             maxIterations=dfDict.get('maxIterations', buildDefaultDFConfig().maxIterations),
             tolerance=dfDict.get('tolerance', buildDefaultDFConfig().tolerance),
             relaxationFactor=dfDict.get('relaxationFactor', buildDefaultDFConfig().relaxationFactor),
+            relaxationMode=_relaxationMode(dfDict),
             solverType=_solverType(dfDict),
             rtol=dfDict.get('rtol', buildDefaultDFConfig().rtol),
             atol=dfDict.get('atol', buildDefaultDFConfig().atol),

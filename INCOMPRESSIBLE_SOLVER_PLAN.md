@@ -56,6 +56,33 @@ verification against a dense-`lstsq` reference
 (`test_minresGivensMatchesDenseLstsq`). The full handoff spec remains in the
 deep-dive section below (historical). Test module is now 16 tests, all green.
 
+**Session-4 update (relaxed-Jacobi ω window).** The default path's
+sensitivity to `relaxationFactor` is pinned down exactly: the fixed-ω update
+`p ← p + ωD⁻¹r` is stable **iff** `ω < 2/ρ(D⁻¹A)`, and `D⁻¹A` is similar to
+the symmetric `|D|^(−1/2)(−A)|D|^(−1/2) ≥ 0` (NSD operator + gauge null
+space). Measured on the dense operator: `ρ ≈ 5.636` — a *degenerate
+high-frequency lattice cluster*, robust to smooth grid deformation (5.636 →
+5.638 across 0.5–1 cell advection) and `dt`-invariant — so the window is
+`ω < 0.355` across the family: the dataclass default 0.5 always diverges,
+the builder default 0.3 sits inside with ~15% margin, and fixed-ω
+performance is flat inside the window (only the margin matters). Landed: an
+opt-in `relaxationMode: optimal` (per-step exact residual minimizer
+`ω_k = (r·AD⁻¹r)/‖AD⁻¹r‖²`; zero extra matvec cost; monotonically decreasing
+residual — no window, no tuning, works even with ω=0.5 configured; default
+`fixed` stays byte-identical, regression guard still green). Rejected: the
+power-iteration spectral estimate (the degenerate top cluster makes 5 power
+iters underestimate ρ by ~36% → the derived ω diverges). Full evidence in
+"Relaxed Jacobi: the omega stability window" in
+`docs/regression/incompressible_pressure_solver_choice.md`; the analysis is
+reproducible/sweepable via `scripts/probe_relaxedJacobiOmega.py` (kernel,
+support radius/neighbor count, dimension, resolution, deformation →
+`D⁻¹A` spectrum + fixed-ω/optimal trajectories, CSV out). Test module is
+now 20 tests, all green. First 3D sweep (n_h=4): the same n_h means ~4×
+more neighbors, μ rises to 6.1–14.3 across kernels (2D: 3.2–5.7), and the
+window shrinks to 40–55% of the 2D value for every kernel (B7 0.330,
+Wendland4 0.214, QuarticSpline 0.166, Wendland2 0.149) — so ω=0.3 diverges
+in 3D for all but B7, and ω=0.5 everywhere.
+
 ## BiCGStab deep-dive (session 2)
 
 **Question.** BiCGStab (the recommended Krylov option) reached only ~1e-3
@@ -242,6 +269,19 @@ Design (decided — implement as specified):
   trap for any preconditioned symmetric Krylov method: the
   convergence/breakdown floor must live in the same space as the residual it
   is compared against.
+- **Relaxed-Jacobi ω window** (session 4): the `relaxationFactor` sensitivity
+  is a hard stability window `ω < 2/ρ(D⁻¹A)` with measured
+  `ρ ≈ 5.636` (degenerate high-frequency cluster — robust to smooth
+  deformation, dt-invariant), i.e. `ω < 0.355`: the dataclass default 0.5
+  diverges, the builder default 0.3 is inside. Fixed-ω performance is flat
+  inside the window, so only the margin matters; don't tune ω for
+  performance. `relaxationMode: optimal` (per-step exact residual minimizer,
+  zero extra matvecs, monotone) removes the window entirely. The
+  power-iteration spectral estimate was rejected — the degenerate top cluster
+  makes a short power run under-estimate ρ by ~36%, pushing the derived ω
+  out of the window; that is also why the `richardson.py` backtracking felt
+  hacky (unreliable seed, trial/halving compensating).
+
 - `/tmp` artifacts (ephemeral, safe to delete): `bicgstab_probe.py`,
   `minres_selftest.py`, `cg_debug.py`, `linearity_debug.py`,
   `bicgstab_probe.log`.

@@ -32,7 +32,7 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType
+from ...configurations import PressureSolverType, JacobiRelaxationMode
 from .krylov import solvePressureKrylov
 
 __all__ = ['solveIncompressible']
@@ -94,6 +94,13 @@ def solveIncompressible(
             return solvePressureKrylov(
                 particles, config, schemeConfig, adjacency, sourceTerm, dt**2,
                 psSolver, gauge='nonnegative', verbose=verbose)
+
+        if psSolver.relaxationMode is JacobiRelaxationMode.optimal:
+            raise ValueError(
+                "relaxationMode 'optimal' is only supported by the divergenceFree "
+                "(IISPH) solver: the constant-density solver clamps pressures to "
+                "non-negative each iteration, which breaks the exact residual "
+                "recurrence the optimal step relies on")
 
         alphas = dt**2 * computeAlpha(
                 currentState = particles,
