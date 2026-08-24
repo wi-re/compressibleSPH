@@ -161,6 +161,89 @@ def testCaseParamOverridesReachTheCase():
     assert not torch.equal(systemNoObs.state.c, systemObs.state.c)
 
 
+def testSmoothICsBuildsAndSmooths():
+    """`smoothICs=True` must build (regression: before the `kinds` fix it
+    crashed with `AttributeError: 'ParticleSet' object has no attribute
+    'kinds'` inside `smoothValuesWarp`) and the smoothing must actually
+    act -- the sharp source's initial u peak drops vs. the unsmoothed
+    build."""
+    _, plain, _ = buildWaveCase(nx=16)
+    _, smoothed, _ = buildWaveCase(nx=16, smoothICs=True)
+    uPlain = plain.state.u.abs().max().item()
+    uSmooth = smoothed.state.u.abs().max().item()
+    assert torch.isfinite(torch.tensor(uSmooth))
+    assert uSmooth < uPlain, f'smoothed peak {uSmooth} !< unsmoothed {uPlain}'
+
+
+def testScalingSetRendersFromSyntheticRecords(tmp_path):
+    """The post-hoc scaling graph set must render end-to-end from a plain
+    record list (no GPU, no case build): one PNG per panel, the overview
+    grid, and a `scaling.md` carrying the fitted exponent table."""
+    from benchmarks.common import scaling
+
+    def perfRecords():
+        out = []
+        for key, label, f, base in [('euler', 'Euler (forward)', 1, 0.5),
+                                    ('rk4', 'RK4', 4, 1.5),
+                                    ('jfnk', 'SDIRK2 + JFNK(jvp)', 70, 40.0)]:
+            for N in (1024, 4096, 16384):
+                step = base * (N / 1024) ** 0.9
+                out.append({'key': key, 'label': label, 'nParticles': N,
+                            'msPerStep': step, 'msPerRhs': step / f,
+                            'fEvalsPerStep': f,
+                            'peakAllocatedMB': 10 * (N / 1024) ** 0.9,
+                            'staticStateMB': 0.5 * (N / 1024),
+                            'buildSeconds': 0.05})
+        return out
+
+    def accRecords():
+        out = []
+        for key, label, p in [('euler', 'Euler (forward)', 1.0), ('rk4', 'RK4', 4.0)]:
+            for i, dt in enumerate((0.1, 0.05, 0.025)):
+                err = 2.0 * dt ** p
+                out.append({'key': key, 'label': label, 'dt': dt,
+                            'msPerStep': 1.0 + i,
+                            'extra': {'dt': dt, 'errU': err, 'errV': err / 2,
+                                      'estOrder': None if i == 0 else p,
+                                      'energyDrift': 1e-3, 'nSteps': 10}})
+        return out
+
+    def stabRecords():
+        out = []
+        for key, label in [('euler', 'Euler (forward)'), ('jfnk', 'BE + JFNK(jvp)')]:
+            for m in (1, 2, 4, 8):
+                diverged = key == 'euler' and m >= 8
+                out.append({'key': key, 'label': label,
+                            'extra': {'mult': m, 'dt': 0.025 * m, 'bounded': not diverged},
+                            'uMax0': 1.0,
+                            'uMaxPeak': 1e6 if diverged else 2.0 * m ** (0.3 if key == 'euler' else -0.5),
+                            'diverged': diverged,
+                            'msPerStep': 1.0 + (0.2 * m if key == 'jfnk' else 0.0),
+                            'itersMean': 16.0 if key == 'jfnk' else None,
+                            'convergedSolves': 0,
+                            'solves': 10 if key == 'jfnk' else 0})
+        return out
+
+    for suite, recs in (('performance', perfRecords()),
+                        ('accuracy', accRecords()),
+                        ('stability', stabRecords())):
+        names = scaling.plotScalingSet(
+            recs, suite, tmp_path / suite, f'test {suite}',
+            boundedFactor=10.0 if suite == 'stability' else None)
+        expected = [f'scaling_{pid}.png' for pid, _, _, _ in scaling.PANELS[suite]]
+        expected.append('scaling_overview.png')
+        assert names == expected, (suite, names)
+        for n in expected:
+            f = tmp_path / suite / n
+            assert f.is_file() and f.stat().st_size > 0, (suite, n)
+        md = (tmp_path / suite / 'scaling.md').read_text()
+        assert '## Scaling exponents' in md
+        # the synthetic err = 2*dt^p must come back as fitted slope ~p
+        # (RK4 p=4.0 in the error_u / error_v columns)
+        if suite == 'accuracy':
+            assert ' 4.00 ' in md, md
+
+
 def testPerformanceRecordFields(case):
     """The fields the performance suite reports must be populated and
     self-consistent for a plain run."""

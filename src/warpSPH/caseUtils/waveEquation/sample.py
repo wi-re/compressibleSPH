@@ -20,13 +20,22 @@ __all__ = ['smoothValuesWarp', 'smoothState', 'addNoise', 'populateCGrid',
 
 def smoothValuesWarp(quantity, particleState, nIters, neighbors, config):
     sampled  = quantity.clone()
+    # `particleState` may be a bare `ParticleSet` (a sampled region carries
+    # only positions/supports/masses/densities) -- the wave case's build path
+    # passes the `sampleParticles` result straight through -- while
+    # `sphOperation_warp` requires kinds. The wave states this case builds
+    # are homogeneous (all kind 0; see `finalizeWaveSystemSetup`), so fall
+    # back to zeros when the field is absent.
+    kinds = getattr(particleState, 'kinds', None)
+    if kinds is None:
+        kinds = torch.zeros(quantity.shape[0], device=quantity.device, dtype=torch.int32)
     for _ in range(nIters):
         sampled = sphOperation_warp(
             queryPositions=particleState.positions, referencePositions=particleState.positions,
             querySupports=particleState.supports, referenceSupports=particleState.supports,
             queryMasses=particleState.masses, referenceMasses=particleState.masses,
             queryDensities = particleState.densities, referenceDensities = particleState.densities,
-            queryKinds = particleState.kinds, referenceKinds = particleState.kinds,
+            queryKinds = kinds, referenceKinds = kinds,
             queryValues = sampled, referenceValues = sampled,
             kernel = KernelFunctions.Wendland2,
             adjacency= neighbors, domain = config.domain,

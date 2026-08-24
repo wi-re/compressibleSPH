@@ -63,10 +63,12 @@ benchmarks/
     runner.py    # buildWaveCase + runScheme: the instrumented step loop
     metrics.py   # relL2, effectiveOrder, loglogFit, fmt
     report.py    # results.json / summary.md / PNG (Agg backend, headless-safe)
+    scaling.py   # post-hoc scaling graph set from stored results.json
   wave/
     bench_accuracy.py    # dt-refinement sweep vs. a converged reference
     bench_performance.py # particle-count sweep: time, memory, scaling
     bench_stability.py   # dt-multiplier sweep past the explicit limit
+    bench_plots.py       # render the scaling graph set from stored run outputs
   results/               # timestamped output
 tests/test_bench_wave.py # small smoke + consistency tests for the machinery
 ```
@@ -187,6 +189,31 @@ blows up, 0.1 stays bounded). `bounded` = finite and peak max|u| ≤
 runs away is `unbounded`, not `diverged`. Implicit schemes report the same
 plus the internal-solver record — the table that answers "which solver
 settings survive, and at what iteration cost".
+
+## Scaling graph sets from stored outputs (`bench_plots.py`)
+
+Each suite's `--plot` writes one summary PNG next to its tables. For the
+scaling questions the suites exist to answer — *how does each quantity
+scale, and how do the schemes compare on it* — `bench_plots.py` turns any
+stored run output into a full set of graphs, without re-running anything
+(no GPU needed, it only reads the JSON):
+
+```sh
+python -m benchmarks.wave.bench_plots /path/to/run_dir        # or its results.json
+python -m benchmarks.wave.bench_plots runA runB --out /tmp/p  # overlay two runs
+```
+
+The x-axis is whatever that suite swept (particle count / dt / dt
+multiplier) and each panel is one quantity with one curve per scheme —
+plus a combined overview grid and a `scaling.md` index carrying the input
+provenance and the fitted log-log scaling exponents per scheme per
+quantity (the numbers behind the curves). The panel set per suite lives in
+`common/scaling.py` (`PANELS`): performance gets ms/step, ms/RHS, f/step,
+peak + static memory, build time; accuracy gets the error curves, measured
+order, energy drift, and cost; stability gets the boundedness envelope,
+cost, internal-solver iterations, and the converged fraction. Overlaying
+several runs tags each run's curves in the legends, which is also how you
+check run-to-run reproducibility visually.
 
 ## Extending to another case
 

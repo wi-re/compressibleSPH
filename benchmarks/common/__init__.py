@@ -17,6 +17,7 @@ from .schemes import (
 from .runner import RunRecord, RecordingSolver, buildWaveCase, runScheme
 from .metrics import relL2, effectiveOrder, loglogFit, fmt
 from . import report
+from . import scaling
 
 __all__ = [
     'MULTISTEP_SCHEMES', 'SchemeSpec', 'SCHEMES',
@@ -25,5 +26,5 @@ __all__ = [
     'getScheme', 'getSchemes',
     'RunRecord', 'RecordingSolver', 'buildWaveCase', 'runScheme',
     'relL2', 'effectiveOrder', 'loglogFit', 'fmt',
-    'report',
+    'report', 'scaling',
 ]
