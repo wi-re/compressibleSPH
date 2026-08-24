@@ -244,3 +244,136 @@ def test_implicitStandingWaveErrorShrinksWithResolution():
         f'errors {errors} did not shrink monotonically with resolution')
     assert errors[-1] < 0.5 * errors[0], (
         f'error only went from {errors[0]:.3e} to {errors[-1]:.3e} over resolutions {resolutions}')
+
+
+# --- JFNK_PLAN.md Phase A6: the generic warpSPHIntegrators JFNK solver, -----
+# validated against this module's own hand-rolled CG reference. -------------
+
+from warpSPHIntegrators import (
+    FixedPointSolver, JFNKSolver, get_reference_state, getIntegrator,
+)
+from warpSPHIntegrators.dirk import DIRK, getDIRKTableau
+from warpSPHIntegrators.fields import flatten_integrated
+from warpSPHIntegrators.jfnk import fd_matvec, gmres, jvp_matvec
+from warpSPHIntegrators.util import updateStateEuler, updateStep
+
+
+def _backwardEulerStageStepFn(system: WaveSystemv3, dt: float, config, schemeConfig: WaveEquationConfig):
+    """The same stage map `dirk.py`'s `DIRK` builds internally for backward
+    Euler's one implicit stage (`a_ii = 1`): `Y -> y0 + dt * f(Y)`. Used here to
+    drive `fd_matvec`/`jvp_matvec`/`gmres` directly, for the iteration-count
+    comparison below -- `JFNKSolver` itself only reports outer Newton
+    iterations, not GMRES's own per-solve count.
+    """
+    y0 = system.initializeNewState()
+    y0.t = float(system.t) + dt
+
+    def step_fn(Y):
+        Y.t = y0.t
+        k, r = updateStep(system, Y, dt, f_wave_equation, config, schemeConfig)
+        return updateStateEuler(y0, k, dt, copyState=True)
+
+    return y0, step_fn
+
+
+# --- Step 4: `getIntegrator('Backward Euler (implicit)')` + JFNKSolver -----
+# reproduces the hand-eliminated CG reference, for both matvec modes. -------
+
+@pytest.mark.parametrize('matvec', ['fd', 'jvp'])
+def test_jfnkThroughGenericDIRKAgreesWithHandRolledCG(matvec):
+    """`implicitBackwardEulerStep` solves the hand-eliminated `N`-dimensional
+    equation for `u` alone; `getIntegrator(...)` + `JFNKSolver` solves the full
+    `2N`-dimensional coupled `(u, v)` stage system a generic driver has to use,
+    since it has no way to know the problem-specific algebraic elimination is
+    available. Both solve for the same fixed point, so they should agree to
+    solver tolerance -- that agreement is itself most of the point of this
+    check (JFNK_PLAN.md A6).
+    """
+    dt = 0.01
+    cgSystem, config, _k = _buildStandingWaveSystem(nx=32, dim=1)
+    schemeConfig = WaveEquationConfig()
+    cgResult = implicitBackwardEulerStep(cgSystem, dt, config, schemeConfig, tol=1e-10)
+
+    jfnkSystem, _config2, _k2 = _buildStandingWaveSystem(nx=32, dim=1)
+    scheme = getIntegrator('Backward Euler (implicit)')
+    solver = JFNKSolver(matvec=matvec, tol=1e-10, max_iterations=15)
+    result = scheme(jfnkSystem, dt, f_wave_equation, config, schemeConfig, solver=solver)
+    jfnkState = get_reference_state(result.state)
+
+    torch.testing.assert_close(jfnkState.u, cgResult.state.u, rtol=1e-4, atol=1e-5)
+    torch.testing.assert_close(jfnkState.v, cgResult.state.v, rtol=1e-4, atol=1e-5)
+
+
+# --- Step 5: JFNK must succeed somewhere Picard measurably fails, mirroring
+# test_dirk.py::test_picard_diverges_on_a_stiff_problem_regardless_of_tableau_stability,
+# but driven by the wave equation's own stiffness (dt*omega ~ dt*c/h growing
+# with dt here) rather than a tunable k. ------------------------------------
+
+def test_picardDivergesWhereJFNKStaysBoundedOnAStiffStep():
+    dt = 2.0  # far past the CFL-scaled dt (~0.006 at nx=32) this case normally uses
+    schemeConfig = WaveEquationConfig()
+    scheme = getIntegrator('Backward Euler (implicit)')
+
+    picardSystem, config, _k = _buildStandingWaveSystem(nx=32, dim=1)
+    picardResult = scheme(picardSystem, dt, f_wave_equation, config, schemeConfig,
+                          solver=FixedPointSolver(iterations=20))
+    picardMax = get_reference_state(picardResult.state).u.abs().max().item()
+    assert picardMax > 1e10, (
+        f'expected Picard(20) to have blown up at this stiffness, got max|u|={picardMax:.3e}'
+    )
+
+    for matvec in ('fd', 'jvp'):
+        jfnkSystem, config2, _k2 = _buildStandingWaveSystem(nx=32, dim=1)
+        solver = JFNKSolver(matvec=matvec, tol=1e-8, max_iterations=15)
+        result = scheme(jfnkSystem, dt, f_wave_equation, config2, schemeConfig, solver=solver)
+        jfnkMax = get_reference_state(result.state).u.abs().max().item()
+        # L-stable backward Euler damps hard at this stiffness; the initial
+        # standing-wave amplitude is 1, so a converged solve should be small,
+        # not just "not astronomical".
+        assert jfnkMax < 1.0, f'JFNK({matvec}) should be damped well below the initial amplitude, got {jfnkMax:.3e}'
+
+
+# --- Step 6: exact-JVP vs FD matvec -- agreement AND the concrete payoff ---
+# (fewer Krylov iterations, no eps to tune), not just agreement. ------------
+
+def test_exactJVPMatvecAgreesWithFDAndUsesNoMoreGMRESIterations():
+    dt = 0.01
+    system, config, _k = _buildStandingWaveSystem(nx=32, dim=1)
+    schemeConfig = WaveEquationConfig()
+    y0, step_fn = _backwardEulerStageStepFn(system, dt, config, schemeConfig)
+
+    y_flat = flatten_integrated(y0)
+    G_y = y_flat - flatten_integrated(step_fn(y0))
+
+    mv_fd = fd_matvec(step_fn, y0, y_flat, G_y)
+    mv_jvp = jvp_matvec(step_fn, y0)
+
+    torch.manual_seed(0)
+    v = torch.randn_like(y_flat)
+    jv_fd, jv_jvp = mv_fd(v), mv_jvp(v)
+    # FD's own truncation tolerance -- not exact agreement, per JFNK_PLAN.md A6.
+    torch.testing.assert_close(jv_fd, jv_jvp, rtol=1e-3, atol=1e-4)
+
+    _delta_fd, iters_fd = gmres(mv_fd, -G_y, tol=1e-8, maxiter=y_flat.numel())
+    _delta_jvp, iters_jvp = gmres(mv_jvp, -G_y, tol=1e-8, maxiter=y_flat.numel())
+    assert iters_jvp <= iters_fd, (
+        f'expected the exact matvec to need no more Krylov iterations than FD, '
+        f'got jvp={iters_jvp}, fd={iters_fd}'
+    )
+
+
+# --- Cheap bonus: the driver is generic, so JFNK works on other DIRK -------
+# tableaus too, for free. ----------------------------------------------------
+
+@pytest.mark.parametrize('schemeName', ['Implicit Midpoint', 'SDIRK2'])
+@pytest.mark.parametrize('matvec', ['fd', 'jvp'])
+def test_jfnkWorksWithOtherDIRKTableausOnTheWaveEquation(schemeName, matvec):
+    dt = 0.01
+    system, config, _k = _buildStandingWaveSystem(nx=32, dim=1)
+    schemeConfig = WaveEquationConfig()
+    scheme = getIntegrator(schemeName)
+    solver = JFNKSolver(matvec=matvec, tol=1e-8, max_iterations=15)
+    result = scheme(system, dt, f_wave_equation, config, schemeConfig, solver=solver)
+    st = get_reference_state(result.state)
+    assert torch.isfinite(st.u).all() and torch.isfinite(st.v).all()
+    assert st.u.abs().max().item() < 2.0  # bounded, no blow-up
