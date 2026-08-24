@@ -216,3 +216,6 @@ datagen/weaklyCompressible/sweeps/
 /log.txt
 
 memory_snapshot.json
+
+# Benchmark suite output: timestamped per-run results (JSON + PNG), not curated.
+results/
