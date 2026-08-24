@@ -10,20 +10,51 @@ flaky, and that Phase 4's own comparison tests only pass because
 `implicitRelaxation`'s heavy outer damping smooths over individual bad inner
 solves -- not because the inner Newton solve actually converges. A jitter
 sweep (`--jitters 0,0.005,0.01,0.02,0.03,0.05,0.07,0.1,0.15,0.2`, the
-default) narrows this to an ill-posedness effect, not noise: the Newton step
+default) narrowed this to an ill-posedness effect, not noise: the Newton step
 linearizes `grad C = 0` at a *frozen* adjacency, but finding the equilibrium
 distribution is a genuinely global problem where a particle's true
 connectivity changes as it moves -- so the further the current state is from
-equilibrium, the worse a local model the frozen matvec/RHS is. At `jitter=0`
-the solve is trivial; by `jitter=0.01` it already hits the divergence
-threshold almost immediately, with the *unconverged* residual growing
-monotonically with jitter from there. Every existing test uses `jitter=0.1`,
-squarely in that regime. (This was originally a silent gap: a bailed-out
-`xk` got used exactly as if it had converged. It is now closed by the opt-in
-fallback chain in `solverDriver.solveImplicitSystem` -- enabled by
-`shiftProperties.implicitFallback` or `ShiftingScheme.dynamic`, default
-`none` keeps the historical behavior. This harness still reports the raw
-solver status directly, *bypassing* that fallback, for diagnosis.)
+equilibrium, the worse a local model the frozen matvec/RHS is.
+
+**This finding is specific to `ShiftingImplicitOperator.exactHessian`, not
+the shipped default.** This script was added (commit `664cee9`) *before* the
+very next commit (`61f783e`, same day) introduced `ShiftingImplicitOperator`
+and flipped the default to `legacyPairwise` -- precisely *because*
+`exactHessian`'s diagonal is configuration-dependent and unbounded, which is
+what produces the divergence described below (see
+`implicitShifting.py`'s module docstring and
+`docs/regression/implicit_shifting_operator_choice.md`). This script builds
+its system from `schemeConfig.shiftProperties.implicitOperator`
+(`--operator`, default `legacyPairwise` to match production), so **running
+it with the default settings does *not* reproduce the divergence this
+docstring describes** -- pass `--operator exactHessian` for that. Verified
+2026-08-24: on the default `legacyPairwise` operator, the same jitter sweep
+(nx=16, 2D, seeds 1234/1/42) converges cleanly at every jitter through 0.2
+(`rel_resid` ~5e-5 to 9e-5, under the `1e-4` target) with only `jitter=0`
+itself hitting `rho-breakdown` (`|b|` is ~1e-6 there, an exact-lattice
+degeneracy, not the ill-posedness this docstring is about). With
+`--operator exactHessian`, the same sweep reproduces the description below
+almost exactly: `rho-breakdown` by `jitter=0.01` (`rel_resid` ~8e-3, two
+orders of magnitude over target) and `threshold-bailout` with `max|xk|/dx`
+up to ~9.6 (a genuine blow-up, not merely slow convergence) from
+`jitter=0.02` on.
+
+At `jitter=0` the solve is trivial; by `jitter=0.01` it already hits the
+divergence threshold almost immediately, with the *unconverged* residual
+growing monotonically with jitter from there. Every existing test uses
+`jitter=0.1`, squarely in that regime -- **for `exactHessian`**; the
+production-default `legacyPairwise` tests
+(`test_implicitShiftingConvergesFromFullyRandomPositions`) pass because the
+default operator itself converges there, not because outer damping is
+covering for a non-converged inner solve (see that test's own docstring,
+which states this directly: `exactHessian`'s instability on far-from-
+equilibrium starts is "the known, documented, accepted tradeoff, not a
+regression to guard"). (This was originally also a silent gap on top of the
+above: a bailed-out `xk` got used exactly as if it had converged. It is now
+closed by the opt-in fallback chain in `solverDriver.solveImplicitSystem` --
+enabled by `shiftProperties.implicitFallback` or `ShiftingScheme.dynamic`,
+default `none` keeps the historical behavior. This harness still reports the
+raw solver status directly, *bypassing* that fallback, for diagnosis.)
 
 **What this script does, concretely.** For each jitter level: builds a
 jittered Cartesian lattice, assembles the exact same linear system
@@ -73,6 +104,7 @@ from warp.types import matrix
 from warpSPH.utils import buildDomainDescription
 from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.configurations.weaklyCompressible import WeaklyCompressibleSPHConfig
+from warpSPH.configurations.moduleConfigurations.shifting import ShiftingImplicitOperator
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.density import computeDensities
 from warpSPH.modules.shifting.implicitShifting import _multiplyLaplacianBlock, _buildSystem, _buildDiagBlock
@@ -240,13 +272,18 @@ def main():
     ap.add_argument('--restart', type=int, default=30, help='GMRES restart length m (only used with --solver gmres/both)')
     ap.add_argument('--compare-preconditioners', action='store_true', help='also solve with a diffSPH-style self-Hessian-only Jacobi diagonal and with no preconditioner')
     ap.add_argument('--compare-automatic', action='store_true', help='also check warpOperationHVP\'s matvec against the hand-built one on the same system')
+    ap.add_argument('--operator', type=str, default='legacyPairwise', choices=['legacyPairwise', 'exactHessian'],
+                    help='which ShiftingImplicitOperator to assemble (default legacyPairwise, matching production; '
+                         'the jitter>=0.01 divergence this script documents is an exactHessian-specific finding -- '
+                         'pass --operator exactHessian to reproduce it)')
     args = ap.parse_args()
 
     device = torch.device(args.device if (args.device == 'cpu' or torch.cuda.is_available()) else 'cpu')
     jitters = [float(j) for j in args.jitters.split(',') if j.strip() != '']
+    operator = ShiftingImplicitOperator[args.operator]
 
     for nx in args.nx:
-        print(f"\n{'=' * 90}\nnx={nx}  dim={args.dim}  L={args.L}  device={device}\n{'=' * 90}")
+        print(f"\n{'=' * 90}\nnx={nx}  dim={args.dim}  L={args.L}  device={device}  operator={args.operator}\n{'=' * 90}")
         header = f"{'solver':>10s} {'jitter':>8s} {'status':>18s} {'rel_resid':>11s} {'raw_resid':>11s} {'|b|':>10s} {'max|xk|/dx':>10s} {'thresh/dx':>10s}"
         print(header)
 
@@ -258,6 +295,7 @@ def main():
             schemeConfig = WeaklyCompressibleSPHConfig()
             schemeConfig.shiftProperties.active = True
             schemeConfig.surfaceDetectionConfig.active = False
+            schemeConfig.shiftProperties.implicitOperator = operator
 
             sys = buildSystem(state, config, domain, schemeConfig)
             maxiter = args.maxiter or schemeConfig.shiftProperties.implicitMaxSolverIter
@@ -306,9 +344,10 @@ def main():
     print("  raw_resid is this harness's own ||b - A xk|| recompute")
     print("  (independent of the solvers' convergence lists; both solvers now append")
     print("  that same value as their final history entry on every return). Watch")
-    print("  rel_resid: production tolerances target ~1e-4 relative: at jitter=0.1")
-    print("  (what every existing test uses) rel_resid is typically 2-3 orders of")
-    print("  magnitude above that.")
+    print("  rel_resid: production tolerances target ~1e-4 relative. With the default")
+    print("  --operator legacyPairwise (production default) rel_resid stays near or")
+    print("  under that target through jitter=0.2. With --operator exactHessian,")
+    print("  rel_resid at jitter=0.1 is typically 2-3 orders of magnitude above it.")
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ from warpSPH.configurations.simulationConfig import buildConfig
 from warpSPH.sample.regular import sampleRegularParticles
 from warpSPH.modules.shifting.wp_implicitShifting import computeShiftingPairTerms
 from warpSPH.math import scatter_sum
-from warpSPHCore import ParticleState, SupportScheme, buildVerletList, warpOperationJVP, OperationProperties
+from warpSPHCore import ParticleState, ParticleTangentState, SupportScheme, buildVerletList, warpOperationJVP, OperationProperties
 from warpSPHCore.enumTypes import WarpOperation, OperationDirection
 
 
@@ -79,12 +79,14 @@ def test_densityPositionJVP_matches_implicitShiftings_ownGradient():
     props = OperationProperties(kernel=config.kernel, operation=WarpOperation.Density,
                                 supportMode=SupportScheme.Gather, operationMode=OperationDirection.AllToAll)
 
+    zeroSupports = torch.zeros(n, device=device, dtype=dtype)
     columns = []
     for d in range(dim):
         basis = torch.zeros(n, dim, device=device, dtype=dtype)
         basis[:, d] = 1.0
         columns.append(warpOperationJVP(omegaState, props, domain, adjacency=adjacency,
-                                        tangentQueryPositions=basis))
+                                        queryTangentState=ParticleTangentState(
+                                            positions=basis, supports=zeroSupports, masses=None)))
     JwAutomatic = torch.stack(columns, dim=1)
 
     torch.testing.assert_close(JwAutomatic, JwReference, rtol=1e-5, atol=1e-6)

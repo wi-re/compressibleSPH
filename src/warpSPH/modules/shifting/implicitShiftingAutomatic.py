@@ -28,7 +28,7 @@ a numerical-safety measure -- see `wp_densityHVP.py`'s docstring
 from typing import Any, Optional, Tuple
 import torch
 from torch.profiler import record_function
-from warpSPHCore import ParticleState, SupportScheme, OperationProperties, warpOperationJVP, warpOperationHVP
+from warpSPHCore import ParticleState, ParticleTangentState, SupportScheme, OperationProperties, warpOperationJVP, warpOperationHVP
 from warpSPHCore.enumTypes import WarpOperation, OperationDirection
 
 from warpSPH.configurations.simulationConfig import SimulationConfig
@@ -72,12 +72,22 @@ def computeImplicitShiftAutomatic(
                                     supportMode=SupportScheme.Gather, operationMode=OperationDirection.AllToAll)
 
         zero = torch.zeros(numParticles, dim, device=device, dtype=dtype)
+        zeroSupports = torch.zeros(numParticles, device=device, dtype=dtype)
         basisVectors = torch.eye(dim, device=device, dtype=dtype)
 
         # grad C -- Phase 4 step 2: one warpOperationJVP call per coordinate.
+        # warpOperationJVP's geometry-tangent path takes a bundled
+        # ParticleTangentState (positions/supports/masses) rather than the
+        # loose tangentQueryPositions/tangentReferencePositions kwargs this
+        # call used before the Tier-2 correction-JVP work replaced them
+        # (warpier_tier2_correction_jvp_plan.md phase a1); a zero supports
+        # tangent and masses=None isolate the pure position-JVP this needs,
+        # matching the rest of this codebase's own gradcheck scripts.
         Jw = torch.stack([
             warpOperationJVP(omegaState, props, domain, adjacency=adjacency,
-                             tangentQueryPositions=basisVectors[d].expand(numParticles, dim))
+                             queryTangentState=ParticleTangentState(
+                                 positions=basisVectors[d].expand(numParticles, dim),
+                                 supports=zeroSupports, masses=None))
             for d in range(dim)
         ], dim=1)
         B = Jw.flatten().clone()
