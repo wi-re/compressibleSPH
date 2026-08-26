@@ -139,11 +139,21 @@ def solvePressureKrylov(
     restart = solverCfg.restart
 
     # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns (see
-    # `BoundaryPressureMode`'s docstring): the operator is wrapped so every
-    # matvec sees (and returns) 0 at boundary rows, decoupling them from the
-    # Krylov iteration entirely -- a no-op when there are no boundary
-    # particles (`fluidMask` all-True).
+    # `BoundaryPressureMode`'s docstring): the operator is wrapped so every matvec
+    # sees (and returns) 0 at boundary rows, restricting the Krylov iterate `x` to
+    # the fluid subspace -- the standard Dirichlet-lifting trick for an
+    # inhomogeneous boundary value in an iterative solve. Boundary pressure is
+    # frozen at its incoming `particles.pressures` value (0 under `plain`, the
+    # mDBC-extrapolated/-projected value otherwise), folded into the RHS as the
+    # `A_fb p_b` correction (`boundaryCorrection` below) rather than left inside the
+    # matvec/iterate, since a generic Krylov method needs a fixed linear operator on
+    # a fixed unknown subspace -- unlike the relaxed-Jacobi solvers in
+    # `divergenceFree.py`/`incompressible.py`, which can just bake the frozen value
+    # into the pressure field their SPH neighbor sums read directly. A no-op when
+    # there are no boundary particles (`fluidMask` all-True, `boundaryCorrection`
+    # all-0).
     fluidMask = particles.kinds == 0
+    boundaryPressure = particles.pressures.clone()
     _rawMatvec = buildIISPHMatvec(particles, config, schemeConfig, adjacency, dt_scale)
 
     def matvec(p):
@@ -151,7 +161,9 @@ def solvePressureKrylov(
         out = _rawMatvec(p)
         return torch.where(fluidMask, out, torch.zeros_like(out))
 
-    b = torch.where(fluidMask, sourceTerm, torch.zeros_like(sourceTerm))
+    boundaryOnly = torch.where(fluidMask, torch.zeros_like(boundaryPressure), boundaryPressure)
+    boundaryCorrection = _rawMatvec(boundaryOnly)
+    b = torch.where(fluidMask, sourceTerm - boundaryCorrection, torch.zeros_like(sourceTerm))
     precond = buildIISPHPrecond(particles, config, schemeConfig, adjacency, dt_scale)
     if x0 is None:
         x0 = particles.pressures.clone() if particles.pressures is not None else None
@@ -238,14 +250,17 @@ def solvePressureKrylov(
 
     # Gauge fix (the pressure is defined up to an additive constant),
     # excluding boundary rows from the centering mean, then re-pinning them
-    # to 0 (the sign-flip branches above may have left tiny fp noise there).
+    # to their frozen `boundaryPressure` (the sign-flip branches above, and the
+    # nonnegative clamp, may have left tiny fp noise or an incorrect clamp there
+    # since `x` at boundary rows should already be ~0 by construction of
+    # `matvec`/`b` above).
     if gauge == 'center':
         x = x - x[fluidMask].mean()
     elif gauge == 'nonnegative':
         x = torch.clamp(x, min=0.0)
     elif gauge is not None:
         raise ValueError(f'Unknown gauge fix: {gauge!r}')
-    x = torch.where(fluidMask, x, torch.zeros_like(x))
+    x = torch.where(fluidMask, x, boundaryPressure)
 
     a_p = computePressureAccelIISPH(
         state=particles, pressureValues=x, config=config,

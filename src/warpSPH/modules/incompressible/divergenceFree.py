@@ -90,15 +90,23 @@ def _solveDivergenceFreeOptimal(
         maxIters = dfSolver.maxIterations
         threshold = dfSolver.tolerance
 
-        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns: their
-        # pressure is held fixed at 0 for the duration of the solve (see
-        # `BoundaryPressureMode`'s docstring), excluded from the gauge mean,
-        # and their `a_p` is zeroed post-solve. A no-op when there are no
-        # boundary particles (`fluidMask` all-True).
+        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns:
+        # their pressure is held fixed at its incoming `particles.pressures` value
+        # (0 under `plain`, the mDBC-extrapolated/-projected value otherwise -- see
+        # `BoundaryPressureMode`'s docstring) for the duration of the solve, excluded
+        # from the gauge mean, and their `a_p` is zeroed post-solve. Freezing at the
+        # incoming value (not literal 0) matters for `mdbcMlsPressure`: that fixed
+        # value is exactly what lets boundary particles source a pressure force onto
+        # fluid neighbors through the ordinary SPH neighbor sum inside
+        # `computePressureAccelIISPH`/`computePressureShiftIISPH` below -- no separate
+        # RHS correction needed, since those sums already run over all neighbors
+        # regardless of `kind`. A no-op when there are no boundary particles
+        # (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
+        boundaryPressure = particles.pressures.clone()
 
         pressureA = particles.pressures.clone() * 0.75
-        pressureB = torch.where(fluidMask, pressureA, torch.zeros_like(pressureA))
+        pressureB = torch.where(fluidMask, pressureA, boundaryPressure)
         pressureA = pressureB.clone()
 
         errors = []
@@ -151,7 +159,7 @@ def _solveDivergenceFreeOptimal(
                 pressureA = pressureB.clone()
                 pressureB = pressureA + omega_k * u
                 pressureB = pressureB - pressureB[fluidMask].mean()  # Fix the pressure gauge without altering the RHS
-                pressureB = torch.where(fluidMask, pressureB, torch.zeros_like(pressureB))
+                pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
                 residual = residual - omega_k * q
                 if (i + 1) % 16 == 0:
                         residual = sourceTerm - op(pressureB)  # bound fp32 recurrence drift
@@ -251,15 +259,19 @@ def solveDivergenceFree(
                 particles, config, schemeConfig, adjacency, sourceTerm, alphas, dt,
                 dfSolver, verbose=verbose)
 
-        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns: their
-        # pressure is held fixed at 0 for the duration of the solve (see
-        # `BoundaryPressureMode`'s docstring), excluded from the gauge mean,
-        # and their `a_p` is zeroed post-solve. A no-op when there are no
-        # boundary particles (`fluidMask` all-True).
+        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns:
+        # their pressure is held fixed at its incoming `particles.pressures` value
+        # (0 under `plain`, the mDBC-extrapolated/-projected value otherwise -- see
+        # `BoundaryPressureMode`'s docstring and `_solveDivergenceFreeOptimal`'s own
+        # copy of this comment above for why freezing at the incoming value, not
+        # literal 0, matters), excluded from the gauge mean, and their `a_p` is
+        # zeroed post-solve. A no-op when there are no boundary particles
+        # (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
+        boundaryPressure = particles.pressures.clone()
 
         pressureA = particles.pressures.clone() * 0.75
-        pressureA = torch.where(fluidMask, pressureA, torch.zeros_like(pressureA))
+        pressureA = torch.where(fluidMask, pressureA, boundaryPressure)
         pressureB = pressureA.clone()
 
         errors = []
@@ -292,7 +304,7 @@ def solveDivergenceFree(
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
                 pressureB = pressureB - pressureB[fluidMask].mean()  # Fix the pressure gauge without altering the RHS
-                pressureB = torch.where(fluidMask, pressureB, torch.zeros_like(pressureB))
+                pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
 
 
                 # pressureB[particles.surfaceIndicators == 1] = 0.0  # Set pressures to zero for surface particles

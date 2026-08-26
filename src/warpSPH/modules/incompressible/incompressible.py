@@ -113,16 +113,20 @@ def solveIncompressible(
         alphas = torch.clamp(alphas, max=-1e-6)  # Avoid division by zero
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
 
-        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns: their
-        # pressure is held fixed at 0 for the duration of the solve (see
-        # `BoundaryPressureMode`'s docstring), excluded from the gauge mean
-        # (this solver's gauge is a non-negativity clamp, not a mean-center,
-        # so there is no mean to exclude them from), and their `a_p` is
-        # zeroed post-solve. A no-op when there are no boundary particles
-        # (`fluidMask` all-True).
+        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns:
+        # their pressure is held fixed at its incoming `particles.pressures` value
+        # (0 under `plain`, the mDBC-extrapolated/-projected value otherwise -- see
+        # `BoundaryPressureMode`'s docstring and `divergenceFree.py`'s copy of this
+        # comment for why freezing at the incoming value, not literal 0, matters),
+        # excluded from the gauge mean (this solver's gauge is a non-negativity
+        # clamp, not a mean-center, so there is no mean to exclude them from), and
+        # their `a_p` is zeroed post-solve. A no-op when there are no boundary
+        # particles (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
+        boundaryPressure = particles.pressures.clone()
 
         pressureA = particles.pressures.clone() * 0.
+        pressureA = torch.where(fluidMask, pressureA, boundaryPressure)
         pressureB = pressureA.clone()
 
         errors = []
@@ -152,7 +156,7 @@ def solveIncompressible(
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
                 pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
-                pressureB = torch.where(fluidMask, pressureB, torch.zeros_like(pressureB))
+                pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
                 # pressureB = pressureB - pressureB.mean()  # Fix the pressure gauge without altering the RHS
 
                 residual_clamped = torch.clamp(-residual, min=-threshold)

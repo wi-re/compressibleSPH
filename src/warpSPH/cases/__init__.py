@@ -44,6 +44,7 @@ CASE_MODULES = (
     # incompressible -- examples/incompressible/*.ipynb
     'tgv',
     'kolmogorovIncompressible',
+    'randomFlowIncompressible',
     # non-fluid demo -- see WAVE_EQUATION_PLAN.md
     'waveEquation',
 )

@@ -14,11 +14,19 @@ Written up here so it can be picked up/continued across sessions.
 ## Status
 
 **Part 1: primary fix landed and validated past the case's own `tLimit`.**
-**Part 2: config + solver-masking + MLS-pressure-projection machinery
-implemented and regression-tested (steps 1, 2, 3, 4, 5, 6); case port and
-validation (steps 7, 8) not started — no case currently samples boundary
-particles, so the new machinery is exercised only as a verified no-op so
-far.** See the per-part sections below for details.
+**Part 2: all 8 steps landed, plus an nx=128 production-resolution
+follow-up.** A new case (`randomFlowIncompressible`, step 7) now exercises
+mDBC boundary particles under DFSPH for the first time — previously the
+machinery from steps 1–6 was a verified no-op, since no case sampled
+`kind==1` particles under `divergenceFree`. All three `BoundaryPressureMode`
+values run to completion on it (step 8's smoke test). The nx=128 follow-up
+found and fixed a real bug (boundary-row pressure masking zeroed
+`BoundaryPressureMode.mdbcMlsPressure`'s projected pressure instead of
+freezing it, making Option c a silent no-op) and confirmed the DFSPH/deltaSPH
+density-band gap is not a resolution artifact. It also surfaced a new,
+still-open issue: `mdbcMlsPressure`, now actually live, is numerically
+unstable on the bounded case (NaNs within ~7 steps) — see the Part 2
+nx=128 findings and "Open questions" below.
 
 ---
 
@@ -158,18 +166,15 @@ confirmed this session:
    `computeMdbcDensity` call conditional on mode, and inject the MLS
    pressure projection call for mode `mdbcMlsPressure` right after
    `solveDivergenceFree`. ✅ **Done.**
-7. **Port 06-randomFlow to incompressible**: add an incompressible
-   `buildSystem`/`configureScheme` hook (new function alongside
-   `configureWeaklyCompressible`, or an incompressible-specific variant)
-   that reuses `boundaryRegion`/`domainBoundarySdf` from
-   `weaklyCompressible.py`. Register as a new case (e.g.
-   `randomFlowIncompressible`) or a `--scheme` switch on the existing case —
-   confirm which fits the `Case` protocol (`src/warpSPH/runner/case.py`)
-   before deciding. **Not started.**
+7. **Port 06-randomFlow to incompressible**. ✅ **Done** —
+   `src/warpSPH/cases/randomFlowIncompressible.py`, registered in
+   `cases/__init__.py`'s `CASE_MODULES`. See findings below for why this is
+   a new case file, not a `--scheme` flag on the existing one.
 8. **Validate**: run bounded random flow under all three boundary modes,
    check density near walls, momentum leakage, and stability vs. the
    periodic baseline; compare against wcsph/deltaSPH bounded behavior as a
-   sanity reference. **Not started** (blocked on step 7).
+   sanity reference. **Partially done** — see findings below for what was
+   and wasn't checked.
 
 ### Part 2 findings / implementation notes (2026-08-26)
 
@@ -212,23 +217,208 @@ confirmed this session:
   lags fluid density by construction. This is believed correct/analogous
   but has not been validated against a real bounded flow (no case exercises
   it yet — that's step 7/8).
-- **Why steps 7–8 weren't attempted this session**: porting `randomFlow` to
-  the incompressible scheme needs actual boundary-particle *sampling*
-  (assigning `kind==1`/`kind==2`, `ghostIndices`, `ghostOffsets` at
-  particle-generation time for a bounded domain), which is a materially
-  different, larger task than the solver-side wiring above — it touches
-  `initializers/weaklyCompressible.py`'s region-sampling path and the
-  `Case`/`RunContext` machinery, not just the incompressible modules. Left
-  for a follow-up session; the open question below on new-case-vs-flag
-  should be resolved first.
+### Part 2, steps 7–8 findings (2026-08-26)
+
+- **New case file, not a `--scheme` flag — resolved.** `--scheme` is
+  already a generic `CaseSpec` override honoured by every case
+  (`runner.py`: `_resolveScheme(spec.scheme or case.scheme)`;
+  `cli.py`: `defaults.setdefault('scheme', case.scheme)`) — so
+  `randomFlow.py`'s own docstring claim that its cases differ "only in...
+  which scheme integrates it (`--scheme`)" already looked true at the CLI
+  level. It isn't, for two independent reasons found while building the
+  port (both now documented in `randomFlowIncompressible.py`'s module
+  docstring):
+  - `Case.timestep` is one hook shared by whichever scheme a case ends up
+    running under. `randomFlow` leaves it unset, which is correct for its
+    `deltaSPH` default (falls through to `modules.timestep.computeTimestep`'s
+    `WeaklyCompressibleSystem` branch) but wrong for `divergenceFree`: an
+    `IncompressibleSystem` isn't a `WeaklyCompressibleSystem`, so the
+    dispatcher falls through to the *compressible* branch instead, which
+    reads `system.state.internalEnergies` — an attribute `IncompressibleState`
+    doesn't have. `randomFlow.py --scheme divergenceFree` with the case's own
+    `adaptiveDt=True` default crashes with an `AttributeError` on the first
+    step. This is exactly the failure `kolmogorovIncompressible.py` already
+    worked around with its own CFL-only `timestep` hook — reused verbatim
+    for the new case (the formula is generic: advective + viscous CFL, no
+    acoustic term, nothing Kolmogorov-specific in it).
+  - `randomFlow.initialConditions` ends with `setupTimestep`, which (per
+    `setupWeaklyCompressibleTimestep`) sets a **fixed** `dt = targetDt` for
+    the whole run and derives a sound speed from it that DFSPH never reads.
+    Mechanically harmless (no crash), but not adaptive, and it unconditionally
+    warns about a synthetic "Mach number" that means nothing for an
+    incompressible solver.
+
+  Everything else in `randomFlow.py` turned out to already be scheme-agnostic
+  and is reused as-is by the new case (`buildSystem`, `noiseVelocities`,
+  `BOUNDED_BAND`, and — via `weaklyCompressible.py` —
+  `configureWeaklyCompressible`, `paramExtraData`,
+  `weaklyCompressibleDiagnostics`, `OBSTACLE_PARAMS`): confirmed by reading
+  `initializers/weaklyCompressible.py`'s `initializeSimulation`, which
+  branches generically on `SimulationState is IncompressibleState` right
+  alongside its `WeaklyCompressibleState` branch, and
+  `rigidBody/ghostParticles.py`'s `addBoundaryGhostParticles`, which builds
+  the `kind==2` mDBC ghost layer via `type(particleState)` — i.e. it was
+  already scheme-agnostic and already exercised by every existing WCSPH
+  `--bounded` case (`randomFlow --bounded`, `lidDrivenCavity`,
+  `movingObstacle`, `drivenSquare`). **Note**: no case of *any* scheme
+  actually consumes those ghost particles via mDBC before this one — mDBC
+  (`computeMdbcDensity`/`computeMdbcPressure`) is only wired into
+  `schemes/dfsph.py`, so WCSPH's bounded cases sample the same `kind==2`
+  layer but never read it.
+- **Smoke-tested** (`python -m warpSPH.cases.randomFlowIncompressible`,
+  `nx=24`, CPU): periodic mode (10–20 steps) and `--bounded` mode (20 steps,
+  1736 particles incl. boundary + ghost) both run to completion, no NaNs.
+  `--bounded` under all three `boundaryPressureMode` values (`plain`,
+  `mdbcDensity`, `mdbcMlsPressure`, 8 steps each) also complete cleanly —
+  this is the first time any of the three has run on live boundary data
+  rather than as a no-op. `tests/test_runner.py` (case-registry smoke tests)
+  and `tests/test_physics.py`/`tests/test_incompressibleKrylov.py` (82 tests)
+  still pass unchanged.
+- **Resolution sweep + deltaSPH baseline (this session, nx=24 `--bounded`,
+  `mdbcDensity`, time-matched to t≈1.37)**:
+  - nx=24 → nx=64 (both 20 steps, so different final `t` since dt is
+    velocity/support-adaptive): `maxVelocity`'s transient spike shrank
+    sharply (2.22 → 1.05), consistent with the coarse grid's noise-field
+    sampling near the wall being the main driver of that spike rather than a
+    masking bug. Density excursion did **not** shrink with resolution
+    (min/max ≈ 0.78/1.33 at nx=24 vs. 0.86/1.17 at nx=64 — better, but not by
+    the margin the velocity spike improved by).
+  - **DFSPH vs. deltaSPH, both nx=24, `--bounded`, run to the same t≈1.37**
+    (5480 steps at deltaSPH's fixed `dt=0.00025` vs. DFSPH's 20 adaptive
+    steps — step-count-matched comparisons are not meaningful here, since
+    DFSPH's per-step `dt` is ~400x larger): deltaSPH's density stays in
+    [0.998, 1.003] throughout, including through its own transient
+    `maxVelocity` spike (1.0 → 3.63, i.e. a *larger* spike than DFSPH's
+    2.22) — so a coarse-grid boundary velocity spike alone does not explain
+    DFSPH's much looser density band ([0.78, 1.33] over the same run). This
+    is suggestive that DFSPH's mDBC path is genuinely looser at controlling
+    boundary-adjacent density than deltaSPH's EOS-driven boundary handling
+    at this resolution, not just coarse-sampling noise — but it is one
+    data point at one (very coarse) resolution, not a diagnosis. **Not
+    pursued further this session.**
+- **Still open** (the rest of step 8's brief, now narrower thanks to the
+  above): root-cause the DFSPH/deltaSPH density-band gap (is it inherent to
+  mDBC's density extrapolation being one-step-lagged, a resolution effect
+  that needs nx=128 to judge fairly, or a real bug in the pressure-solver
+  masking from steps 2–5?); compare `mdbcDensity` vs `mdbcMlsPressure` vs
+  `plain` against *each other* at matched physical time (only compared at
+  matched step-count=8 so far, which the paragraph above shows is not
+  meaningful once `dt` differs run-to-run); and a production-resolution
+  (`nx=128`) run to confirm behavior holds past this smoke-test scale. Left
+  for a follow-up session. **Resolved/superseded by the nx=128 follow-up
+  below**, done in this same session.
+
+### Part 2, nx=128 production-resolution follow-up (2026-08-26)
+
+Script: `scripts/probe_randomFlowIncompressibleBoundaryModes.py` (new), runs
+`randomFlowIncompressibleCase`/`randomFlowCase` in-process via
+`runner.run()`, `--bounded`, matched physical time, `store=False`/`plot=False`
+so only the diagnostics trajectory is collected.
+
+- **The density-band gap does not close with resolution — closes the first
+  open question.** nx=128, `mdbcDensity`, t≈1.5: ρ∈[0.661, 1.475], *looser*
+  than the nx=24 smoke test's [0.78, 1.33] over a comparable run, while
+  deltaSPH stays at [0.999, 1.003] on the identical setup and t. This rules
+  out "coarse-resolution artifact" outright — production resolution does not
+  narrow the gap, it's if anything worse. Given the finding below (`plain`
+  tracks `mdbcDensity` almost exactly), this looks like it's inherent to
+  DFSPH's own bulk pressure-projection behavior near a wall on this problem,
+  not specific to the mDBC machinery.
+- **Found and fixed a real masking bug — answers the second open question.**
+  At nx=128, `mdbcDensity` and `mdbcMlsPressure` were not just similar but
+  **bit-identical at every recorded step** (float32 precision, min/max
+  density traced step-by-step over 17 steps) before this session's fix. Root
+  cause: the `kind==1`/`kind==2` boundary-row masking in all four
+  pressure-solve code paths — `divergenceFree.py`'s fixed-ω loop and its
+  `_solveDivergenceFreeOptimal` sibling, `incompressible.py`'s fixed-ω loop,
+  and `krylov.py`'s `solvePressureKrylov` — froze boundary-row pressure at
+  **literal `torch.zeros_like(...)`**, not at whatever
+  `currentState.pressures` already held there. Since `computeMdbcPressure`
+  writes its projected value to `currentState.pressures` *after*
+  `solveDivergenceFree` returns (a deliberate one-step lag, per
+  `computeMdbcPressure`'s own docstring), that projected value was being
+  discarded at the very top of the *next* step's solve, before
+  `computePressureAccelIISPH` ever saw it — so `mdbcMlsPressure`'s entire
+  stated purpose ("boundary particles carry a physically consistent pressure
+  for force computation on fluid neighbors") was silently a no-op. This also
+  means the general density-band gap above is *not* explained by this bug:
+  `plain` (which never calls `computeMdbcPressure` at all) tracks
+  `mdbcDensity` too closely for a broken Option c to be the main driver of
+  that gap.
+  - **Fix landed** (`divergenceFree.py`, `incompressible.py`, `krylov.py`):
+    the two relaxed-Jacobi solvers now do
+    `torch.where(fluidMask, pressureB, boundaryPressure)` (`boundaryPressure
+    = particles.pressures.clone()`, captured once per solve) instead of
+    `torch.zeros_like(...)` at every re-masking point — since
+    `computePressureAccelIISPH`/`computePressureShiftIISPH` sum over all
+    neighbors regardless of `kind`, baking the frozen value directly into the
+    pressure field they read is sufficient, no separate RHS term needed. The
+    Krylov path is structurally different (a generic matrix-free solver
+    needs a fixed operator on a fixed unknown subspace, so the boundary value
+    can't just ride along inside the iterate) and got the standard
+    Dirichlet-lifting treatment instead: `b = sourceTerm - A(boundaryOnly
+    field)`, solve the homogeneous fluid-only subproblem as before, then
+    re-pin the boundary rows of the result to `boundaryPressure` (was `0`)
+    instead of `0` at the end.
+  - **Verified as an exact no-op everywhere it was previously verified inert**:
+    `pytest tests/test_physics.py tests/test_incompressibleKrylov.py` (82
+    tests, all 5 `PressureSolverType` variants) passes unchanged — expected,
+    since `fluidMask` is all-`True` on every case those tests cover, so every
+    new `torch.where(fluidMask, X, boundaryPressure)` branch never takes the
+    `boundaryPressure` arm there.
+  - **Verified as no longer a no-op on the one case that does exercise it**:
+    re-ran the nx=128 step-by-step trace above post-fix —
+    `mdbcMlsPressure` now diverges from `mdbcDensity` starting at step 1
+    (previously identical through at least step 16).
+- **New finding, found by the fix**: `mdbcMlsPressure`, now actually live,
+  is **numerically unstable** on this case — nx=128 `--bounded` NaNs by step
+  7 (density spikes to 7.26, velocity to `inf`, then NaN), where `plain`/
+  `mdbcDensity` stay bounded over the same steps. `plain`/`mdbcDensity`
+  trajectories are byte-identical to their pre-fix values (confirms the fix
+  is properly isolated to the one mode that actually writes a nonzero
+  boundary pressure). Suspected cause, not yet confirmed: `computeMdbcPressure`
+  (`modules/mdbc/pressure2025.py`) does a first-order MLS extrapolation of
+  pressure to the wall with **no magnitude clamp or rest-value fallback** —
+  its own docstring already flags this design choice ("pressure ... has no
+  reference value of its own to fall back on"), unlike `computeMdbcDensity`,
+  which anchors low-neighbor-count/noisy fits back toward `rho0`. A noisy or
+  large `p_interp_grad` near a corner or a low-neighbor-count boundary point
+  could extrapolate to an unbounded pressure, which (now that it actually
+  feeds `computePressureAccelIISPH`) becomes a runaway force on nearby fluid
+  particles. **Not investigated further this session** — this is a genuine
+  solver-stability question (does Option c need a magnitude clamp, a
+  relaxation/damping factor blending with the previous step's value, or a
+  different fallback ladder near low-neighbor boundary points?) rather than
+  a wiring bug, and needs its own targeted probe (in the style of Part 1's
+  `probe_*.py` scripts, isolating `computeMdbcPressure`'s output particle by
+  particle right before the divergence) before attempting a fix.
 
 ---
 
 ## Open questions / decisions needed
 
-- Part 2, step 7: new case file vs. flag on existing `randomFlow.py` case —
-  to be resolved by checking `Case`/scheme-selection conventions before
-  implementation.
 - Whether Part 1's fix should be a case-specific override (e.g. Kolmogorov
   case sets `ω`/tolerance explicitly) or a general default change to the
   incompressible scheme config.
+- ~~Part 2, step 8: DFSPH's `--bounded` density band is markedly looser than
+  deltaSPH's ... resolution artifact ... or a real gap in the steps 2–5
+  pressure-solver masking?~~ **Resolved (2026-08-26)**, see the nx=128
+  follow-up above: not a resolution artifact (nx=128 is looser than nx=24,
+  not tighter) and not explained by the masking bug found in the same
+  session (`plain`, which never touches `computeMdbcPressure`, tracks
+  `mdbcDensity` closely — both loose). Looks inherent to DFSPH's own bulk
+  pressure-projection behavior near a wall on this problem, independent of
+  which `BoundaryPressureMode` is chosen. Not root-caused further this
+  session (would need a targeted probe isolating the near-wall pressure
+  solve itself, in the style of Part 1's `probe_*.py` scripts, and/or a
+  comparison against `kolmogorovIncompressible`'s unbounded stability to
+  isolate whether it's a wall effect specifically vs. a general DFSPH
+  trait masked by that case never having boundaries).
+- **New**: is `BoundaryPressureMode.mdbcMlsPressure` (Option c) salvageable
+  as currently formulated, or does `computeMdbcPressure`'s pressure
+  extrapolation need a stabilizing change (magnitude clamp, damping/
+  relaxation toward the previous step's value, or a different low-neighbor
+  fallback) before it can run past a handful of steps? Found this session
+  once the masking bug (above) stopped hiding it — see the nx=128
+  follow-up's last bullet. Until resolved, `mdbcMlsPressure` should probably
+  not be recommended over `mdbcDensity`/`plain` for real use.
