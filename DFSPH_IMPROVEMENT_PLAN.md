@@ -455,6 +455,52 @@ steps leading up to the NaN.
   divergence with margin (bounded to at least t≈1.5, well past where the
   undamped version NaN'd at t≈0.1).
 
+### Part 2, bulk density-band gap — wall-distance profile (2026-08-26)
+
+Script: `scripts/probe_dfsphWallDensityProfile.py` (new). Drives both cases
+manually to matched t, then bins each fluid particle's `|density-1|` by its
+signed distance from the nearest domain wall
+(`weaklyCompressible.domainBoundarySdf`, the same SDF the case's own geometry
+is built from) to test whether the error is wall-localized or bulk-spread.
+
+- **Short-time check (t≈0.1, nx=64) looked bulk-uniform**: DFSPH's mean error
+  was ~4.6e-3 to 6.4e-3 across all 4 depth bins, no wall concentration;
+  deltaSPH's was ~1.3e-4 (~35x tighter) and equally flat. This is what
+  motivated the "general DFSPH trait, not a wall effect" reading in the
+  (now superseded) note below.
+- **Production-time check (t≈1.5, nx=128) tells a different, two-part
+  story.** deltaSPH stays flat across all 8 bins as before (mean error
+  5.5e-4 to 6.3e-4, no depth dependence, always `depth >= 0.0037` — i.e. no
+  deltaSPH fluid particle ever crosses the nominal wall). DFSPH does not:
+  - **A severe, genuinely wall-localized spike**: the nearest-wall bin
+    (`depth` from `-0.162` to `-0.017`, i.e. **outside** the nominal interior
+    domain by up to ~10 particle spacings) has mean error **0.236** —
+    50-80x worse than every other bin. 318 of ~16,600 fluid particles
+    (~2%) fall in this bin. This is `kind==0` fluid particles, not boundary
+    particles — meaning a real minority of fluid particles are drifting
+    *past* the nominal wall SDF's zero level and into the boundary band by
+    production time, which is not something deltaSPH's fluid particles ever
+    do on the identical setup (its depth range stays `>= 0.0037`
+    throughout). This looks like a no-penetration containment issue specific
+    to DFSPH, not (only) a density-accuracy issue.
+  - **A smaller but still real bulk gap survives underneath that spike**:
+    excluding the wall-adjacent bin, DFSPH's bulk bins (`depth` from `0.417`
+    to `0.996`) settle to mean error ~3.7e-3 to 5.4e-3 — still ~7-10x worse
+    than deltaSPH's bulk ~5.5e-4 at the same depths, confirming the short-time
+    check's "general trait" reading was not wrong, just incomplete: there
+    are two distinct effects layered on top of each other, and the
+    wall-adjacent one apparently needs time (or accumulated near-wall
+    activity) to develop, since it wasn't yet visible in the t≈0.1 check.
+  - **Not investigated further this session**: why fluid particles cross
+    the nominal wall boundary at all is the more actionable of the two
+    findings and the natural next lead — `computeMdbcNoPenShift`
+    (`modules/mdbc/wp_nopenshift.py`, a `@wp.kernel`, so any change there
+    needs the `gradcheck` skill afterward) is the mechanism that is supposed
+    to prevent exactly this, and hasn't been inspected this session. The
+    smaller residual bulk gap (~7-10x) is left as the same still-open
+    "general DFSPH bulk pressure-projection" question, now with a cleaner
+    number attached.
+
 ---
 
 ## Open questions / decisions needed
@@ -464,21 +510,20 @@ steps leading up to the NaN.
   incompressible scheme config.
 - ~~Part 2, step 8: DFSPH's `--bounded` density band is markedly looser than
   deltaSPH's ... resolution artifact ... or a real gap in the steps 2–5
-  pressure-solver masking?~~ **Resolved (2026-08-26)**, see the nx=128
-  follow-up above: not a resolution artifact (nx=128 is looser than nx=24,
-  not tighter). Not primarily a `BoundaryPressureMode` effect either: `plain`
-  and `mdbcDensity` track each other closely (both loose,
-  `[0.66,1.46]`/`[0.66,1.48]`); `mdbcMlsPressure`, once its masking bug and
-  instability were both fixed (below), does noticeably better
-  (`[0.69,1.23]`) but is still far from deltaSPH's `[0.999,1.003]`. Looks
-  inherent to DFSPH's own bulk pressure-projection behavior near a wall on
-  this problem — real, but a second-order effect next to whatever the main
-  gap is. Not root-caused further this session (would need a targeted probe
-  isolating the near-wall pressure solve itself, in the style of Part 1's
-  `probe_*.py` scripts, and/or a comparison against
-  `kolmogorovIncompressible`'s unbounded stability to isolate whether it's a
-  wall effect specifically vs. a general DFSPH trait masked by that case
-  never having boundaries).
+  pressure-solver masking?~~ **Resolved/refined (2026-08-26)**: not a
+  resolution artifact, not primarily a `BoundaryPressureMode` effect (see the
+  nx=128 follow-up above), and — per the wall-distance profile just above —
+  **not one effect but two**: (1) a small minority (~2%) of fluid particles
+  drifting past the nominal wall SDF boundary by production time (t≈1.5),
+  with a severe local density error (mean 0.236) right where they do, and
+  (2) a smaller ~7-10x bulk gap vs. deltaSPH that holds at every depth
+  including far from any wall. (1) is the more actionable open item now —
+  points at `computeMdbcNoPenShift` (`modules/mdbc/wp_nopenshift.py`)
+  potentially not fully containing fluid particles under DFSPH — and hasn't
+  been inspected yet. (2) would still benefit from the
+  `kolmogorovIncompressible`-vs-`--bounded` unbounded/bounded comparison
+  this bullet originally proposed, to check whether it's present even with
+  no wall at all.
 - ~~Is `BoundaryPressureMode.mdbcMlsPressure` (Option c) salvageable as
   currently formulated, or does `computeMdbcPressure`'s pressure
   extrapolation need a stabilizing change?~~ **Resolved (2026-08-26)**, see
