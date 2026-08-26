@@ -35,6 +35,64 @@ def case():
     return ctx, system, float(ctx.config.dt)
 
 
+def testJfnkJvpMatvecMatchesFdomANonIdentityDirection(case):
+    """The JVP matvec must equal the FD matvec for a *genuinely non-trivial*
+    Krylov direction -- not the accidental agreement an identity-map check can
+    give. Guards the forward-mode bridge (`warpSPHCore`'s
+    `StateAwareWarpFunction.jvp`, the path that relaunches the operator on the
+    tangent) against a tangent that silently fails to reach the Laplacian: if
+    the tangent were dropped, `J_G v` for the wave residual would collapse
+    toward `v` (the earlier JVP-vs-FD "agreement" was exactly this coincidence,
+    because the tested direction's `u` slice was zero).
+
+    Two guards, so the test cannot be vacuous:
+      1. the direction is non-trivial: `J_G v` is NOT ~ `v`
+         (`||J_G v - v||/||v||` is well above 0.2, not ~0);
+      2. `jvp_matvec(v)` agrees with `fd_matvec(v)` to within float32/FD noise.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip('the forward-mode bridge is only exercised on the CUDA build')
+    ctx, system, dt = case
+    from warpSPHIntegrators.fields import flatten_integrated
+    from warpSPHIntegrators.jfnk import fd_matvec, jvp_matvec
+    from warpSPHIntegrators.util import updateStateEuler, updateStep
+
+    f = ctx.stepFunction
+    initialState = system.initializeNewState()
+    base_state = initialState.initializeNewState()
+    A_II = 1.0  # backward-Euler stage: Y = base + dt * f(Y) -- any valid step works
+    T = 0.0
+
+    def step_fn(Y):
+        Y.t = T
+        k, _ = updateStep(initialState, Y, dt, f, ctx.config, ctx.schemeConfig)
+        return updateStateEuler(base_state, k, A_II * dt, copyState=True)
+
+    Y = initialState.initializeNewState()
+    for _ in range(2):
+        step_fn(Y)
+    torch.cuda.synchronize()
+
+    y_flat = flatten_integrated(Y)
+    G_y = y_flat - flatten_integrated(step_fn(Y))
+
+    gen = torch.Generator(device='cpu').manual_seed(0)
+    v = torch.randn(y_flat.shape, generator=gen).to(device=y_flat.device, dtype=y_flat.dtype)
+    v = v / v.norm()
+
+    fd_out = fd_matvec(step_fn, Y, y_flat, G_y)(v)
+    jvp_out = jvp_matvec(step_fn, Y)(v)
+
+    nontrivial = (fd_out - v).norm() / v.norm()
+    assert nontrivial > 0.2, (
+        f'test would be vacuous: J_G v ~= v (identity-map coincidence), '
+        f'got ||J_G v - v||/||v|| = {nontrivial:.3f}'
+    )
+    assert torch.isfinite(jvp_out).all()
+    rel = (jvp_out - fd_out).norm() / fd_out.norm()
+    assert rel < 1e-2, f'jvp matvec disagrees with fd on a non-identity direction: rel err {rel:.3e}'
+
+
 def testSchemeRegistryResolves():
     """Every registry key resolves through the same name path the frontend
     uses, carries its true order, and (implicit only) a buildable solver."""

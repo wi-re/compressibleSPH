@@ -14,11 +14,13 @@ from .compressibleMonaghan import CompressibleState, CompressibleSystemUpdate, C
 from .waveSystem import WaveSystemStatev3, WaveSystemUpdatev3, WaveSystemv3
 from .compSPH import CompSPHState, CompSPHSystem
 from .weaklyCompressible import WeaklyCompressibleState, WeaklyCompressibleSystem, WeaklyCompressibleSystemUpdate
+from .acousticCore import AcousticCoreState, AcousticCoreSystemUpdate, AcousticCoreSystem
 
 __all__ = [
     'BaseParticleState', 'BaseSystemUpdate', 'BaseSystem',
     'CompressibleState', 'CompressibleSystemUpdate', 'CompressibleSystem',
     'WaveSystemStatev3', 'WaveSystemUpdatev3', 'WaveSystemv3',
     'CompSPHState', 'CompSPHSystem',
-    'WeaklyCompressibleState', 'WeaklyCompressibleSystem', 'WeaklyCompressibleSystemUpdate'
+    'WeaklyCompressibleState', 'WeaklyCompressibleSystem', 'WeaklyCompressibleSystemUpdate',
+    'AcousticCoreState', 'AcousticCoreSystemUpdate', 'AcousticCoreSystem',
 ]

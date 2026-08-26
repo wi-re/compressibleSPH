@@ -14,6 +14,7 @@ from .waveEquationConfig import ShapeSpec as WaveShapeSpec
 from .waveEquationConfig import WaveSource, WaveBoundary
 from .waveEquationConfig import CaseConfig as WaveCaseConfig
 from .waveEquationConfig import WaveEquationConfig, waveEquationConfigToDict, dictToWaveEquationConfig
+from .acousticCoreConfig import AcousticCoreConfig, acousticCoreConfigToDict, dictToAcousticCoreConfig
 from .compressibleConfig import CompressibleSPHConfig, compressibleConfigToDict, dictToCompressibleConfig
 from .compSPHConfig import CompSPHConfig, compSPHConfigToDict, dictToCompSPHConfig
 from .crkSPH import CRKViscosity, CRKSPHConfig, crkSPHConfigToDict, dictToCRKSPHConfig
@@ -38,6 +39,9 @@ __all__ = [
     'WaveEquationConfig',
     'waveEquationConfigToDict',
     'dictToWaveEquationConfig',
+    'AcousticCoreConfig',
+    'acousticCoreConfigToDict',
+    'dictToAcousticCoreConfig',
     'CompressibleSPHConfig',
     'CompSPHConfig',
     'CRKViscosity',
