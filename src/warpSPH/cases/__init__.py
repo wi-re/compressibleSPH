@@ -43,6 +43,7 @@ CASE_MODULES = (
     'channelFlow',
     # incompressible -- examples/incompressible/*.ipynb
     'tgv',
+    'kolmogorovIncompressible',
     # non-fluid demo -- see WAVE_EQUATION_PLAN.md
     'waveEquation',
 )
