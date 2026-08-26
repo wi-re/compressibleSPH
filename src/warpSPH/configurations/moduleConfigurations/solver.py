@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -54,6 +54,36 @@ class JacobiRelaxationMode(Enum):
     optimal = 1  # per-step exact residual-minimizing size (IISPH solver only)
 
 
+class BoundaryPressureMode(Enum):
+    """How `kind==1` boundary particles are handled by the incompressible
+    pressure solvers (`solveDivergenceFree`/`solveIncompressible`) and by
+    `schemes/dfsph.py`'s mDBC wiring.
+
+    In all three modes, boundary particles are excluded from the pressure
+    *unknowns*: their pressure is held fixed (not driven by the
+    Jacobi/Krylov update) for the duration of a solve, they are excluded
+    from the gauge-fixing mean, and their pressure acceleration (`a_p`) is
+    zeroed post-solve -- the one-way-coupling contract already enforced
+    downstream by `nonFluidMask` in `dfsph_step`. What differs is the value
+    their pressure is held at, and how their density is computed:
+
+    - `plain`: no mDBC at all. Boundary density comes from plain SPH
+      summation like a fluid particle; boundary pressure is held at 0.
+    - `mdbcDensity`: boundary density is mDBC-extrapolated
+      (`computeMdbcDensity`, Liu-Liu MLS from fluid neighbors); boundary
+      pressure is still held at 0 (no pressure extrapolation).
+    - `mdbcMlsPressure`: same density extrapolation as `mdbcDensity`, plus
+      the fluid pressure field is itself Liu-Liu MLS-projected onto
+      boundary particles after each `solveDivergenceFree` call
+      (`computeMdbcPressure`), so boundary particles carry a physically
+      consistent pressure for the *next* step's force computation on fluid
+      neighbors, rather than an artificial zero-pressure wall.
+    """
+    plain = 0
+    mdbcDensity = 1
+    mdbcMlsPressure = 2
+
+
 @dataclass
 class RelaxedJacobiSolverConfig:
     minIterations: int = field(default=1, metadata={"description": "Minimum number of iterations for the relaxed Jacobi solver"})
@@ -89,6 +119,7 @@ class IncompressibleSolverConfig:
     pressureSolver: RelaxedJacobiSolverConfig = field(default_factory=buildDefaultPSConfig, metadata={"description": "Configuration for the pressure solver"})
     divergenceFreeSolver: RelaxedJacobiSolverConfig = field(default_factory=buildDefaultDFConfig, metadata={"description": "Configuration for the divergence-free solver"})
     integrateRho: bool = field(default=False, metadata={"description": "Whether to integrate density in the incompressible solver"})
+    boundaryPressureMode: BoundaryPressureMode = field(default=BoundaryPressureMode.mdbcDensity, metadata={"description": "How kind==1 boundary particles are handled by the pressure solvers: plain (no mDBC), mdbcDensity (mDBC density extrapolation only, matching this scheme's historical always-on behavior), or mdbcMlsPressure (mDBC density + MLS-projected boundary pressure)"})
 
 def buildDefaultIncompressibleSolverConfig() -> IncompressibleSolverConfig:
     return IncompressibleSolverConfig(

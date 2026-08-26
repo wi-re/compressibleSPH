@@ -156,7 +156,8 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'restart': config.solverConfig.divergenceFreeSolver.restart,
                 'krylovFp64': config.solverConfig.divergenceFreeSolver.krylovFp64,
             },
-            'integrateRho': config.solverConfig.integrateRho
+            'integrateRho': config.solverConfig.integrateRho,
+            'boundaryPressureMode': config.solverConfig.boundaryPressureMode.name,
         }
     }
 
@@ -221,6 +222,10 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         v = d.get('relaxationMode', JacobiRelaxationMode.fixed)
         return JacobiRelaxationMode[v] if isinstance(v, str) else v
 
+    def _boundaryPressureMode(d):
+        v = d.get('boundaryPressureMode', BoundaryPressureMode.mdbcDensity)
+        return BoundaryPressureMode[v] if isinstance(v, str) else v
+
     config.solverConfig = IncompressibleSolverConfig(
         pressureSolver=RelaxedJacobiSolverConfig(
             minIterations=psDict.get('minIterations', buildDefaultPSConfig().minIterations),
@@ -246,7 +251,8 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             restart=dfDict.get('restart', buildDefaultDFConfig().restart),
             krylovFp64=dfDict.get('krylovFp64', buildDefaultDFConfig().krylovFp64),
         ),
-        integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho)
+        integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho),
+        boundaryPressureMode=_boundaryPressureMode(solverConfigDict),
     )
     
 

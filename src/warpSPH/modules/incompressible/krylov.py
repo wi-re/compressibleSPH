@@ -138,11 +138,25 @@ def solvePressureKrylov(
     maxiter = solverCfg.maxIterations
     restart = solverCfg.restart
 
-    b = sourceTerm
-    matvec = buildIISPHMatvec(particles, config, schemeConfig, adjacency, dt_scale)
+    # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns (see
+    # `BoundaryPressureMode`'s docstring): the operator is wrapped so every
+    # matvec sees (and returns) 0 at boundary rows, decoupling them from the
+    # Krylov iteration entirely -- a no-op when there are no boundary
+    # particles (`fluidMask` all-True).
+    fluidMask = particles.kinds == 0
+    _rawMatvec = buildIISPHMatvec(particles, config, schemeConfig, adjacency, dt_scale)
+
+    def matvec(p):
+        p = torch.where(fluidMask, p, torch.zeros_like(p))
+        out = _rawMatvec(p)
+        return torch.where(fluidMask, out, torch.zeros_like(out))
+
+    b = torch.where(fluidMask, sourceTerm, torch.zeros_like(sourceTerm))
     precond = buildIISPHPrecond(particles, config, schemeConfig, adjacency, dt_scale)
     if x0 is None:
         x0 = particles.pressures.clone() if particles.pressures is not None else None
+    if x0 is not None:
+        x0 = torch.where(fluidMask, x0, torch.zeros_like(x0))
 
     if getattr(solverCfg, 'krylovFp64', False):
         # Run the Krylov recurrence in fp64 while the SPH matvec stays at
@@ -186,7 +200,12 @@ def solvePressureKrylov(
                                   maxiter=maxiter, precond=precond, dim=1,
                                   verbose=verbose)
     elif solverType == PressureSolverType.bicg:
-        matvecT = buildIISPHMatvecT(particles, config, schemeConfig, adjacency, dt_scale)
+        _rawMatvecT = buildIISPHMatvecT(particles, config, schemeConfig, adjacency, dt_scale)
+
+        def matvecT(p):
+            p = torch.where(fluidMask, p, torch.zeros_like(p))
+            out = _rawMatvecT(p)
+            return torch.where(fluidMask, out, torch.zeros_like(out))
         # The operator is (to fp32 precision) symmetric, so buildIISPHMatvecT's
         # self-adjoint placeholder is exact; the sign-flip below (same rationale
         # as the CG branch) hands BiCG a positive-definite system. Note BiCG is
@@ -217,17 +236,21 @@ def solvePressureKrylov(
     # to the production dtype before the gauge fix / final accel / return.
     x = x.to(particles.densities.dtype)
 
-    # Gauge fix (the pressure is defined up to an additive constant).
+    # Gauge fix (the pressure is defined up to an additive constant),
+    # excluding boundary rows from the centering mean, then re-pinning them
+    # to 0 (the sign-flip branches above may have left tiny fp noise there).
     if gauge == 'center':
-        x = x - x.mean()
+        x = x - x[fluidMask].mean()
     elif gauge == 'nonnegative':
         x = torch.clamp(x, min=0.0)
     elif gauge is not None:
         raise ValueError(f'Unknown gauge fix: {gauge!r}')
+    x = torch.where(fluidMask, x, torch.zeros_like(x))
 
     a_p = computePressureAccelIISPH(
         state=particles, pressureValues=x, config=config,
         supportScheme=SupportScheme.Scatter, adjacency=adjacency)
+    a_p = torch.where(fluidMask.unsqueeze(-1), a_p, torch.zeros_like(a_p))
 
     errors = [float(e) for e in conv]
     pressures = [(float(x.min()), float(x.max()), float(x.mean()))]

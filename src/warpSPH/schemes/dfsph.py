@@ -21,7 +21,9 @@ from warpSPH.modules.gravity import computeGravity
 from warpSPH.modules.incompressible import solveDivergenceFree
 from warpSPH.modules.mdbc import (
     computeBoundaryVelocities, computeMdbcDensity, computeMdbcNoPenShift,
+    computeMdbcPressure,
 )
+from warpSPH.configurations import BoundaryPressureMode
 from warpSPH.modules.momentum import computeMomentum
 from warpSPH.modules.surfaceDetection import detectFreeSurface
 from warpSPHCore import SupportScheme, buildVerletList
@@ -70,10 +72,15 @@ def dfsph_step(
     # print(f'step {currentSystem.t:.6g}: density stats: mean={currentState.densities.mean().item():.6g}, min={currentState.densities.min().item():.6g}, max={currentState.densities.max().item():.6g}')
     # if currentState.densities.max() > 1.01:
         # print(f"Warning: Density exceeds 1.01, max density: {currentState.densities.max().item():.6g}")
-    # 3. Skipped mDBC density computation since no boundaries are present
+    # 3. mDBC density computation -- `BoundaryPressureMode.plain` skips it
+    # (boundary particles get plain SPH summation density, like a fluid
+    # particle, matching Part 2 Option a of DFSPH_IMPROVEMENT_PLAN.md);
+    # both other modes keep the historical always-on extrapolation.
+    boundaryPressureMode = schemeConfig.solverConfig.boundaryPressureMode
     # with TimedBlock('compute mDBC density', use_cuda=True, device=config.device) as tb_mdbc:
     with record_function("[warpSPH] - [deltaSPH - 03] - compute mDBC density"):
-        currentState.densities = computeMdbcDensity(currentState, config, schemeConfig, adjacency)
+        if boundaryPressureMode != BoundaryPressureMode.plain:
+            currentState.densities = computeMdbcDensity(currentState, config, schemeConfig, adjacency)
 
         # print(f'Fluid density stats: min={currentState.densities[currentState.kinds == 0].min().item()}, max={currentState.densities[currentState.kinds == 0].max().item()}, mean={currentState.densities[currentState.kinds == 0].mean().item()}')
         # print(f'Boundary density stats: min={currentState.densities[currentState.kinds == 1].min().item()}, max={currentState.densities[currentState.kinds == 1].max().item()}, mean={currentState.densities[currentState.kinds == 1].mean().item()}')
@@ -166,6 +173,12 @@ def dfsph_step(
         dt = dt
     )
     currentState.pressures = pressure
+    if boundaryPressureMode == BoundaryPressureMode.mdbcMlsPressure:
+        # Project this step's fluid pressure solution onto boundary
+        # particles (Part 2 Option c) -- see `computeMdbcPressure`'s own
+        # docstring for why this runs after, not inside, the solve above.
+        with record_function("[warpSPH] - [deltaSPH - 03b] - compute mDBC pressure"):
+            currentState.pressures = computeMdbcPressure(currentState, config, schemeConfig, adjacency)
 
     # To resolve the issues with particle disorder and clustering, we can also solve for the incompressible pressure using the Incompressible SPH solver
     # This effectively acts as a particle shifting term that helps to maintain particle order and prevent clustering

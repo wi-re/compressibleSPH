@@ -113,6 +113,15 @@ def solveIncompressible(
         alphas = torch.clamp(alphas, max=-1e-6)  # Avoid division by zero
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
 
+        # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns: their
+        # pressure is held fixed at 0 for the duration of the solve (see
+        # `BoundaryPressureMode`'s docstring), excluded from the gauge mean
+        # (this solver's gauge is a non-negativity clamp, not a mean-center,
+        # so there is no mean to exclude them from), and their `a_p` is
+        # zeroed post-solve. A no-op when there are no boundary particles
+        # (`fluidMask` all-True).
+        fluidMask = particles.kinds == 0
+
         pressureA = particles.pressures.clone() * 0.
         pressureB = pressureA.clone()
 
@@ -143,11 +152,12 @@ def solveIncompressible(
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
                 pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
+                pressureB = torch.where(fluidMask, pressureB, torch.zeros_like(pressureB))
                 # pressureB = pressureB - pressureB.mean()  # Fix the pressure gauge without altering the RHS
 
                 residual_clamped = torch.clamp(-residual, min=-threshold)
 
-                error = torch.mean(residual_clamped).cpu().item()
+                error = torch.mean(residual_clamped[fluidMask]).cpu().item()
                 # error = torch.mean(torch.abs(residual)).cpu().item()
                 errors.append(error)
 
@@ -171,6 +181,7 @@ def solveIncompressible(
                 supportScheme = SupportScheme.Scatter,
                 adjacency = adjacency,
         )
+        a_p = torch.where(fluidMask.unsqueeze(-1), a_p, torch.zeros_like(a_p))
         # print(f"Final pressure acceleration: mean: {a_p.mean().cpu().item():.6g}, min: {a_p.min().cpu().item():.6g}, max: {a_p.max().cpu().item():.6g}")
 
         # print(f'final Residual: {residual.mean().cpu().item():.6g}, min: {residual.min().cpu().item():.6g}, max: {residual.max().cpu().item():.6g}')
