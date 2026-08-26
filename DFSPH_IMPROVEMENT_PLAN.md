@@ -15,18 +15,24 @@ Written up here so it can be picked up/continued across sessions.
 
 **Part 1: primary fix landed and validated past the case's own `tLimit`.**
 **Part 2: all 8 steps landed, plus an nx=128 production-resolution
-follow-up.** A new case (`randomFlowIncompressible`, step 7) now exercises
-mDBC boundary particles under DFSPH for the first time — previously the
-machinery from steps 1–6 was a verified no-op, since no case sampled
-`kind==1` particles under `divergenceFree`. All three `BoundaryPressureMode`
-values run to completion on it (step 8's smoke test). The nx=128 follow-up
-found and fixed a real bug (boundary-row pressure masking zeroed
+follow-up and two bug fixes found along the way.** A new case
+(`randomFlowIncompressible`, step 7) now exercises mDBC boundary particles
+under DFSPH for the first time — previously the machinery from steps 1–6 was
+a verified no-op, since no case sampled `kind==1` particles under
+`divergenceFree`. All three `BoundaryPressureMode` values run to completion
+on it at nx=128, matched to t≈1.5. The nx=128 follow-up found and fixed two
+bugs in turn: (1) boundary-row pressure masking was zeroing
 `BoundaryPressureMode.mdbcMlsPressure`'s projected pressure instead of
-freezing it, making Option c a silent no-op) and confirmed the DFSPH/deltaSPH
-density-band gap is not a resolution artifact. It also surfaced a new,
-still-open issue: `mdbcMlsPressure`, now actually live, is numerically
-unstable on the bounded case (NaNs within ~7 steps) — see the Part 2
-nx=128 findings and "Open questions" below.
+freezing it, making Option c a silent no-op; fixing that surfaced (2) an
+undamped feedback loop between the boundary pressure projection and the
+fluid pressure solve that NaN'd within ~7 steps once Option c was actually
+live, fixed with a new under-relaxation factor
+(`mdbcPressureRelaxation`, default `0.3`). With both fixes,
+`mdbcMlsPressure` is now the most stable *and* most accurate of the three
+modes. Separately, confirmed the DFSPH/deltaSPH density-band gap itself is
+not a resolution artifact (nx=128 doesn't close it) and is not primarily a
+`BoundaryPressureMode` effect — that gap is still open, see "Open questions"
+below.
 
 ---
 
@@ -393,6 +399,62 @@ so only the diagnostics trajectory is collected.
   `probe_*.py` scripts, isolating `computeMdbcPressure`'s output particle by
   particle right before the divergence) before attempting a fix.
 
+### Part 2, `mdbcMlsPressure` instability — root cause and fix (2026-08-26)
+
+Script: `scripts/probe_mdbcMlsPressureInstability.py` (new). Drives
+`randomFlowIncompressibleCase` manually (not through `runner.run()`, which
+only exposes the diagnostics dict) so it can re-run `computeMdbcPressure`'s
+own internals (`interpolateLiuLiu`'s `numNeighbors`/`A_g`/`b`, the projected
+`p_proj` and its Taylor gradient term) per boundary particle on the exact
+steps leading up to the NaN.
+
+- **Root cause: an undamped feedback loop, not a low-neighbor-count
+  artifact.** Traced boundary pressure step by step: `[-1.47,1.33]` →
+  `[-2.48,2.59]` → `[-3.95,5.56]` → `[-4.08,10.85]` → NaN — magnitude roughly
+  doubling every step. At step 5's worst offender, `numNeighbors=22` (well
+  past the `threshold=9` fallback cutoff, i.e. a well-sampled point using the
+  full MLS projection, not the Shepard/zero fallback) with `|grad p|=153`
+  producing `p_proj=11.25`. The mechanism: a larger boundary pressure pushes
+  nearby fluid particles harder (once the masking-bug fix above let it
+  through) → a steeper local fluid pressure field next step → `computeMdbcPressure`'s
+  one-step-lagged linear extrapolation projects an even larger boundary
+  pressure from that steeper gradient → repeat. No stabilizing term existed
+  anywhere in this loop; `computeMdbcDensity`'s analogous rest-density anchor
+  (mentioned in `computeMdbcPressure`'s own docstring as something pressure
+  structurally lacks) has no equivalent here.
+- **Fix landed**: a new `IncompressibleSolverConfig.mdbcPressureRelaxation`
+  field (default `0.3`, matching `divergenceFreeSolver`'s own default
+  `relaxationFactor` — the same fix pattern this scheme already uses for its
+  own Jacobi iterations), applied in `computeMdbcPressure`
+  (`modules/mdbc/pressure2025.py`) as `new = old + factor*(projected - old)`
+  before merging back onto `currentState.pressures`, round-tripped through
+  `incompressibleConfigToDict`/`dictToIncompressibleSPHConfig`
+  (`configurations/incompressible.py`).
+- **Verified**: `pytest tests/test_physics.py tests/test_incompressibleKrylov.py
+  tests/test_runner.py` (100 tests) passes unchanged (boundary particles
+  don't exist on those cases, so this new code path is never hit — the
+  `oldBoundary`/relaxation blend is a no-op there just like the masking fix
+  above). `probe_mdbcMlsPressureInstability.py --nx 128 --nsteps 30`: no
+  longer diverges — boundary pressure stays in roughly `[-0.1, 0.33]`
+  throughout instead of doubling every step. Re-ran the nx=128
+  `probe_randomFlowIncompressibleBoundaryModes.py` sweep at t≈1.5:
+  `mdbcMlsPressure` now completes the full run (`diverged=False`, 80 steps)
+  with density band **[0.688, 1.226]** — markedly tighter than both `plain`
+  (`[0.661, 1.460]`) and `mdbcDensity` (`[0.661, 1.475]`) on the identical
+  setup and physical time. `mdbcMlsPressure` is now both the most stable and
+  the most accurate of the three modes at this operating point (though all
+  three remain far looser than deltaSPH's `[0.999, 1.003]` baseline — see the
+  still-open bulk-behavior question above, which this does not touch).
+- **`mdbcPressureRelaxation=0.3` was not tuned** — it was chosen to match
+  the scheme's existing convention rather than swept. A follow-up could
+  check whether a larger factor (faster response, e.g. matching
+  `pressureSolver`'s own `0.3`... they're already equal) or a smaller one
+  (more damping) trades off stability margin against how quickly the
+  boundary pressure tracks a genuinely changing near-wall flow; not needed
+  to unblock this session's work since `0.3` already resolved the
+  divergence with margin (bounded to at least t≈1.5, well past where the
+  undamped version NaN'd at t≈0.1).
+
 ---
 
 ## Open questions / decisions needed
@@ -404,21 +466,26 @@ so only the diagnostics trajectory is collected.
   deltaSPH's ... resolution artifact ... or a real gap in the steps 2–5
   pressure-solver masking?~~ **Resolved (2026-08-26)**, see the nx=128
   follow-up above: not a resolution artifact (nx=128 is looser than nx=24,
-  not tighter) and not explained by the masking bug found in the same
-  session (`plain`, which never touches `computeMdbcPressure`, tracks
-  `mdbcDensity` closely — both loose). Looks inherent to DFSPH's own bulk
-  pressure-projection behavior near a wall on this problem, independent of
-  which `BoundaryPressureMode` is chosen. Not root-caused further this
-  session (would need a targeted probe isolating the near-wall pressure
-  solve itself, in the style of Part 1's `probe_*.py` scripts, and/or a
-  comparison against `kolmogorovIncompressible`'s unbounded stability to
-  isolate whether it's a wall effect specifically vs. a general DFSPH
-  trait masked by that case never having boundaries).
-- **New**: is `BoundaryPressureMode.mdbcMlsPressure` (Option c) salvageable
-  as currently formulated, or does `computeMdbcPressure`'s pressure
-  extrapolation need a stabilizing change (magnitude clamp, damping/
-  relaxation toward the previous step's value, or a different low-neighbor
-  fallback) before it can run past a handful of steps? Found this session
-  once the masking bug (above) stopped hiding it — see the nx=128
-  follow-up's last bullet. Until resolved, `mdbcMlsPressure` should probably
-  not be recommended over `mdbcDensity`/`plain` for real use.
+  not tighter). Not primarily a `BoundaryPressureMode` effect either: `plain`
+  and `mdbcDensity` track each other closely (both loose,
+  `[0.66,1.46]`/`[0.66,1.48]`); `mdbcMlsPressure`, once its masking bug and
+  instability were both fixed (below), does noticeably better
+  (`[0.69,1.23]`) but is still far from deltaSPH's `[0.999,1.003]`. Looks
+  inherent to DFSPH's own bulk pressure-projection behavior near a wall on
+  this problem — real, but a second-order effect next to whatever the main
+  gap is. Not root-caused further this session (would need a targeted probe
+  isolating the near-wall pressure solve itself, in the style of Part 1's
+  `probe_*.py` scripts, and/or a comparison against
+  `kolmogorovIncompressible`'s unbounded stability to isolate whether it's a
+  wall effect specifically vs. a general DFSPH trait masked by that case
+  never having boundaries).
+- ~~Is `BoundaryPressureMode.mdbcMlsPressure` (Option c) salvageable as
+  currently formulated, or does `computeMdbcPressure`'s pressure
+  extrapolation need a stabilizing change?~~ **Resolved (2026-08-26)**, see
+  "Part 2, `mdbcMlsPressure` instability — root cause and fix" above: an
+  under-relaxation factor (`mdbcPressureRelaxation`, default `0.3`) damps the
+  projection/fluid-solve feedback loop that was causing the divergence.
+  `mdbcMlsPressure` now runs stably at nx=128 to at least t≈1.5 and gives the
+  tightest density band of the three modes. The relaxation factor itself
+  was not tuned/swept — see that section's last bullet for a possible
+  follow-up, not blocking.

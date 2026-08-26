@@ -18,8 +18,24 @@ back onto `currentState.pressures` for boundary particles, so it is available
 to (a) `computePressureAccelIISPH`'s neighbor sums on the *next* step, giving
 fluid particles near a wall a physically extrapolated pressure gradient
 instead of an artificial zero-pressure boundary, and (b) as that next step's
-warm start for the boundary rows the solver itself holds fixed at 0 during
-the iteration (see `divergenceFree.py`'s `fluidMask` masking).
+warm start for the boundary rows the solver itself holds fixed (see
+`divergenceFree.py`'s `fluidMask` masking, which -- after
+`DFSPH_IMPROVEMENT_PLAN.md`'s masking-bug fix -- actually feeds that frozen
+value into the neighbor sums fluid particles read).
+
+That one-step lag closes a feedback loop with the fluid solve: a larger
+boundary pressure pushes nearby fluid particles harder, which (through the
+same mechanism this module exists to exploit) projects to an even larger
+boundary pressure the following step. Undamped, this is unstable -- verified
+by `scripts/probe_mdbcMlsPressureInstability.py`, which traced boundary
+pressure roughly doubling every step (even at well-sampled boundary points,
+`numNeighbors` well past the fallback threshold, so this is not primarily a
+low-neighbor-count artifact) until the run NaNs within single-digit steps.
+`schemeConfig.solverConfig.mdbcPressureRelaxation` (default `0.3`, matching
+`divergenceFreeSolver`'s own default `relaxationFactor`) under-relaxes the
+update -- `new = old + factor*(projected - old)` -- to damp that loop, the
+same fix pattern the rest of this scheme already uses for its own Jacobi
+iterations.
 """
 
 import torch
@@ -73,6 +89,14 @@ def computeMdbcPressure(currentState, config: SimulationConfig, schemeConfig, ad
         threshold = 9
         boundaryPressure[bIndices] = torch.where(
             numNeighbors > threshold, p_proj, boundaryPressure[bIndices])
+
+        # Under-relax against the incoming (previous step's) boundary pressure
+        # to damp the projection/fluid-solve feedback loop described in the
+        # module docstring -- a no-op the first time a boundary particle gets
+        # a nonzero projection, since `currentState.pressures` starts at 0.
+        relax = schemeConfig.solverConfig.mdbcPressureRelaxation
+        oldBoundary = currentState.pressures[bIndices]
+        boundaryPressure[bIndices] = oldBoundary + relax * (boundaryPressure[bIndices] - oldBoundary)
 
         mergedPressures = currentState.pressures.clone()
         mergedPressures[bIndices] = boundaryPressure[bIndices]
