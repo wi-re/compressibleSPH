@@ -37,7 +37,7 @@ from warpSPH.runner.runner import buildContext
 from warpSPH.runner.caseSpec import CaseSpec
 
 
-def runToTime(case, nx, tLimit, extraParams, tag):
+def runToTime(case, nx, tLimit, extraParams, tag, noPenShift=None):
     spec = CaseSpec(caseName=case.name, scheme=case.scheme, params=dict(case.params))
     spec = spec.merged(**case.defaults)
     spec = spec.merged(nx=nx, tLimit=tLimit, store=False, plot=False, quiet=True,
@@ -45,6 +45,8 @@ def runToTime(case, nx, tLimit, extraParams, tag):
 
     ctx = buildContext(case, spec)
     case.configureScheme(ctx)
+    if noPenShift is not None:
+        ctx.schemeConfig.solverConfig.mdbcNoPenetrationShift = noPenShift
     system = case.buildSystem(ctx)
     case.initialConditions(ctx, system)
     runningState = system.initializeNewState()
@@ -91,11 +93,16 @@ def wallDistanceProfile(ctx, runningState, nbins, tag):
     # there, growing with distance from the nearest wall -- so `d` itself is
     # already "depth into the fluid", no sign flip needed.
     depth = d
-    print(f'[{tag}] wall-depth range over fluid particles: '
-         f'[{depth.min().item():.4f}, {depth.max().item():.4f}]')
-
     rho = s.densities[fluidMask].detach()
     err = (rho - 1.0).abs()
+    crossedMask = depth < 0
+    nCrossed = int(crossedMask.sum().item())
+    crossedErrMean = err[crossedMask].mean().item() if nCrossed > 0 else float('nan')
+    print(f'[{tag}] wall-depth range over fluid particles: '
+         f'[{depth.min().item():.4f}, {depth.max().item():.4f}] '
+         f'nCrossed(depth<0)={nCrossed}/{depth.numel()} '
+         f'crossedMeanErr={crossedErrMean:.4e} '
+         f'rho=[{rho.min().item():.4f},{rho.max().item():.4f}]')
 
     dx = ctx.config.dx
     minDepth, maxDepth = depth.min().item(), depth.max().item()
@@ -119,11 +126,20 @@ if __name__ == '__main__':
     p.add_argument('--tlimit', type=float, default=1.5)
     p.add_argument('--nbins', type=int, default=8)
     p.add_argument('--mode', type=str, default='mdbcDensity')
+    p.add_argument('--no-pen-shift', dest='noPenShift', type=str, default='both',
+                   choices=['both', 'on', 'off'],
+                   help='Run computeMdbcNoPenShift on, off, or both (default) for the DFSPH case')
+    p.add_argument('--skip-deltasph', action='store_true')
     args = p.parse_args()
 
-    ctxD, stateD = runToTime(randomFlowIncompressibleCase, args.nx, args.tlimit,
-                             {'boundaryPressureMode': args.mode}, tag='dfsph')
-    wallDistanceProfile(ctxD, stateD, args.nbins, tag='dfsph')
+    variants = {'both': [True, False], 'on': [True], 'off': [False]}[args.noPenShift]
+    for shiftOn in variants:
+        tag = f'dfsph/noPenShift={shiftOn}'
+        ctxD, stateD = runToTime(randomFlowIncompressibleCase, args.nx, args.tlimit,
+                                 {'boundaryPressureMode': args.mode}, tag=tag,
+                                 noPenShift=shiftOn)
+        wallDistanceProfile(ctxD, stateD, args.nbins, tag=tag)
 
-    ctxW, stateW = runToTime(randomFlowCase, args.nx, args.tlimit, {}, tag='deltaSPH')
-    wallDistanceProfile(ctxW, stateW, args.nbins, tag='deltaSPH')
+    if not args.skip_deltasph:
+        ctxW, stateW = runToTime(randomFlowCase, args.nx, args.tlimit, {}, tag='deltaSPH')
+        wallDistanceProfile(ctxW, stateW, args.nbins, tag='deltaSPH')

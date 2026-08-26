@@ -159,6 +159,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
             'integrateRho': config.solverConfig.integrateRho,
             'boundaryPressureMode': config.solverConfig.boundaryPressureMode.name,
             'mdbcPressureRelaxation': config.solverConfig.mdbcPressureRelaxation,
+            'mdbcNoPenetrationShift': config.solverConfig.mdbcNoPenetrationShift,
         }
     }
 
@@ -256,6 +257,8 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         boundaryPressureMode=_boundaryPressureMode(solverConfigDict),
         mdbcPressureRelaxation=solverConfigDict.get(
             'mdbcPressureRelaxation', buildDefaultIncompressibleSolverConfig().mdbcPressureRelaxation),
+        mdbcNoPenetrationShift=solverConfigDict.get(
+            'mdbcNoPenetrationShift', buildDefaultIncompressibleSolverConfig().mdbcNoPenetrationShift),
     )
     
 

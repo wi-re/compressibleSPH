@@ -156,8 +156,13 @@ def dfsph_step(
     # Revert boundary velocity
     # with TimedBlock('compute mDBC no-pen shift', use_cuda=True, device=config.device) as tb_nopenshift:
     with record_function("[warpSPH] - [deltaSPH - 16] - compute mDBC no-pen shift"):
-        nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
-        dvdt += nopenshift / dt
+        # Experimental A/B toggle (DFSPH_IMPROVEMENT_PLAN.md) -- the original
+        # DFSPH paper has no such term and relies on the pressure projection
+        # alone to prevent penetration; default True preserves this scheme's
+        # historical always-on behavior pending that comparison's outcome.
+        if schemeConfig.solverConfig.mdbcNoPenetrationShift:
+            nopenshift = computeMdbcNoPenShift(currentState, config, schemeConfig, adjacency)
+            dvdt += nopenshift / dt
     # currentState.velocities = currentVelocities
 
     # First we project the velocity field to be divergence free using the DFSph solver

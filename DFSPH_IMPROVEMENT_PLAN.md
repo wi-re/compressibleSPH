@@ -501,6 +501,50 @@ is built from) to test whether the error is wall-localized or bulk-spread.
     "general DFSPH bulk pressure-projection" question, now with a cleaner
     number attached.
 
+### Part 2, no-penetration shift A/B test (2026-08-26)
+
+Hypothesis floated (project owner): the original DFSPH paper (Bender &
+Koschier) has no no-penetration term at all and relies on the pressure
+projection alone to prevent penetration — is `computeMdbcNoPenShift` a
+crutch that is actually making the wall-crossing problem above worse, not
+better? Tested directly rather than argued from the kernel's source (which
+is a soft per-particle velocity-damping correction, not a hard containment
+constraint — plausible either way from reading it alone).
+
+- **Change**: added `IncompressibleSolverConfig.mdbcNoPenetrationShift: bool`
+  (default `True`, preserving historical behavior), gating the
+  `computeMdbcNoPenShift`/`dvdt += nopenshift / dt` call in `dfsph_step`
+  (`schemes/dfsph.py`). Round-tripped through
+  `incompressibleConfigToDict`/`dictToIncompressibleSPHConfig`. Verified as
+  an exact no-op on the existing suite (100 tests unchanged, default `True`
+  matches prior always-on behavior).
+- **A/B result** (`probe_dfsphWallDensityProfile.py --no-pen-shift both`,
+  nx=128, `mdbcDensity`, t≈1.5, same seed, otherwise identical run):
+
+  | | shift on (default) | shift off |
+  |---|---|---|
+  | particles crossing the wall (depth<0) | 441/16384 (2.7%) | 543/16384 (3.3%) |
+  | worst penetration depth | 10.4 dx | 16.2 dx |
+  | density max | 1.401 | 1.472 |
+  | density min | 0.829 | 0.907 |
+  | mean error among crossed particles | 0.214 | 0.204 |
+
+  **The hypothesis is not supported by this test.** Turning the shift off
+  makes wall-crossing strictly worse on two of three crossing metrics (more
+  particles cross, and the worst one crosses nearly twice as deep) and on
+  density max; it only improves density min. Net: not a clear win either
+  way, and the crossing/depth numbers argue mildly *against* removing it,
+  not for it. Left `mdbcNoPenetrationShift` defaulted `True` — the toggle
+  itself stays in the config for further experimentation (e.g. combined
+  with a fix to the underlying near-wall pressure behavior, rather than as
+  a substitute for one), but this session's data doesn't support flipping
+  the default or removing the mechanism.
+- **Not investigated further this session**: *why* the shift doesn't fully
+  contain particles even when active (its threshold conditions vs. DFSPH's
+  much larger adaptive `dt` than this mechanism may have been tuned/verified
+  against elsewhere) — the A/B test answers "is it net-harmful" (no) but not
+  "why is 2.7% of the fluid still crossing with it on."
+
 ---
 
 ## Open questions / decisions needed
@@ -517,13 +561,17 @@ is built from) to test whether the error is wall-localized or bulk-spread.
   drifting past the nominal wall SDF boundary by production time (t≈1.5),
   with a severe local density error (mean 0.236) right where they do, and
   (2) a smaller ~7-10x bulk gap vs. deltaSPH that holds at every depth
-  including far from any wall. (1) is the more actionable open item now —
-  points at `computeMdbcNoPenShift` (`modules/mdbc/wp_nopenshift.py`)
-  potentially not fully containing fluid particles under DFSPH — and hasn't
-  been inspected yet. (2) would still benefit from the
-  `kolmogorovIncompressible`-vs-`--bounded` unbounded/bounded comparison
-  this bullet originally proposed, to check whether it's present even with
-  no wall at all.
+  including far from any wall. (1) is the more actionable open item — an A/B
+  test (see "no-penetration shift A/B test" above) ruled out "just remove
+  `computeMdbcNoPenShift`" as a fix (removing it made crossing depth/count
+  and density max modestly worse, not better), but did *not* explain why
+  ~2.7% of fluid particles still cross the wall with it active — that's the
+  narrower question still open, and would need reading
+  `computeMdbcNoPenShift`'s threshold conditions against DFSPH's actual
+  adaptive `dt`/velocity scale on this case, not just toggling it on/off.
+  (2) would still benefit from the `kolmogorovIncompressible`-vs-`--bounded`
+  unbounded/bounded comparison this bullet originally proposed, to check
+  whether it's present even with no wall at all.
 - ~~Is `BoundaryPressureMode.mdbcMlsPressure` (Option c) salvageable as
   currently formulated, or does `computeMdbcPressure`'s pressure
   extrapolation need a stabilizing change?~~ **Resolved (2026-08-26)**, see
