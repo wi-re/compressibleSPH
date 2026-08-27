@@ -269,10 +269,10 @@ class IncompressibleSystem(BaseIntegrationSystem):
 
         dx = dt**2 * dvdt_incomp
 
-        proj_vel = torch.einsum('nij, ni -> nj', gradVel, dx)
+        proj_vel = torch.einsum('nij, nj -> ni', gradVel, dx)
 
         self.state.positions += dx
-        self.state.velocities -= proj_vel
+        self.state.velocities += proj_vel
         # print(f"Applied incompressible update with max position change magnitude: {dvdt_incomp.norm(dim=1).max().item() * dt}")
 
         # print(returnValues[-1][2])
