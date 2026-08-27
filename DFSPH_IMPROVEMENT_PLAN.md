@@ -76,21 +76,39 @@ causes. This session found the actual mechanism and landed a fix:
   historical clamp by construction, so nothing else moves. Full suite
   (241 passed) and gradcheck pass.
 
+**Part 5: bounded DFSPH stability root-caused, fix recommended not landed
+(2026-08-27).** `randomFlowIncompressible --bounded` NaNs on its own at
+nx=128/t=5.54 (past the t≈1.5 Part 2 validated; not a regression, and not the
+Part 4 mechanism). Cause: fluid leaks into the wall band and piles up there
+at 30%+ over-density, monotonically, until it detonates. The deltaSPH sibling
+on the same geometry never lets a single particle in, so the geometry and
+boundary sampling are fine. It is a timestep threshold: stability turns over
+between half a particle spacing and a whole one of per-step displacement, and
+the default `cflFactor=0.3` sits just past it at 1.2 spacings. At
+`cflFactor=0.125` the case runs to t=8 with penetration in a steady state.
+Not the boundary-pressure mode (all three diverge), not
+`mdbcNoPenetrationShift` (helps ~20%), and *not* the unbounded implicit shift
+(capping it makes things worse — a useful negative result). Fix recommended
+(a wall-aware `dt` constraint, scoped like Part 4's gauge) but left to the
+owner, since it trades ~2.4x throughput on bounded runs.
+
 ---
 
 ## Next session: start here
 
-Part 4 is closed (see its two sections at the bottom of this document for
-the mechanism, the gauge comparison, and the validation numbers). Nothing
-below is blocking; pick by preference.
+Part 4 is closed and Part 5 is diagnosed but unfixed (both are written up at
+the bottom of this document). Nothing below is blocking; pick by preference.
 
-1. **`randomFlowIncompressible --bounded` diverges on its own at t=5.54**
-   (nx=128, untouched default, reproduced on the committed tree too). Part 2
-   only ever validated that case to t≈1.5, so this is new ground rather than
-   a regression — but it is a real failure mode of the bounded case that the
-   shifting-gauge fix deliberately does not touch. This is the natural
-   successor to Part 2's still-open wall gap, and probably the highest-value
-   thread left.
+1. **Land (or reject) Part 5's wall-aware timestep constraint.** The
+   bounded case's divergence is fully diagnosed (see Part 5): it needs the
+   per-step displacement held under ~half a particle spacing near walls, and
+   the default `cflFactor=0.3` gives 1.2. The fix is scoped the same way
+   Part 4's gauge is — active only where there are boundary particles, a
+   no-op on periodic cases — but it costs ~2.4x more steps on bounded runs,
+   so it is a deliberate trade rather than a free correction. Part 5 also
+   lists the one measurement that would sharpen the constraint's form (a
+   sweep at a different `n_h`, to separate "half a spacing" from "an eighth
+   of h").
 2. **The Krylov path never got the fix.** `solveIncompressible` returns
    through `solvePressureKrylov` with `gauge='nonnegative'` before reaching
    the relaxed-Jacobi loop, so `ShiftPressureGauge` does not reach it, and
@@ -112,6 +130,15 @@ edits to use):
   `--project-source`, `--null-test` (applies the operator to a constant and
   a random field, to measure how near-null the constant mode is),
   `--no-clamp`, `--maxIters`, `--jitter`.
+- `scripts/probe_boundedIncompressibleBlowup.py` — Part 5's tool: watches the
+  bounded case blow up step by step, reporting where each step's worst
+  particle is relative to the wall, how many have crossed it, and a
+  wall-depth density profile from just before the explosion. Knobs for the
+  things that turned out not to matter, so they stay cheap to re-check:
+  `--mode`, `--noPenShift`, `--shiftCap`, `--cflFactor`, and `--case
+  randomFlow` for the deltaSPH control.
+- `scripts/probe_tgvShiftGauge.py` — TGV under both gauges, graded against
+  the analytic kinetic-energy decay rate.
 - `scripts/probe_densityBiasVsDisorder.py` — the no-dynamics demonstration
   that the density bias is structural (jitter sweep against `mean(rho-1)`).
 - `scripts/probe_densitySign.py` — the original signed-vs-unsigned bulk bias
@@ -1451,3 +1478,123 @@ objection completely) fails at the very same step as leaving them in place.
   once a fix lands, to see whether it narrows) is now answerable, but the
   expected answer is "no": the fix does not apply to wall-bounded solves at
   all, by construction.
+
+## Part 5 — bounded DFSPH stability: the wall cannot stop a particle that crosses a full spacing in one step (2026-08-27)
+
+Picked up from Part 4's leftover item. `randomFlowIncompressible --bounded`
+at nx=128 reaches NaN at t=5.54 under the untouched default — past the t≈1.5
+Part 2 ever validated, so new ground rather than a regression, and reproduced
+on the committed tree, so not the Part 3 velocity-resample fix either. It is
+also *not* the Part 4 mechanism: that fix declines to act on a wall-bounded
+solve by construction, and the run is byte-identical with and without it.
+
+**What actually happens: fluid leaks into the wall and piles up there.**
+Instrumenting every step with each particle's distance to the wall
+(`scripts/probe_boundedIncompressibleBlowup.py`, new; `domainBoundarySdf`,
+the same measure Part 2's wall profile bins by) shows a monotone accumulation
+of fluid particles *inside* the boundary band, from the very first steps:
+
+| step | t | fluid particles past the wall | mean&#124;rho-1&#124; within 2dx of wall | in the bulk |
+|---|---|---|---|---|
+| 26 | 0.47 | 233 | 0.070 | 0.0036 |
+| 101 | 1.91 | 496 | 0.133 | 0.0068 |
+| 201 | 4.17 | 963 | 0.148 | 0.0086 |
+| 256 | 5.51 | 1487 | 0.198 | 0.0144 |
+| 257 | 5.54 | 4506 | 0.297 | 0.113 |
+
+The error is wall-localized by more than an order of magnitude throughout,
+and the count never recovers — it only grows. The wall-depth profile at the
+last pre-blowup step makes the shape of it plain: the bulk is fine
+(`mean rho = 1.011` beyond 4 spacings from the wall) while the fluid jammed
+into the wall band sits at **`rho = 1.30 - 1.36`**, 30%+ over-dense, peaking
+at 1.66. The final NaN is that pile letting go in a single step.
+
+**Not the boundary treatment, and not the shift.** Three candidates tested
+and all rejected:
+
+- **`BoundaryPressureMode`**: all three of `plain`, `mdbcDensity` and
+  `mdbcMlsPressure` diverge at t = 5.40 / 5.54 / 4.83. The mode changes
+  nothing that matters here.
+- **`mdbcNoPenetrationShift`**: on (default) gives 349 penetrating particles
+  at t=1.0, off gives 437. It helps ~20% — a real effect, nowhere near
+  enough, and consistent with Part 2's own suspicion that it is a crutch.
+- **Capping the implicit shift.** The shift `dx = dt**2 * a_p` is unbounded
+  in this solver and reaches ~6 particle spacings per step, which looked like
+  the obvious culprit. It is not: capping it at 0.25 spacings/step still
+  diverges (t=5.28), and capping it at 0.05 diverges *much earlier*
+  (t=1.45). The large shift is doing real work; throttling it just leaves
+  the density error uncorrected. Worth recording as a negative result,
+  because the shift's size is genuinely alarming and the natural next move.
+
+**The deltaSPH control settles what kind of problem this is.** The
+weakly-compressible sibling (`randomFlow --bounded`) on the *same geometry*,
+run to matched time: **zero** particles ever enter the wall band, and its
+wall-adjacent density (`1.0012`, `mean|rho-1| = 1.2e-3`) is identical to its
+bulk — no near-wall band at all. So the geometry and the boundary sampling
+are fine; something about how DFSPH runs against this wall is not.
+
+**It is the timestep, and the threshold is one particle spacing.** deltaSPH
+runs this case at `dt = 2.5e-4` (acoustic CFL); DFSPH runs it at `dt ≈ 0.02`,
+~80x larger, which is the entire point of an implicit scheme. Sweeping
+`cflFactor` and reading the result in the unit that matters — how far the
+fastest particle travels per step, which is `cflFactor * h = cflFactor * 4dx`
+for this case's `n_h = 4`:
+
+| `cflFactor` | advective step | outcome | penetrating particles | near-wall &#124;rho-1&#124; |
+|---|---|---|---|---|
+| 0.3 (default) | 1.2 spacings | **NaN at t=5.54** | 4506, growing | 0.30 |
+| 0.25 | 1.0 spacings | **NaN at t=5.09** | 15994, growing | 0.41 |
+| 0.125 | 0.5 spacings | survives to t=8.0 | 653, steady | 0.040 |
+| 0.05 | 0.2 spacings | survives to t=8.0 | 201, *declining* | 0.022 |
+
+The transition is sharp and sits between half a spacing and a whole one.
+Below it the penetration count reaches a steady state (and at 0.05 actively
+recovers, 255 -> 224 -> 201); above it the count grows without bound until
+the pile detonates.
+
+**Why one spacing is the right threshold, physically.** The wall's force on
+a fluid particle is mediated by the boundary particles' kernel contributions,
+computed from the configuration at the *start* of the step. The distance over
+which that contribution changes from "no wall here" to "fully inside the wall"
+is one particle spacing. A particle allowed to cross a full spacing per step
+can therefore traverse the entire first boundary-particle layer before the
+wall has ever exerted a force on it — the wall is not weak, it is *late*.
+That also explains why the near-wall error scales roughly first-order in dt
+(0.096 -> 0.017 -> 0.0071 across the sweep), why the boundary *pressure* mode
+is irrelevant (the problem is not what value the wall holds, it is that the
+particle is already past it), and why capping the shift alone does not help
+(advection at 1.2 spacings/step is over the threshold on its own, before the
+shift adds anything).
+
+Note the two contributions stack: at the default CFL, advection moves the
+fastest particle 1.2 spacings and the shift adds up to ~6 more. At
+`cflFactor = 0.05` advection gives 0.2 and the shift falls to ~0.08-0.19,
+since the shift scales as `dt**2`. Any fix has to bound the *total*
+displacement, which is why capping either one alone failed.
+
+**Recommended fix, not implemented — it is a cost decision, not just a
+correctness one.** The principled version is a wall-aware timestep
+constraint: when the solve has boundary particles, additionally limit `dt`
+so the per-step displacement (advective *and* shift) stays under ~half a
+particle spacing. Structurally this mirrors the Part 4 gauge fix — scoped to
+the case class that needs it, a no-op on periodic cases, which have no
+boundary particles and are already stable at the default CFL. The cost is
+real: it is a ~2.4x step-count increase on bounded DFSPH runs
+(`cflFactor` 0.3 -> 0.125), which is a deliberate trade of throughput for
+not diverging, and the sort of default the owner should choose rather than
+inherit. The natural home is `kolmogorovIncompressibleTimestep`
+(`cases/kolmogorovIncompressible.py`), which `randomFlowIncompressible`
+already borrows as its `timestep` hook.
+
+Two caveats worth carrying into that work:
+
+- The threshold was measured in particle spacings, but `n_h = 4` was fixed
+  throughout, so "half a spacing" and "one eighth of `h`" are not
+  distinguished by this data. Which one governs matters for the constraint's
+  form, and a single sweep at a different `n_h` would settle it.
+- Even at `cflFactor = 0.125` the steady state still holds ~650 particles
+  inside the wall band. Stable is not the same as correct: the wall still
+  leaks, it just leaks into an equilibrium instead of an avalanche. Part 2's
+  still-open wall-adjacent density gap is very likely the same phenomenon
+  measured at a time when it had not yet run away.
+
