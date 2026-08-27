@@ -108,6 +108,18 @@ as Part 4's unreachable setpoint being integrated into the momentum equation
 — which is also the explanation for why this scheme uses a momentum-neutral
 position shift in the first place.
 
+**Part 6: scheme-naming/architecture question opened, nothing restructured
+(2026-08-27).** `schemes/dfsph.py::dfsph_step` does not implement DFSPH — it
+is a divergence-free projection plus a position-based particle shift — though
+the registered scheme name (`divergenceFree`) is accurate, so the misnomer is
+confined to the file/function names. "Real DFSPH" is now measurable rather
+than hypothetical (`ShiftApplication.inStepVelocity`): much better at walls,
+worse on `tgv`, and the specific pairing of it with MLS-pressure boundaries
+NaNs at t=0.21, inverting Part 2's boundary-mode ranking. Recommended
+sequencing and a list of questions for a literature session on DFSPH and its
+derivatives are written up in Part 6; the owner wants that session before any
+restructuring.
+
 ---
 
 ## Next session: start here
@@ -115,6 +127,13 @@ position shift in the first place.
 Part 4 is closed and Part 5 is diagnosed but unfixed (both are written up at
 the bottom of this document). Nothing below is blocking; pick by preference.
 
+0. **A literature session on DFSPH and its derivatives**, to establish what
+   belongs where before any restructuring — the project owner's stated next
+   step. Part 6 lists the questions, each tied to a specific measurement in
+   this document rather than to general reading. The first of them (how
+   published implementations avoid integrating the constant-density solve's
+   permanent residual into momentum) is the same question item 1 below
+   attacks empirically, so the two inform each other.
 1. **Drive the velocity correction from the *attainable* part of the source
    only.** This is the highest-value item left, and the one experiment that
    could make a velocity mode safe enough to default to.
@@ -1812,4 +1831,133 @@ single flag on `solveIncompressible`'s source term, and it is the one
 experiment that could make a velocity mode safe enough to be the default.
 
 Suite (241 passed) and gradcheck pass; the default path is untouched.
+
+## Part 6 — what this scheme actually is, and whether "real DFSPH" should be a separate scheme (2026-08-27)
+
+Raised by the project owner off the back of Part 5: given that the velocity
+formulation turns out to be the one DFSPH proper uses, should the current
+scheme be moved to a new name and an actual DFSPH — position-based boundaries
+with MLS pressure — take the `dfsph` name? Recorded here with the
+measurements that bear on it. **No restructuring done**: the owner wants a
+literature session on DFSPH and its derivatives first, to establish what
+belongs where. The questions that session should answer are listed at the end,
+each one tied to something measured here rather than to general curiosity.
+
+### The misnomer is real, but narrower than it looks
+
+`schemes/dfsph.py::dfsph_step` implements a divergence-free velocity
+projection plus a position-based implicit particle shift
+(`solveIncompressible` applied in `finalize` as `dx = dt**2 * a_p`). That is
+not DFSPH, which runs two solves per step and applies **both** to the
+velocity. But the *registered* name is already
+`IncompressibleSPHScheme.divergenceFree`, and that is accurate for what the
+code does. So the misnomer lives only in the file and function names, not in
+the user-facing scheme name. Renaming `dfsph.py`/`dfsph_step` to match the
+registered name is a zero-risk correction and is worth doing independently of
+anything below.
+
+### "Actual DFSPH" is no longer hypothetical — it is `ShiftApplication.inStepVelocity`
+
+Part 5 continued (2) implemented it: constant-density solve inside the step,
+folded into the `dvdt` the integrator advects with, position shift dropped.
+That is the formulation. So the question "what would registering a real
+`dfsph` scheme ship?" has measured answers rather than expected ones:
+
+- **Walls: much better.** near-wall `mean|rho-1|` 9.7e-3 against 0.30 at the
+  current default's death, 63 particles ever inside the boundary band against
+  4506, `rho` held in [0.986, 1.140], stable to t=8.0.
+- **Bulk: worse, on the one case with a reference solution.** `tgv`'s
+  kinetic-energy decay runs at 3.3x the analytic rate and is non-monotone,
+  against 0.55x and monotone for the position shift.
+
+That second line is the whole difficulty with claiming the `dfsph` name for
+it today: it would be a scheme named after the canonical method that fails the
+canonical test case. And Part 5 continued (2) established the cause is not
+placement or tuning — it is Part 4's unreachable setpoint being integrated
+into the momentum equation, which no amount of renaming touches.
+
+### The specific pairing proposed — DFSPH + MLS-pressure boundaries — is currently the unstable one
+
+Untested until now. Under `inStepVelocity`, at nx=128 to t=8.0:
+
+| boundary mode | outcome | near-wall &#124;rho-1&#124; | penetrating |
+|---|---|---|---|
+| `mdbcDensity` | t=8.0 | 9.7e-3 | 63 |
+| `plain` | t=8.0 | 4.6e-2 | 268 |
+| `mdbcMlsPressure` | **NaN at t=0.21** | — | — |
+
+Extra damping only delays it — `mdbcPressureRelaxation` 0.1 gives t=0.71 and
+0.03 (10x the default) gives t=3.09 — so this is a genuine instability, not
+under-damping.
+
+**This inverts Part 2's ranking**, where `mdbcMlsPressure` was found to be the
+most stable *and* most accurate of the three modes. It was, under the
+position-shift formulation. Under the velocity formulation it is the only one
+that fails. So the boundary treatment's ranking is not a property of the
+boundary treatment alone — it depends on which formulation it is coupled to,
+and any conclusion carried over from Part 2 has to be re-derived rather than
+assumed.
+
+### Recommended sequencing (not acted on)
+
+1. Rename the file/function to match the already-correct registered scheme
+   name. Free, no behaviour change.
+2. Gate a second registered scheme on the source-projection experiment
+   ("Next session" item 1). If projecting the structurally-unreachable mean
+   out of the *velocity* path removes the `tgv` dissipation, then `dfsph`
+   becomes a scheme that is better at walls and correct in the bulk, and
+   registering it needs no argument. If it does not, registering it adds a
+   scheme that is strictly worse on the reference case.
+3. When it is registered: two `SchemeBundle`s sharing **one** step function,
+   differing in their defaults (`shiftApplication`, boundary mode, likely
+   `cflFactor`), rather than a forked `dfsph.py`. The two paths are ~90%
+   common code and the real divergence is in defaults, which is what the
+   bundle is for.
+
+### Questions for the literature session
+
+Each of these is a place where this codebase's measured behaviour needs an
+answer from the published methods, not a general reading topic.
+
+- **The unreachable setpoint.** Part 4 established that the SPH summation
+  density's particle average is minimised by the lattice and rises
+  quadratically with disorder, so `mean_i rho_i == rho0` is unattainable and
+  the constant-density solve carries a permanent residual. How do published
+  DFSPH implementations avoid integrating that residual into momentum? Warm
+  starting, a convergence tolerance deliberately looser than the structural
+  bias, one-sided source clamping (correct compression only, never
+  expansion), rest-density calibration against the sampled configuration, or
+  something else? This is the single question that decides whether a velocity
+  formulation can be default-safe here.
+- **Which density.** Is the constant-density solve driven by summation
+  density or by an advected/integrated density in the published method? The
+  structural bias argument applies to the first and not obviously to the
+  second, and this codebase has an `integrateRho` switch (currently
+  defaulting off, and Part 3 found a dead branch in it).
+- **Shifting versus the constant-density solve.** Which derivatives keep a
+  particle-shifting term *alongside* DFSPH's two velocity solves, and how do
+  they sequence it? Measured here: doing both at full strength corrects the
+  same density error twice per step and injects energy into `tgv` (kinetic
+  energy grows 6.6x over 200 steps).
+- **Boundary coupling.** Which boundary treatments do published DFSPH
+  implementations actually pair with — mDBC, Adami-style pressure
+  extrapolation, MLS projection, position-based/rigid-body coupling? Is the
+  boundary-pressure/fluid-pressure feedback loop this codebase damps with
+  `mdbcPressureRelaxation` a known failure mode, and what is the standard
+  formulation that avoids it rather than damping it?
+- **Reference values.** What decay rate do DFSPH papers report on Taylor-Green,
+  and is over-dissipation a known artifact of velocity-level density
+  correction? `tests/test_physics.py` documents this codebase's 0.55x as the
+  Monaghan viscosity switch rather than an error, so the comparison needs the
+  published number to be meaningful.
+- **Timestep near boundaries.** Part 5 measured a sharp stability threshold at
+  ~one particle spacing of per-step displacement, with the default
+  `cflFactor=0.3` sitting just past it at 1.2 spacings. Do published DFSPH
+  implementations carry an explicit wall-proximity timestep constraint, or
+  does their boundary treatment remove the need for one?
+- **Background pressure.** Part 4 found the constant pressure mode is not
+  forceless where kernel support is truncated, and that the drifting constant
+  was acting as a de-clumping background pressure. How does this relate to
+  transport-velocity formulations, which add such a background pressure
+  deliberately?
 
