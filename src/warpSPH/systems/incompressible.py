@@ -272,11 +272,19 @@ class IncompressibleSystem(BaseIntegrationSystem):
 
         proj_vel = torch.einsum('nij, nj -> ni', gradVel, dx)
 
-        self.state.positions += dx
-        self.state.velocities += proj_vel
+        shiftApplication = schemeConfig.solverConfig.shiftApplication
 
-        if (schemeConfig.solverConfig.shiftApplication
-                is ShiftApplication.positionAndVelocity):
+        if shiftApplication is not ShiftApplication.inStepVelocity:
+            # `inStepVelocity` has already applied this solve's correction to
+            # the velocity inside the step (`schemes/dfsph.py`), which is the
+            # whole of DFSPH proper's constant-density treatment -- applying
+            # the position shift on top of it corrects the same density error
+            # twice per step, which on `tgv` injects energy rather than
+            # removing it (kinetic energy *grows* 6.6x over 200 steps).
+            self.state.positions += dx
+            self.state.velocities += proj_vel
+
+        if shiftApplication is ShiftApplication.positionAndVelocity:
             # Also apply the constant-density solution the way DFSPH proper
             # does -- to the velocity -- rather than only as the position shift
             # above. Without this the scheme has no velocity-level response to
@@ -284,8 +292,10 @@ class IncompressibleSystem(BaseIntegrationSystem):
             # `div v = 0`, which stops further compression but never undoes
             # existing compression), so wall-adjacent compression can only be
             # relieved by moving particles, which near a wall pushes them
-            # through it. Dissipative -- see `ShiftApplication`'s docstring for
-            # the measured cost on `tgv` and why this is opt-in.
+            # through it. Dissipative -- applied here, after the integrator,
+            # nothing ever removes the non-divergence-free part of it. See
+            # `ShiftApplication`'s docstring, and `inStepVelocity` for the
+            # placement that does not have that problem.
             self.state.velocities += dt * dvdt_incomp
         # print(f"Applied incompressible update with max position change magnitude: {dvdt_incomp.norm(dim=1).max().item() * dt}")
 

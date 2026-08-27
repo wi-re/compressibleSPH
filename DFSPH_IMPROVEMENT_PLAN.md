@@ -99,7 +99,14 @@ state. It is dissipative, though — it drives `tgv`'s kinetic-energy decay to
 1.93x the analytic rate — so it ships opt-in, with the near-wall-only
 refinement that would likely remove that cost written up but not done.
 MLS-projection timing and divergence-free solver options were both tested
-and neither matters (<=10%).
+and neither matters (<=10%). A second round found the better formulation:
+`inStepVelocity` (DFSPH proper — velocity correction inside the step, no
+position shift) gives a 30x better near-wall density error than the default's
+death state and holds `rho` in [0.986, 1.140] to t=8.0. Both velocity modes
+damp `tgv` at ~3.3x the analytic decay rate, and that cost is now understood
+as Part 4's unreachable setpoint being integrated into the momentum equation
+— which is also the explanation for why this scheme uses a momentum-neutral
+position shift in the first place.
 
 ---
 
@@ -108,18 +115,22 @@ and neither matters (<=10%).
 Part 4 is closed and Part 5 is diagnosed but unfixed (both are written up at
 the bottom of this document). Nothing below is blocking; pick by preference.
 
-1. **Make `ShiftApplication.positionAndVelocity` act only near walls.**
-   This is the highest-value item left. It already turns the bounded case
-   from "NaN at t=5.54" into "steady to t=8.0 at the default CFL", but it is
-   dissipative in the bulk (`tgv`'s decay rate goes to 1.93x analytic), which
-   is why it is opt-in rather than default. The correction is only *needed*
-   where the position shift cannot act freely, so restricting it to a
-   wall-proximity band should keep the benefit and remove the cost — and
-   would make it a no-op on periodic cases by construction, the way Part 4's
-   gauge scopes itself. Needs a boundary-proximity measure available inside
-   `finalize` (a kernel sum over `kinds == 1` neighbours, or a field on the
-   state), with a smooth taper rather than a hard mask. See Part 5
-   continued.
+1. **Drive the velocity correction from the *attainable* part of the source
+   only.** This is the highest-value item left, and the one experiment that
+   could make a velocity mode safe enough to default to.
+   `ShiftApplication.inStepVelocity` already gives the bounded case a 30x
+   better near-wall density error and turns its NaN into a steady state, but
+   it damps `tgv` at 3.3x the analytic rate. Part 5 continued (2) argues that
+   dissipation *is* Part 4's unreachable setpoint integrated into the
+   momentum equation — the constant-density solve never converges, and its
+   permanent residual becomes a permanent unphysical force. Projecting the
+   structurally-unreachable mean out of the source for the velocity path
+   (while leaving the position shift on the raw source, where Part 4 showed
+   the mean carries the de-clumping signal) should remove it. One flag on
+   `solveIncompressible`'s source term. Note two refinements already tried
+   and *rejected*, so they are not re-run: confining the correction to a wall
+   band (diverges sooner than not doing it at all — its value is not
+   wall-local) and scaling it down (no lambda satisfies both cases).
 2. **Optionally, the wall-aware `dt` constraint** (Part 5). Still valid,
    still ~2.4x throughput, and now largely superseded by the above — worth
    landing only if the near-wall scoping does not pan out. Part 5 lists the
@@ -1722,4 +1733,83 @@ no walls at all. The blocker is mechanical rather than conceptual:
 not the state), so this needs either a boundary-proximity field on the state
 or a kernel-sum over `kinds == 1` neighbours. A smooth taper rather than a
 hard mask, to avoid injecting a discontinuity into the velocity field.
+
+### Part 5 continued (2) — the velocity correction's real cost, and why the scheme uses a position shift at all (2026-08-27)
+
+Two refinements to `positionAndVelocity` were tried. The first failed, the
+second is a clear improvement, and together they explain what the trade
+actually is.
+
+**Confining the correction to a wall band: tested, does not work.** The plan
+above predicted this would "keep the benefit and remove the cost", since the
+correction is only *needed* where the position shift cannot act freely.
+Implemented against an SPH interpolation of the boundary indicator
+(`kinds != 0`), which is a clean proximity measure — measured on this case it
+is 0.32 within a particle spacing of the wall, 0.07 at one to two, and
+**exactly zero beyond three**, so a taper on it vanishes identically in the
+bulk and on any periodic case. It diverges at **t=4.17**, against t=8.0 for
+the unscoped correction and t=5.54 for the shipped default. Widening the band
+makes it worse still (t=2.74). The prediction was wrong, and the reason is
+visible in the matched-`dt` table above: the unscoped correction improves the
+*bulk* density error 2x as well (1.4e-3 against 3.0e-3). Its value is not
+wall-local — a better-conditioned bulk is what leaves the wall region less to
+absorb — so confining it to a thin shell throws the mechanism away and injects
+a velocity discontinuity at the shell edge on top. The mode was implemented,
+measured, and removed rather than left in the config as a knob that is worse
+than both of its neighbours.
+
+**Scaling it down: no sweet spot.** The bounded case is stable at quarter
+strength (t=8.0 at lambda=0.25), but `tgv`'s decay rate is already 1.4x
+analytic and non-monotone there, against 0.55x for the default. The two
+requirements do not overlap anywhere.
+
+**Applying it where DFSPH proper does: a large improvement, and it isolates
+the real cost.** The correction was being added in `finalize`, *after* the
+integrator. DFSPH proper computes it inside the step and folds it into the
+`dvdt` the integrator advects with — and drops the position shift entirely,
+two velocity-level solves per step and no repositioning. That is the new
+`ShiftApplication.inStepVelocity`, and on the bounded case it is the best
+of everything tried:
+
+| mode | near-wall &#124;rho-1&#124; | bulk | penetrating | rho range | outcome |
+|---|---|---|---|---|---|
+| `positionShift` (default) | 0.30 | 0.113 | 4506 | [0.139, 2.452] | **NaN t=5.54** |
+| `positionAndVelocity` | 3.3e-2 | 1.2e-3 | 239 | [0.936, 1.147] | t=8.0 |
+| `inStepVelocity` | **9.7e-3** | **6.6e-4** | **63** | **[0.986, 1.140]** | t=8.0 |
+
+Keeping the position shift *as well* as the in-step correction is a trap
+worth naming: it corrects the same density error twice per step, and on `tgv`
+that **injects** energy rather than removing it — kinetic energy grows 6.6x
+over 200 steps. `finalize` therefore skips the shift in this mode.
+
+**And the cost is not a placement artifact — it is Part 4's unreachable
+setpoint, resurfacing in the momentum equation.** Both velocity modes damp
+`tgv` at essentially the same rate (3.28x and 3.26x analytic, against 0.55x
+for the default, both non-monotone). Moving the correction to the
+theoretically correct place did not help at all, which rules out "the
+divergence-free projection never gets to clean it up" as the explanation.
+The actual reason is the one Part 4 established: the SPH summation density's
+particle average *cannot* equal `rho0` for a disordered configuration, so the
+constant-density solve never converges and always carries a residual. Feed
+that permanent residual into the **momentum** equation and it is a permanent
+unphysical forcing. Apply the identical residual as a **position shift** and
+it is momentum-neutral — it only reorganises particles.
+
+That is the real answer to "why does this scheme use a position shift at all
+when DFSPH proper uses a velocity correction", and it reframes the whole
+trade: the position shift is not a shortcut, it is the formulation that is
+robust to an unreachable setpoint. Its weakness is purely that it cannot act
+near a wall without pushing particles through one.
+
+**The experiment this points at, not done:** drive the *velocity* correction
+from the attainable part of the source only — project out the structurally
+unreachable mean Part 4 measured (`probe_densityBiasVsDisorder.py`) — while
+leaving the position shift on the raw source, where Part 4 showed the mean
+carries the genuine de-clumping signal and must be kept. If the `tgv`
+dissipation is the unreachable mean being integrated into momentum, that
+projection should remove it and leave the bounded case's gain intact. It is a
+single flag on `solveIncompressible`'s source term, and it is the one
+experiment that could make a velocity mode safe enough to be the default.
+
+Suite (241 passed) and gradcheck pass; the default path is untouched.
 

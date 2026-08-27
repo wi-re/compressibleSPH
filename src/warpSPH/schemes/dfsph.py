@@ -18,12 +18,12 @@ from warpSPH.modules.boundaryConditions import computeForcing, enforceDirichlet,
 from warpSPH.modules.deltaSPH import computeVelocityDiffusion
 from warpSPH.modules.density import computeDensities
 from warpSPH.modules.gravity import computeGravity
-from warpSPH.modules.incompressible import solveDivergenceFree
+from warpSPH.modules.incompressible import solveDivergenceFree, solveIncompressible
 from warpSPH.modules.mdbc import (
     computeBoundaryVelocities, computeMdbcDensity, computeMdbcNoPenShift,
     computeMdbcPressure,
 )
-from warpSPH.configurations import BoundaryPressureMode
+from warpSPH.configurations import BoundaryPressureMode, ShiftApplication
 from warpSPH.modules.momentum import computeMomentum
 from warpSPH.modules.surfaceDetection import detectFreeSurface
 from warpSPHCore import SupportScheme, buildVerletList
@@ -185,6 +185,26 @@ def dfsph_step(
         with record_function("[warpSPH] - [deltaSPH - 03b] - compute mDBC pressure"):
             currentState.pressures = computeMdbcPressure(currentState, config, schemeConfig, adjacency)
 
+    # `ShiftApplication.inStepVelocity`: run the constant-density solve here,
+    # inside the step, and fold its correction into the same `dvdt` the
+    # integrator advects with -- where DFSPH proper puts it. The placement is
+    # the point: applied here it is visible to the *next* step's
+    # divergence-free projection, which removes whatever part of it was not
+    # divergence-free. `IncompressibleSystem.finalize`'s
+    # `positionAndVelocity` adds the same correction *after* the integrator,
+    # where nothing ever cleans it up -- and that uncorrected remainder is the
+    # dissipation it shows on `tgv`. See `ShiftApplication`'s docstring.
+    dvdt_inStep = None
+    if schemeConfig.solverConfig.shiftApplication is ShiftApplication.inStepVelocity:
+        dvdt_inStep, _p_incomp, _e_incomp, _ps_incomp = solveIncompressible(
+            particles = currentState,
+            config = config,
+            schemeConfig = schemeConfig,
+            adjacency = adjacency,
+            dvdt = dvdt + dvdt_diss + dvdt_pressure,
+            dt = dt,
+        )
+
     # To resolve the issues with particle disorder and clustering, we can also solve for the incompressible pressure using the Incompressible SPH solver
     # This effectively acts as a particle shifting term that helps to maintain particle order and prevent clustering
     # Instead of being explicit, e.g., as in delta SPH, this is an implicit particle shift
@@ -222,7 +242,8 @@ def dfsph_step(
     with record_function("[warpSPH] - [deltaSPH - 16] - build update"):
         update = WeaklyCompressibleSystemUpdate(
             dxdt = currentState.velocities.clone(),# + dt * dvdt_incomp,
-            dvdt = dvdt + dvdt_diss + dvdt_pressure,# + dvdt_incomp,
+            dvdt = (dvdt + dvdt_diss + dvdt_pressure
+                    + (dvdt_inStep if dvdt_inStep is not None else 0.0)),
             drhodt = drhodt,# + drhodt_diss,
             passive = torch.zeros(currentState.densities.shape, device=currentState.densities.device, dtype=torch.bool)
         )

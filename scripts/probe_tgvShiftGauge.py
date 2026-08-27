@@ -25,6 +25,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--nx', type=int, default=64)
 parser.add_argument('--nsteps', type=int, default=200)
 parser.add_argument('--gauges', nargs='*', default=['nonNegativeClamp', 'minShift'])
+parser.add_argument('--shiftApplication', type=str, default=None,
+                    choices=['positionShift', 'positionAndVelocity',
+                             'inStepVelocity'])
 args = parser.parse_args()
 
 from warpSPHBootstrap import bootstrap
@@ -45,6 +48,10 @@ for gaugeName in args.gauges:
     def _wrapped(ctx, _orig=_orig, gauge=gauge):
         _orig(ctx)
         ctx.schemeConfig.solverConfig.shiftPressureGauge = gauge
+        if args.shiftApplication is not None:
+            from warpSPH.configurations import ShiftApplication
+            ctx.schemeConfig.solverConfig.shiftApplication = \
+                ShiftApplication[args.shiftApplication]
 
     tgvCase.configureScheme = _wrapped
     try:

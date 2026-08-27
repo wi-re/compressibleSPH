@@ -56,10 +56,13 @@ parser.add_argument('--dfMaxIters', type=int, default=None)
 parser.add_argument('--dfRelaxMode', type=str, default=None, choices=['fixed', 'optimal'])
 parser.add_argument('--psMaxIters', type=int, default=None)
 parser.add_argument('--shiftApplication', type=str, default=None,
-                    choices=['positionShift', 'positionAndVelocity'],
+                    choices=['positionShift', 'positionAndVelocity', 'inStepVelocity'],
                     help="how `finalize` applies the constant-density solve; "
                          "`positionAndVelocity` is what makes this case stable "
                          "at the default CFL (see ShiftApplication's docstring)")
+parser.add_argument('--wallFraction', type=float, default=None,
+                    help="override `shiftVelocityWallFraction` (default 0.1); "
+                         "smaller widens the band the correction acts over")
 parser.add_argument('--fixedDt', type=float, default=None,
                     help="pin dt instead of using the case's adaptive timestep "
                          "hook -- required for any A/B whose variants change the "
@@ -206,6 +209,8 @@ if args.mlsRelaxation is not None:
 if args.shiftApplication is not None:
     from warpSPH.configurations import ShiftApplication
     ctx.schemeConfig.solverConfig.shiftApplication = ShiftApplication[args.shiftApplication]
+if args.wallFraction is not None:
+    ctx.schemeConfig.solverConfig.shiftVelocityWallFraction = args.wallFraction
 if args.dfRelaxMode is not None:
     from warpSPH.configurations import JacobiRelaxationMode
     df.relaxationMode = JacobiRelaxationMode[args.dfRelaxMode]

@@ -171,24 +171,45 @@ class ShiftApplication(Enum):
       shift itself collapses from ~1.2 spacings to ~0.1, since the velocity
       correction relieves compression continuously instead of in lumps.
 
-    **`positionAndVelocity` is not physics-neutral, which is why it is opt-in
-    rather than the default.** On `tgv` -- the one case here with an analytic
-    reference -- it drives the kinetic-energy decay rate to 1.93x the analytic
-    rate (against 0.59x for `positionShift`, the value
-    `tests/test_physics.py` documents and asserts) and makes the decay
-    non-monotone. The added correction is a velocity the divergence-free
-    projection never asked for, and it dissipates. On the periodic
-    `kolmogorovIncompressible` it is a wash: the mean density band improves
-    ~30% while the worst-case excursion gets ~3.6x worse.
+    **Both velocity modes are opt-in because neither is physics-neutral, and
+    `tgv` is where that shows.** Against the analytic decay rate
+    `KE(t) = KE(0) exp(-4 nu k^2 t)`, `positionShift` gives 0.55x (the value
+    `tests/test_physics.py` documents and asserts, and it is monotone);
+    `positionAndVelocity` gives 3.2x and `inStepVelocity` 3.4x, both
+    non-monotone. That is not a placement artifact -- it is the same
+    unreachable setpoint `ShiftPressureGauge` documents. The SPH summation
+    density's particle average cannot equal `rho0` for a disordered
+    configuration, so the constant-density solve never converges, and feeding
+    its permanent residual into the *momentum* equation is a permanent
+    unphysical forcing. Applied as a position shift the same residual is
+    momentum-neutral -- it only reorganises particles -- which is why the
+    shift formulation is benign in the bulk and why it is still the default.
 
-    So: a working configuration for wall-bounded DFSPH, at a cost in fidelity
-    that has been measured on the one case that can measure it. Applying it
-    only near walls (leaving the bulk untouched, which would make it a no-op on
-    periodic cases by construction) is the obvious next refinement and is not
-    done. See `DFSPH_IMPROVEMENT_PLAN.md` Part 5.
+    The obvious next experiment, not done: drive the velocity correction with
+    the *attainable* part of the source only (project out the structurally
+    unreachable mean, which Part 4 measured), leaving the position shift to
+    use the raw source as it does now.
+
+    - `inStepVelocity`: DFSPH proper. The correction is computed and applied
+      *inside* the step (`schemes/dfsph.py`), folded into the same `dvdt` the
+      integrator advects with, and the position shift is dropped entirely --
+      two velocity-level solves per step and no repositioning, which is the
+      original formulation. Best wall behavior of the three by a wide margin:
+      on the bounded case near-wall `mean|rho-1|` is 9.7e-3 (against 3.3e-2
+      for `positionAndVelocity` and 0.30 at the default's death), only 63
+      particles ever inside the boundary band (against 239 and 4506), and
+      `rho` stays within [0.986, 1.140].
+
+      Keeping the position shift *as well* is a mistake worth naming: it
+      corrects the same density error twice per step, and on `tgv` that
+      injects energy instead of removing it -- kinetic energy *grows* 6.6x
+      over 200 steps. `finalize` therefore skips the shift in this mode.
+
+    See `DFSPH_IMPROVEMENT_PLAN.md` Part 5.
     """
     positionShift = 0
     positionAndVelocity = 1
+    inStepVelocity = 2
 
 
 @dataclass
