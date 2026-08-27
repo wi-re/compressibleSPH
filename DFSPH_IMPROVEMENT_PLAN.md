@@ -34,6 +34,91 @@ not a resolution artifact (nx=128 doesn't close it) and is not primarily a
 `BoundaryPressureMode` effect — that gap is still open, see "Open questions"
 below.
 
+**Part 3: one bug fixed (velocity-resample sign/axis error in the VD+PS
+particle-shift, `systems/incompressible.py`), verified to not explain either
+of Part 2's open gaps; a second, unrelated DFSPH+free-surface case found
+broken (`rotatingSquarePatch.py`) and root-caused but not fixed; `integrateRho`
+audited and found to have a dead `True` branch.** See "Part 3" sections below.
+
+**Part 4: root-caused and fixed (2026-08-27).** Redirected to the
+periodic/boundary-less case (`kolmogorovIncompressible`) because it is the
+load-bearing building block every other DFSPH case sits on. The previous
+session found a live, reproducible NaN (`solveIncompressible`'s pressure mean
+climbing to 2.4e6 and blowing up at step 574, nx=128) and ruled out the
+non-negative clamp, the iteration budget, and the initial grid's symmetry as
+causes. This session found the actual mechanism and landed a fix:
+
+- `solveIncompressible` is an *implicit particle-shifting* solve, not a
+  momentum pressure solve (both call sites feed its output into a position
+  shift), so its "pressure" is a shifting potential.
+- Its setpoint is unreachable. The SPH summation density's particle average
+  is *minimised* by the lattice and rises quadratically with disorder (shown
+  directly, with no dynamics involved, in
+  `scripts/probe_densityBiasVsDisorder.py`; it follows from Parseval for any
+  positive-definite kernel), so `mean_i rho_i == rho0` cannot be attained.
+  The solver responds by winding up the one mode with a nonzero mean
+  response — the near-constant one, whose response is weak — without bound.
+  **This retires the previous session's option 1: the systematic density
+  bias is structural, not a bug anyone can go find and fix.**
+- Fixed with `ShiftPressureGauge.minShift` (subtract the fluid minimum:
+  non-negative *and* gauge-fixed), **now the default**, scoped to solves
+  where the constant mode is genuinely free. On `kolmogorovIncompressible`
+  at nx=128 it turns a run that NaNs at step 574 into a stable 1000-step run
+  with density held inside [0.980, 1.015] against the clamp's [0.240, 2.515].
+  Mean-centering — the fix that works in `solveDivergenceFree` — was tested
+  and is the *worst* option here.
+- The default change reaches exactly two cases (the periodic,
+  complete-support ones): `kolmogorovIncompressible`, which it fixes, and
+  `tgv`, which it leaves alone — TGV's kinetic-energy decay still matches
+  the analytic rate to within 0.5% of the clamp's answer at nx=64 and
+  nx=128, still monotone, still inside the band `tests/test_physics.py`
+  asserts. Every wall-bounded or free-surface solve falls back to the
+  historical clamp by construction, so nothing else moves. Full suite
+  (241 passed) and gradcheck pass.
+
+---
+
+## Next session: start here
+
+Part 4 is closed (see its two sections at the bottom of this document for
+the mechanism, the gauge comparison, and the validation numbers). Nothing
+below is blocking; pick by preference.
+
+1. **`randomFlowIncompressible --bounded` diverges on its own at t=5.54**
+   (nx=128, untouched default, reproduced on the committed tree too). Part 2
+   only ever validated that case to t≈1.5, so this is new ground rather than
+   a regression — but it is a real failure mode of the bounded case that the
+   shifting-gauge fix deliberately does not touch. This is the natural
+   successor to Part 2's still-open wall gap, and probably the highest-value
+   thread left.
+2. **The Krylov path never got the fix.** `solveIncompressible` returns
+   through `solvePressureKrylov` with `gauge='nonnegative'` before reaching
+   the relaxed-Jacobi loop, so `ShiftPressureGauge` does not reach it, and
+   its post-hoc clamp has exactly the "floor, not a gauge" character that
+   was just fixed on the Jacobi path. Its intra-solve iterate has still
+   never been instrumented.
+3. **Part 2's wall-adjacent density gap** and **Part 3's
+   `rotatingSquarePatch` corner loss** are both still open, both untouched.
+
+**Tooling** (all in `scripts/`, all confirmed working, none require source
+edits to use):
+- `scripts/probe_shiftPressureGauge.py` — end-to-end A/B of the two gauges
+  through the *real* solver, on either `kolmogorovIncompressible` or
+  `randomFlowIncompressible` (`--extra=--bounded`). Start here to re-check
+  anything about the fix.
+- `scripts/probe_incompressibleGaugeDrift.py` — the standalone
+  reimplementation of `solveIncompressible`'s loop, where the gauges were
+  prototyped. Toggles: `--gauge {clamp,center,center-clamp,minshift,quantile,none}`,
+  `--project-source`, `--null-test` (applies the operator to a constant and
+  a random field, to measure how near-null the constant mode is),
+  `--no-clamp`, `--maxIters`, `--jitter`.
+- `scripts/probe_densityBiasVsDisorder.py` — the no-dynamics demonstration
+  that the density bias is structural (jitter sweep against `mean(rho-1)`).
+- `scripts/probe_densitySign.py` — the original signed-vs-unsigned bulk bias
+  check on the running case.
+- `scripts/probe_pressureGaugeDrift.py` — the VD (divergence-free) solver's
+  gauge; confirms it is not where the problem is.
+
 ---
 
 ## Background / current-state facts
@@ -547,6 +632,74 @@ constraint — plausible either way from reading it alone).
 
 ---
 
+### Part 2, reference-paper comparison — VD+PS velocity-resample sign/axis bug (2026-08-26)
+
+Prompted by comparing this scheme against Cornelis et al., "An Optimized
+Source Term Formulation For Incompressible SPH" (2019 TVCJ) — the paper this
+scheme's implicit-particle-shift design (`IncompressibleSystem.finalize`,
+`systems/incompressible.py`) is modeled on (VD+PS: a divergence-free pressure
+solve, then a second density-invariance/DI pressure solve used only to shift
+particle positions, with the divergence-free velocity field resampled at the
+shifted positions rather than replaced).
+
+- **Stale-comment correction**: `schemes/dfsph.py`'s docstring/comments (and
+  the dead code at `dfsph.py:188-217`) read as if the paper's second PPE
+  (PS/DI) is simply unimplemented/disabled. It isn't — that code in
+  `dfsph.py` is genuinely dead, but the real PS step lives in
+  `IncompressibleSystem.finalize` (`systems/incompressible.py:238-276`),
+  fully wired and active every step regardless of `shiftProperties.active`.
+  The scheme does implement the paper's VD+PS structure end-to-end; a reader
+  of `dfsph.py` alone would reasonably conclude otherwise.
+- **Real bug found and fixed**: the paper's velocity-resample step (Eq. 17),
+  `v(t+Δt) = v'(t+Δt) + ∇v'(t+Δt)·(x(t+Δt) − x**)`, was implemented at
+  `systems/incompressible.py:272-275` as:
+  ```python
+  proj_vel = torch.einsum('nij, ni -> nj', gradVel, dx)
+  self.state.velocities -= proj_vel
+  ```
+  Verified against the actual compiled `warpSPHCore` `GradientScheme.Difference`
+  kernel with a synthetic linear velocity field (`v=A·x`, asymmetric `A` so
+  transpose vs. sign errors are distinguishable): the kernel matches the
+  paper's `(v_j−v_i)` convention with no extra sign, and produces
+  `gradVel[n,i,j] ≈ ∂v_i/∂x_j`. Against that layout, the einsum contracts
+  `dx` over the wrong axis (computes `Aᵀ·dx`, not `A·dx` — not simply a sign
+  flip, a different vector), and the `-=` then applies it with the wrong
+  sign on top. Numeric check: code's delta was `[+0.0226,+0.0240]` vs. the
+  paper-correct `[-0.0063,+0.0401]` — disagreeing in both direction and
+  magnitude. The now-dead `dfsph.py:203-217` code shows the same confused
+  pattern (explicitly negates the same operator's output before an
+  analogous einsum+add), suggesting this was never checked against the
+  paper's derivation, not a one-off typo.
+  **Fix landed**: `proj_vel = torch.einsum('nij, nj -> ni', gradVel, dx)`
+  and `self.state.velocities += proj_vel`.
+- **Verified as a no-op on the existing suite**:
+  `pytest tests/test_physics.py tests/test_incompressibleKrylov.py
+  tests/test_runner.py` (100 tests) passes unchanged — expected, this term
+  lives downstream of everything those tests check bit-for-bit.
+- **Checked against the plan's own two open bulk-gap/wall-crossing metrics —
+  fix does not move either one.** `probe_randomFlowIncompressibleBoundaryModes.py
+  --nx 128 --tlimit 1.5 --modes mdbcDensity`: ρ∈[0.659,1.465] post-fix vs.
+  the previously-recorded [0.661,1.475] pre-fix — within noise.
+  `probe_dfsphWallDensityProfile.py --nx 128 --tlimit 1.5 --no-pen-shift on`:
+  459/16384 (2.8%) fluid particles crossed the wall post-fix vs. 441/16384
+  (2.7%) pre-fix, worst-bin mean error 0.231 vs. 0.236, bulk (far-from-wall)
+  bins still ~5.5e-3-6.6e-3 mean error, same order as the pre-fix ~3.7e-3-
+  5.4e-3. **This is a real, verified bug and the fix is correct and stays
+  landed, but it is not the explanation for either open item below** — both
+  numbers are unchanged within run-to-run noise.
+  Plausible reason: `dx = dt**2 * dvdt_incomp` is second-order in `dt`, so
+  `proj_vel` is a small correction relative to the dominant bulk
+  pressure-projection and mDBC boundary effects already responsible for
+  those two gaps; the paper's own diagnostic for VD+PS's benefit was never a
+  density snapshot either — it was the shear-wave sinus-amplitude decay
+  over many seconds (Fig. 3), specifically because clustering/diffusion
+  artifacts from a wrong resample accumulate gradually in the *velocity*
+  field, not in an instantaneous density band. A `kolmogorovIncompressible`-
+  or shear-wave-style long-horizon velocity-quality check (rather than
+  another density-snapshot probe) is the more paper-faithful way to see this
+  fix's actual effect, if it's worth pursuing further — not done this
+  session.
+
 ## Open questions / decisions needed
 
 - Whether Part 1's fix should be a case-specific override (e.g. Kolmogorov
@@ -582,3 +735,719 @@ constraint — plausible either way from reading it alone).
   tightest density band of the three modes. The relaxation factor itself
   was not tuned/swept — see that section's last bullet for a possible
   follow-up, not blocking.
+- **New (2026-08-26), not yet acted on**: is `IntegrationSchemeType` actually
+  constrained to match the PPE derivations' assumption anywhere, or is that
+  purely convention? The paper's PPE derivation (its Eq. 2-6) is specific to
+  semi-implicit/symplectic Euler: velocity is updated first (including the
+  pressure correction), then position is advanced using that *new* velocity
+  — `Δt∇²p(t) = ρ0∇·v*` is only the right one-shot correction under that
+  ordering. Checked: `SimulationConfig.integrationScheme`'s dataclass default
+  is `rungeKutta4` (`configurations/simulationConfig.py:39`), and
+  `buildConfig`'s own fallback when unset is `rungeKutta2`
+  (`simulationConfig.py:93-94`) — neither is semi-implicit Euler. Every DFSPH
+  case that currently exists (`tgv.py:171`, `kolmogorovIncompressible.py:181`,
+  `randomFlowIncompressible.py:118`) explicitly overrides this to
+  `integrationScheme='semiImplicitEuler'` in its own `defaults` dict, and
+  `warpSPHIntegrators/euler.py`'s `integrateSemiImplicitEuler` was confirmed
+  (via `util.py`'s `updateStateSemiImplicitEuler`) to genuinely apply the
+  velocity update before the position update, matching the paper's ordering
+  — so **this is not the explanation for any currently-open item**: every
+  case actually exercised by this plan already gets it right, by convention.
+  But nothing enforces that convention: `CaseSpec.integrationScheme` defaults
+  to `'rungeKutta2'` independent of `scheme`
+  (`runner/caseSpec.py:53`), a case's own default is only a `setdefault`
+  (CLI/user override wins), and no code path checks
+  `scheme == divergenceFree` against `integrationScheme` anywhere in
+  `runner/`. A multi-stage RK integrator would call `dfsph_step` once per
+  stage, each stage independently solving `solveDivergenceFree` as if *that
+  stage's* output were the final velocity — but the actual state update is a
+  Butcher-tableau-weighted blend across stages, so the blended velocity is
+  not guaranteed divergence-free even though each individual stage's was;
+  `IncompressibleSystem.finalize`'s PS solve would then run once per full
+  step (right cadence) but on top of that not-actually-divergence-free
+  blended velocity. `--scheme divergenceFree --integration-scheme
+  rungeKutta4` (or any future DFSPH case that forgets the override) would
+  silently run a scheme whose PPE derivation no longer holds, with no
+  warning. Not fixed this session — flagging as a real latent gap, and a
+  candidate for a one-line guard (assert/warn in `_divergenceFree()` or
+  `dfsph_step`) if it's worth hardening against, rather than relying on every
+  future case remembering the same three-case convention.
+
+### Part 3 — `rotatingSquarePatch`: a DFSPH + free-surface case with severe, unexplained corner density loss (2026-08-26, new)
+
+Prompted by "check whether the tested cases use the right integration scheme,
+and keep digging on boundary/free-surface cases." All three cases actually
+exercised so far in this plan (`tgv`, `kolmogorovIncompressible`,
+`randomFlowIncompressible`) do correctly set
+`integrationScheme='semiImplicitEuler'`, so that's not live anywhere in this
+plan's own history. But grepping for every DFSPH-capable case turned up a
+fourth one the plan never touched: `cases/rotatingSquarePatch.py`
+(`scheme='deltaSPH'` by default, but its own docstring explicitly advertises
+`--scheme divergenceFree` as a supported comparison mode — "the same geometry
+under two schemes"). It's a rotating square patch of fluid with a genuine
+open free surface (`freeSurface=True`, unlike every other case here, which
+has none), and its docstring calls the corners "what makes this test hard."
+
+- **First hypothesis (integration-scheme mismatch, per the item above) —
+  tested and ruled out as the primary cause.** This case inherits
+  `WEAKLY_COMPRESSIBLE_DEFAULTS['integrationScheme'] = 'rungeKutta2'` (no
+  override of its own), so `--scheme divergenceFree` on it *is* a live
+  instance of exactly the invalid combination flagged above. Confirmed it
+  runs that way by default: `python -m warpSPH.cases.rotatingSquarePatch
+  --scheme divergenceFree --nx 32 --tLimit 0.05` blows up (kineticEnergy
+  16→~10⁴, maxVelocity 4.8→144-200, minDensity 1.0→0.18 within 100 steps).
+  Re-ran with `--integrationScheme semiImplicitEuler` explicitly forced: it
+  blows up *worse* (maxVelocity up to 452, kineticEnergy up to ~4.4e4) — so
+  the integration-scheme mismatch is real and worth fixing independently,
+  but it is not what's driving this particular blowup.
+- **Second hypothesis (frozen, oversized `dt`) — real, but also not the
+  primary cause.** `rotatingSquarePatch` has no `Case.timestep` hook (unlike
+  `randomFlowIncompressible`, which needed one for exactly this reason — see
+  Part 2 findings above), so per `runner/runner.py:285-286`
+  (`if case.timestep is not None: ctx.config.dt = case.timestep(...)`), `dt`
+  is **never adapted** for this case under any scheme — confirmed: "final dt"
+  in the run report always equals the initial WCSPH-acoustic-CFL-derived
+  value, unchanged after 100 steps. Forcing a 10x smaller fixed `dt` via
+  `--targetDt 0.00005` delayed the blowup (NaN at step 143 instead of ~100)
+  but did not prevent it. This is a second, real, independent bug (the same
+  bug class Part 2 already fixed for `randomFlow`/`randomFlowIncompressible`,
+  never ported to this case) but not sufficient on its own to explain the
+  failure.
+- **Root cause, localized precisely: severe, resolution-independent density
+  loss at the square's four convex corners, present within ~8 steps,
+  regardless of `dt` or integrator.** Instrumented the case (monkeypatched
+  `diagnostics` to capture the live state) and looked at the lowest-density
+  particles directly. At nx=32 (100 particles) and nx=96 (1024 particles),
+  the four corner-most particles read essentially the **same** density in
+  both cases — `ρ≈0.506` at nx=32 vs. `ρ≈0.506` at nx=96 — and the same
+  neighbor counts (30 vs. a bulk median of 56-93). Resolution-independence
+  is the tell: this isn't discretization noise, it's the particle's actual
+  geometric situation — a particle sitting at a 90° convex free-surface
+  corner has roughly a quarter of a full kernel-support disk's worth of
+  fluid around it, so its raw SPH-summation density *correctly* reads well
+  below `rho0` there. **Under the identical setup and resolution with
+  `--scheme deltaSPH` (EOS-based), density at the same corner particles
+  stays at 0.9998** — confirming this is specific to DFSPH's implicit
+  pressure solve, not a property of the geometry itself: an EOS just turns a
+  low corner density into a small, bounded pressure response, while DFSPH's
+  PPE tries to actively correct it back toward `rho0`.
+- **A plausible fix already exists in the code, commented out, and a quick
+  test of it didn't resolve the corner blowup — needs more targeted work,
+  not landed this session.** `modules/incompressible/divergenceFree.py` has
+  `# pressureB[particles.surfaceIndicators == 1] = 0.0  # Set pressures to
+  zero for surface particles` — the standard IISPH/PCISPH free-surface
+  treatment (pressure should be ~0 at a genuine free surface, not driven
+  back toward the bulk value). Enabling it and re-running the corner probe
+  changed almost nothing (`ρ≈0.507` vs. `0.506`). Root cause of *that*:
+  `detectFreeSurface` flags **96/100 particles at nx=32 and 536/1024 (52%)
+  at nx=96** as surface on this small, thin patch — with `n_h=4.0` and
+  `expansionIterations` dilation, a full support-radius-thick shell inward
+  from the true edge gets flagged, which at this patch's size is most of
+  the domain. A clamp gated on that mask isn't a clean, isolated test of
+  the free-surface-corner hypothesis when it's firing on half-to-nearly-all
+  of the particles; it also only exists in `divergenceFree.py`'s relaxed-
+  Jacobi loop — `solveIncompressible` (`incompressible.py`, the DI/PS
+  solver that runs unconditionally every step in `finalize`) and the Krylov
+  path (`krylov.py`) have **no** free-surface-aware logic at all, commented
+  out or otherwise, so even a working clamp in the VD solve wouldn't reach
+  the PS shift that's applied to positions every step.
+- **Not resolved this session.** Two independent, real, already-fixed-
+  elsewhere-but-not-here bugs (integration scheme, frozen `dt`) are ruled out
+  as the primary driver; the actual mechanism is corner-localized,
+  resolution-independent, DFSPH-specific density loss that an EOS-based
+  scheme doesn't share, and the one existing candidate fix in the codebase
+  is disabled, mask-overbroad on this geometry, and only wired into one of
+  three solver code paths. Next steps, in rough order of leverage: (a) check
+  whether `SurfaceDetectionConfig`'s scheme/`expansionIterations` are simply
+  too aggressive for a patch this thin at these resolutions (a narrower mask
+  would make the existing clamp a fairer test); (b) if a narrower mask still
+  doesn't fix it, extend the same pressure clamp (or a softer, relaxed
+  version, following `mdbcPressureRelaxation`'s precedent from Part 2) to
+  `solveIncompressible` and `solvePressureKrylov`, not just the VD solve;
+  (c) separately land the two ruled-out-as-primary-but-still-real fixes
+  (a `timestep` hook for this case, and the integration-scheme guard) since
+  both are real bugs independent of the corner issue. This is the most
+  concrete, reproducible lead this plan has found for a DFSPH-vs-deltaSPH
+  robustness gap at a genuine free surface (as opposed to the still-open
+  wall/mDBC-boundary gap in Part 2, which is a structurally different
+  scenario — solid walls, not open free surface).
+
+### Part 3 — `integrateRho` audit (2026-08-26)
+
+Asked directly: do the tested cases follow the "not `integrateRho`" path
+correctly, and is that path actually correct? `IncompressibleSolverConfig.
+integrateRho` defaults to `False`
+(`configurations/moduleConfigurations/solver.py:121`), and none of `tgv`,
+`kolmogorovIncompressible`, or `randomFlowIncompressible` override it — so
+yes, every tested case uses the "recompute density from scratch every step"
+path, and `dfsph_step`'s own gating for it
+(`if currentState.densities is None or not integrateRho: currentState.
+densities = computeDensities(...)`) is correctly wired for that setting.
+
+- **But the flag it's gating turns out not to matter either way — a real,
+  if currently-inert, config/contract bug.** Traced what `integrateRho=True`
+  would actually change: the generic integrator applies the continuity-
+  equation update (`ρ(t)+Δt·drhodt`) to `self.state.densities` as part of
+  `updateStateSemiImplicitEuler`'s `applyQuantityUpdate`, *before*
+  `IncompressibleSystem.finalize` runs. But `finalize` immediately discards
+  that: `self.state.densities.copy_(lastState.densities)`
+  (`incompressible.py:128-131`) overwrites it with `lastState.densities` —
+  the density `dfsph_step` computed/used at the *start* of the step, not the
+  continuity-integrated value — and then `self.state.densities =
+  computeDensities(self.state, ...)` (`incompressible.py:230`) overwrites
+  *that* again with a fresh full SPH summation at the shift-advected `x**`,
+  unconditionally, regardless of `integrateRho`. So whatever
+  `integrateRho=True`'s continuity-equation branch computes is thrown away
+  twice over before it ever reaches the density that's carried into the next
+  step. **The config flag's docstring ("Whether to integrate density in the
+  incompressible solver") is not actually true for the density that
+  survives a step** — `finalize` always resums, unconditionally. Since every
+  case that exists uses the default (`False`), this isn't producing wrong
+  results anywhere today, but the flag itself is dead on the `True` branch,
+  which would surprise anyone who sets it expecting continuity-based density
+  evolution. Not fixed this session — either `finalize`'s unconditional
+  resum should itself become conditional on `integrateRho`, or the flag's
+  `True` branch and docstring should be removed/corrected to say what it
+  actually (doesn't) do.
+- **Secondary, smaller finding from the same trace**: `finalize` always
+  computes `ρ**` (line 230) *before* applying the PS shift (`self.state.
+  positions += dx`, line 274) — so the density that's carried into the next
+  step is always labeled at the pre-shift position `x**`, one shift-worth
+  stale relative to the actual carried-forward position `x(t+Δt)`. This
+  matches the reference paper's own approach (it never re-verifies density
+  after its analogous shift either), so it's not obviously wrong, but it's
+  an uncorrected small error source every step, independent of
+  `integrateRho`, and was previously undocumented.
+
+### Part 4 — periodic, boundary-less pressure-gauge drift: found a live NaN mechanism in `solveIncompressible` (2026-08-26)
+
+Redirected per project owner: the free-surface corner issue above is real but
+superfluous to the actual question — dig into the **boundary-less** case
+(no solid wall, no free surface) specifically, because a fully periodic
+domain's PPE is only defined up to an additive constant (pure-Neumann null
+space), and that constant can drift to a magnitude large enough to erode
+float32 precision and cause a blowup. One existing mitigation (subtracting
+the mean) was flagged as unreliable. Used `kolmogorovIncompressible`
+(periodic, no boundary, no free surface — exactly the isolated case asked
+for) and instrumented both pressure solvers non-invasively (Python-level
+monkeypatching of `solveDivergenceFree`/`solveIncompressible`, no source
+changes) to log `sourceTerm`/pressure mean, std, min/max, and iteration
+count every step.
+
+- **The VD (divergence-free) solver's gauge fix works correctly, and is not
+  the drift source.** `solveDivergenceFree`'s relaxed-Jacobi loop subtracts
+  `pressureB[fluidMask].mean()` every iteration (both the fixed-`omega` and
+  `optimal` variants — confirmed by reading both loops). Measured over 300
+  steps at nx=64: `pMean` stayed at `~1e-8` (float32 noise floor) the entire
+  run, even as `pStd` grew ~4 orders of magnitude (`1e-4` → `4.1`) tracking
+  the flow's genuine physical pressure buildup. Tried the also-present,
+  also-commented-out `sourceTerm = sourceTerm - sourceTerm.mean()` fix on
+  top of the existing per-iteration recentering: **no measurable effect**
+  (`pStd`/`nIter` trajectories nearly identical with and without it) — this
+  solver's gauge was already fine; the persistent non-convergence
+  (`maxIterations=32` hit every step from step ~30 on, in both variants) has
+  some other cause, not gauge inconsistency. Reverted the experiment (see
+  the module docstring's own note that `sourceTerm.mean()` isn't currently
+  subtracted).
+- **`solveIncompressible` (the DI/PS solver, called every step from
+  `IncompressibleSystem.finalize`) has no defense against drift at all, and
+  it is live and reproducible.** Its gauge fix is `torch.clamp(pressureB,
+  min=0.0)` — a physically-motivated "pressure isn't tensile" floor, not a
+  mean-centering. The PPE operator here has the *same* constant null space
+  as the VD solver (same `computePressureAccelIISPH`/
+  `computePressureShiftIISPH` machinery, just scaled by `dt**2`), but a
+  floor-only clamp provides zero resistance to the null-space mode
+  drifting *upward*: nothing pulls a too-large mean back down.
+  Mechanistically: `sourceTerm = rho0 - rhoStar` had a **persistently
+  negative mean at every single sampled step across 300+ steps**
+  (`stMean` between `-1e-8` and `-2.4e-2`, never once positive after the
+  first couple of steps) — not from the `rhoStar` floor-clamp at 0.9
+  (confirmed `nClamped=0/4096` throughout a 200-step nx=64 run, ruling that
+  out directly), but from a genuine, systematic tendency for the predicted
+  density to sit slightly *above* `rho0` — i.e. the same sign/character as
+  this plan's already-open "DFSPH bulk density-band gap vs. deltaSPH"
+  finding (Part 2), previously only characterized as an error *magnitude*,
+  never checked for *sign*. Since `alphas` (the IISPH diagonal) is always
+  negative by construction (`torch.clamp(..., max=-1e-6)`), a persistently
+  negative `residual` mean divided by a persistently negative `alphas`
+  pushes `pressureB`'s mean *up* every single iteration, and nothing in the
+  loop (the floor clamp least of all) ever pushes it back down.
+- **Confirmed this actually blows up.** nx=64/300 steps: `pMean` climbed
+  from `~1e-3` to `9.8` (comparable in magnitude to `pStd` itself — i.e.
+  roughly half of the reported "pressure signal" at that point is an
+  unphysical uniform offset, not real spatial variation), while `nIter`
+  pegged at `maxIterations=64` from step ~45 onward (never converging,
+  consistent with the null-space component being structurally
+  un-correctable by this iteration). **nx=128, run to 1000 steps: `pMean`
+  climbed to `29.9` by step 560, then to `2.38e6`, then NaN at step 574** —
+  a clean, direct reproduction of exactly the failure mode described
+  ("pressure drifts to a very large constant... leads to float accuracy
+  issues and blow up"). This run used the identical `kolmogorovIncompressible`
+  configuration Part 1 validated as stable to 1600 steps / t≈14 — the
+  discrepancy is almost certainly run-to-run chaotic sensitivity (forced
+  turbulence; no seed was pinned to match Part 1's exact probe), not a
+  difference introduced by the instrumentation (which is read-only
+  Python-level wrapping, no source files were modified for this run — verified
+  via `git diff --stat` immediately after). That the *timing* varies run to
+  run doesn't weaken the finding: the mechanism is real, live, and reachable
+  from the current default config on a case this plan already calls
+  "validated," not a hypothetical.
+- **Not fixed this session — needs a design decision, not a quick patch.**
+  Unlike the VD solver, `solveIncompressible` can't just copy the
+  "subtract the mean every iteration" fix verbatim: its non-negative clamp
+  is physically load-bearing (pressure without tension), and naively
+  recentering would fight that constraint. Candidate directions, roughly in
+  order of how much they change the solver's character: (a) recenter around
+  the *median* or some other robust statistic instead of literal zero,
+  then re-floor — cheaper than a redesign, but ad hoc; (b) cap `pressureB`'s
+  *mean* growth per iteration directly (a "soft ceiling" mirroring
+  `mdbcPressureRelaxation`'s under-relaxation precedent from Part 2) rather
+  than touching the field's shape; (c) address the root cause instead of
+  the symptom — if DFSPH's bulk density genuinely runs systematically
+  (not just noisily) dense relative to `rho0`, chasing that upstream (Part
+  2's still-open bulk-gap item) would shrink `sourceTerm`'s persistent bias
+  and starve this drift mechanism directly, closing two open items at once.
+  (c) is the most promising lead precisely because it's the same signed
+  quantity as the pre-existing open bulk-gap question — worth checking
+  first whether that gap's *sign* (not just magnitude) matches what's
+  measured here before designing a fix around either symptom.
+- **Krylov path spot-checked, not fully ruled out.** `solvePressureKrylov`'s
+  `gauge='center'` recentering is applied **once, after the whole solve**,
+  not per-iteration like both relaxed-Jacobi loops — structurally the
+  highest-risk path for intra-solve drift, since none of the underlying
+  Krylov methods (BiCGStab/GMRES/CG/BiCG/MINRES, in `modules/shifting/`)
+  know about the gauge constraint internally, and the module's own docstring
+  already flags this operator as ill-conditioned (`kappa(M^-1 A) ~ O(1e8)`).
+  A GMRES run (nx=64, 100 steps, on the VD/divergence-free solve, which
+  *does* have per-solve-final gauge fixing) didn't show obviously worse
+  drift than relaxed-Jacobi in final per-step stats (`pMean` stayed
+  `~1e-7`, `pStd`/`pMax` comparable order to relaxed-Jacobi's), but that
+  only observes the *post-solve* state, not what happens to the iterate
+  *during* the ~33 internal iterations each step — the exact blind spot
+  this mechanism lives in. Did not instrument `solveIncompressible` under a
+  Krylov solver (it always uses the same `gauge='nonnegative'` post-hoc
+  clamp regardless of `solverType`, so it likely inherits the identical
+  drift mechanism found above, possibly faster given the higher intra-solve
+  iteration count). Not tested this session.
+- **Confirmed the sign match for fix direction (c).** Checked directly
+  (`kolmogorovIncompressible`, nx=64, 300 steps, no boundary/wall involved):
+  `mean(rho-1) = +2.71e-3` against `mean|rho-1| = 3.54e-3` — the *signed*
+  bias accounts for ~76% of the *unsigned* error, i.e. this is
+  predominantly a systematic bias, not zero-mean noise, and 82% of
+  particles sit above `rho0`. This is the same sign, same order of
+  magnitude, and same case as this section's `sourceTerm` measurements
+  above — strong evidence that Part 2's still-open "DFSPH bulk density-band
+  gap vs. deltaSPH" and this section's `solveIncompressible` pressure-mean
+  runaway are two symptoms of one upstream cause (DFSPH's bulk pressure
+  projection running systematically dense), not two unrelated bugs. Fixing
+  the upstream bias is now the best-supported next step across both open
+  items, rather than patching either symptom (a wall-density gap, an
+  unbounded pressure gauge) independently.
+
+### Part 4 continued — isolating the drift's actual cause: clamp, iteration budget, grid symmetry (2026-08-26)
+
+Follow-up per project owner: does deactivating the non-negative clamp change
+the drift; does raising `maxIterations` let the solver actually converge;
+and is a perfectly-regular initial grid ("even distortion... difficult to
+solve cleanly... tension... until noise breaks the symmetry enough") the
+underlying driver — with the caveat that an alternative ("optimal") sampling
+avoids the perfect-symmetry start but introduces its own initial density
+noise instead. Built a self-contained reimplementation of `solveIncompressible`'s
+loop in a scratch probe (toggleable clamp, overridable `maxIterations`, no
+source edits) and re-ran `kolmogorovIncompressible` at nx=64/300 steps under
+each variant; confirmed the reimplementation reproduces the real solver's
+trajectory byte-for-byte on the baseline case before trusting its variants.
+
+- **Removing the clamp does not stop the drift — refines, doesn't overturn,
+  the Part 4 finding above.** `pMean` trajectory with `--no-clamp` is nearly
+  identical to the clamped baseline (rises to `~8.5` vs. `~9.8`, settles to
+  `~2.1` vs. `~3.1` by step 300; `pMax` was if anything slightly *higher*
+  without the clamp at some steps, e.g. `57.7` vs. `31.97` at step 90). So
+  the clamp isn't *causing* the upward drift — the mechanism identified above
+  (persistent negative `sourceTerm` mean ÷ persistently negative `alphas`
+  pushing the null-space mode up every iteration) operates independently of
+  whether the floor is there. The clamp's only role is failing to defend
+  against it, not driving it.
+- **A perfectly-regular starting grid is not what's driving the
+  non-convergence either — tested directly, not just reasoned about.**
+  `kolmogorovIncompressible`'s own `buildSystem` hardcodes
+  `sampleRegularParticles(..., jitter=0.0)`
+  (`sample/weaklyCompressible.py:24`) — it never reads
+  `CaseSpec.samplingScheme` at all (confirmed: passing `--samplingScheme
+  jittered`/`optimal` through the real CLI path produced byte-identical
+  output to the unset default, since the case simply doesn't wire that
+  general mechanism up). Monkeypatched `sampleRegularParticles` directly to
+  test its own `jitter` parameter instead (0.1, a real, immediate breaking
+  of the initial lattice symmetry): this produces a large **one-time**
+  initial pressure spike (`pMean=36.8`, `pMax=248` at step 0, vs. the
+  regular grid's `pMean=8.6e-4` at step 0) — exactly as expected, since a
+  jittered start has real initial density disorder the solver must correct
+  immediately — but that spike resolves in **6 iterations**, not 64, and
+  from step 1 onward the trajectory tracks the unjittered baseline closely
+  (peak `pMean~7.9` vs. `~9.8`; `nIter` pegs at `maxIterations=64` from
+  step ~10-20 onward either way). **So breaking the initial symmetry trades
+  a one-step transient spike for essentially the same subsequent
+  non-convergence/drift pattern, not a fix for it** — the persistent
+  `sourceTerm` mean-bias and the resulting drift is not primarily an
+  artifact of the t=0 lattice being perfectly symmetric; it re-emerges
+  dynamically as the flow develops regardless of the starting condition.
+  This matches the "optimal sampling starts with its own density noise"
+  caveat: the caveat turns out to be the whole story, not just a footnote —
+  neither starting condition avoids the drift, they just differ in whether
+  the disorder is front-loaded (jittered) or develops over ~10-40 steps
+  (regular).
+- **`nIter` itself does not show the peak-then-decay pattern — `pMean`/`pStd`
+  do.** Across every variant tested, once `nIter` first hits
+  `maxIterations` (around step 10-40, depending on variant) it **stays
+  pegged there for the rest of the run** — it never recovers to early
+  convergence the way the hypothesis's "sudden resolution once noise breaks
+  the symmetry" framing would predict. What *does* rise-then-decay is the
+  pressure field's magnitude (`pMean`, `pStd`, `pMax`) and the density-std
+  disorder proxy (`rhoStd`, peaking around the same step range, `~80-110`,
+  across every variant) — consistent with the *physical* forcing/dissipation
+  balance settling into a statistically-steady state over that window
+  (kinetic energy build-up then equilibration, expected for a forced
+  Kolmogorov flow), not with the *solver* ever actually resolving the
+  tension it's failing to converge on. The solver stays stuck at its
+  iteration cap throughout; the field's own magnitude just stops growing
+  once the physical forcing/dissipation balance equilibrates.
+- **`maxIterations=1024` (16x default) — makes the drift categorically
+  worse, not better. The most decisive result of this whole investigation.**
+  `pMean` peaked at `61.4` (vs. `9.83` at the default `maxIterations=64`),
+  `pMax` reached `194` (vs. `34.1`), and `nIter` is pegged at the *new* cap
+  (`1024`) throughout the second half of the run — still never converging,
+  just grinding through 16x more unopposed accumulation per step. This is
+  exactly what the identified mechanism predicts and nothing else would:
+  the null-space (mean) component of `pressureB` is not attributable to any
+  degree of freedom `dx_p`/the residual can actually correct (the operator's
+  constant null space means the residual's null-space part is structurally
+  unshrinkable under this iteration), so each additional iteration just adds
+  another `omega*mean(residual)/mean(alphas)` to the mean, forever, with no
+  natural stopping point — more iterations is strictly more of the problem,
+  not less. **This settles the "does the solver just need to converge
+  harder" question conclusively: no.** The fix has to be architectural (a
+  real gauge-fixing mechanism for `solveIncompressible`, or removing the
+  bias that's forcing the null-space mode to move in a consistent direction
+  every iteration in the first place), not a solver-tuning knob — raising
+  `maxIterations`/tightening `tolerance` moves in the wrong direction
+  entirely.
+- **Taken together, the three tests point at one conclusion**: neither the
+  clamp, the iteration budget, nor the initial grid's symmetry is the root
+  cause — all three are downstream knobs on a solver that has no mechanism
+  at all to prevent its null-space mode from accumulating a persistent,
+  per-iteration, per-step bias. The only two tests that changed the
+  *outcome* materially were (a) more iterations, which made it worse in the
+  expected direction (confirming the mechanism), and (b) the still-open
+  cross-reference to Part 2's bulk density-band gap, which showed the same
+  signed bias driving the `sourceTerm` in the first place. Both point at the
+  same fix priority as the previous section: address the upstream density
+  bias, and/or give `solveIncompressible` a real gauge fix (recenter-then-
+  reclamp, a soft mean ceiling, or similar) — not a solver-tuning change.
+
+### Part 4 resolved — the drift is integrator wind-up against an unreachable setpoint; `ShiftPressureGauge.minShift` fixes it (2026-08-27)
+
+Picked up exactly where the previous session's "Next session: start here"
+left it, and both of its top-two leads turned out to be answerable. The
+short version: **option 1 (fix the upstream density bias) is a dead end,
+because there is no bug to find — the bias is structural**; option 2 (give
+`solveIncompressible` a real gauge fix) is the right fix, but only one of
+the three candidate gauges works, and only on the case class the constant
+mode is actually free in. Both are now measured, not argued.
+
+**First, what `solveIncompressible` actually is.** It is not a momentum
+pressure solve. Both of its call sites in the library use it as an
+*implicit particle-shifting* solve: `systems/incompressible.py`'s `finalize`
+calls it with `dvdt=0` and feeds its output straight into a position shift
+(`dx = dt**2 * a_p`), and `cases/tgv.py`'s lattice relaxation does the same.
+Its "pressure" is therefore a shifting potential. That reframes the whole
+question — the constant mode of a shifting potential is not a physical
+pressure level, and the non-negativity clamp is not a physical
+no-tension constraint on a stress, it is "the shift never pulls particles
+together."
+
+**The bias is structural, and no kernel bug is behind it**
+(`scripts/probe_densityBiasVsDisorder.py`, new). Take the case's own initial
+state — a perfect lattice, mass-normalised so `mean(rho) == rho0` by
+construction — displace every particle by increasing random jitter, and
+recompute the density. No solver, no timestep, no scheme kernel involved:
+
+| jitter/dx | 0 | 0.005 | 0.01 | 0.02 | 0.05 | 0.1 | 0.2 | 0.4 |
+|---|---|---|---|---|---|---|---|---|
+| `mean(rho-1)` | 5.6e-8 | 2.2e-6 | 8.7e-6 | 3.4e-5 | 2.1e-4 | 8.5e-4 | 3.3e-3 | 1.2e-2 |
+
+Always positive, and rising as the *square* of the displacement (each
+doubling of jitter multiplies it by ~3.9). This is exactly what the SPH
+summation density has to do and could not do otherwise: for equal masses
+`sum_i rho_i = m * sum_{ij} W(x_i - x_j)`, which by Parseval is
+`m * sum_k What(k) |rhohat(k)|^2` with `What(k) >= 0` for a positive-definite
+kernel (Wendland is one). A lattice puts all of its spectral weight on
+reciprocal-lattice vectors where the bandwidth-limited `What` is ~0; *any*
+disorder moves weight to small `k` where `What` is large, and every such
+contribution is non-negative. **The lattice minimises the particle-averaged
+summation density, so `mean_i rho_i == rho0` is unattainable for any
+disordered configuration.** The previous session's `mean(rho-1) = +2.7e-3`
+was not a symptom of a bug; it is the floor.
+
+That also explains why the running simulation's signed/unsigned ratio (0.76)
+is so much higher than raw jitter's (0.008-0.29): the shifting solve does
+its job and removes the *correctable*, near-zero-mean part of the density
+error, leaving the irreducible positive-mean part as most of what remains.
+
+**So the solver is an integral controller with a setpoint it cannot reach.**
+`sourceTerm = rho0 - rhoStar` keeps a persistent negative mean forever; the
+only mode with a nonzero mean response is the (near-)constant one, whose
+response is weak; so the iteration drives that mode to ever larger
+amplitude, every iteration, every step, without a stopping point. This
+predicts — and explains — every previously-collected observation at once:
+`nIter` pegged at `maxIterations` forever, `maxIterations=1024` making it
+*worse* rather than better, the clamp being irrelevant to the drift, and the
+initial lattice's symmetry being irrelevant too.
+
+Measured directly (`probe_incompressibleGaugeDrift.py --null-test`, new
+flag): on the t=0 lattice `|A*1| = 6.8e-11` against `|A*rand| = 2.8e-5`
+(constants annihilated to 6 orders); by step 59 of the developed flow
+`|A*1|` has risen to ~5% of a same-magnitude non-constant field's response —
+i.e. the constant mode is *near*-null rather than exactly null once the
+configuration disorders, so the mean error is weakly correctable, but only
+at an amplitude ~20x larger than a normal mode would need. Hence a pressure
+mean that reaches 2.4e6 before float32 gives out.
+
+**Correction to the previous session's note on reproducibility.** The nx=128
+blowup was described there as probably "run-to-run chaotic sensitivity."
+It is not: re-running it reproduced `pMean` peaking at `2.3838e6` and NaN at
+**step 574**, matching the earlier run's reported figures exactly. This case
+is deterministic, which is what made the A/B tests below trustworthy.
+
+**Four candidate gauges, compared** (nx=64, 300 steps, second-half means;
+all prototyped in `probe_incompressibleGaugeDrift.py --gauge` before any
+source was touched):
+
+| gauge | `mean(rho-1)` | `mean|rho-1|` | `|pMean|` | outcome |
+|---|---|---|---|---|
+| `clamp` (historical) | 2.88e-3 | 3.83e-3 | 3.9 | survives 300, drifts |
+| `center` (what the VD solver does) | 2.66e-2 | 2.78e-2 | 4.3e5 | **NaN at step 155** |
+| `center-clamp` | 3.91e-2 | 4.34e-2 | 1.4 | **NaN at step 136** |
+| `minshift` (subtract the fluid min) | **1.52e-3** | **2.86e-3** | 13.6 | survives, no drift |
+
+Mean-centering — the fix that works in `solveDivergenceFree` — is the *worst*
+option here, and that is not a surprise once the two solvers' source terms
+are compared: the VD solver's source is a divergence, mean-zero by pair
+antisymmetry, so recentering costs it nothing; this solver's source is not,
+and recentering both gives up the non-negativity that keeps the shift from
+pulling particles together and cancels the background-pressure de-clumping
+force the solve is relying on. Also tested and rejected: projecting the
+source to zero mean (`--project-source`). It makes the solver *converge*
+(nIter 64 -> 13.4, as the compatibility argument predicts) but the density
+gets worse across the board (`mean|rho-1|` 3.9e-3 vs 2.9e-3, `rhoStd` 3.4x
+worse), because the source's mean is not purely unreachable — part of it is
+the genuine "de-clump" signal, and throwing it away stops the solve doing
+its job.
+
+**Landed: `ShiftPressureGauge` (`configurations/moduleConfigurations/solver.py`),
+read by `solveIncompressible`.** `nonNegativeClamp` is the historical
+`clamp(p, min=0)` and stays the default; `minShift` subtracts the fluid
+minimum instead — still non-negative, but gauge-fixed, and it *translates*
+the field's negative part instead of discarding it. Round-trips through
+`incompressibleConfigToDict`/`dictToIncompressibleSPHConfig` (absent key
+falls back to the default).
+
+**Validated end-to-end through the real solver**, not just the probe's
+reimplementation (`scripts/probe_shiftPressureGauge.py`, new), at nx=128:
+
+| case | gauge | steps | diverged | rho range | worst `|rho-1|` |
+|---|---|---|---|---|---|
+| `kolmogorovIncompressible` | `nonNegativeClamp` | 575 | **yes** (t=5.05) | [0.240, 2.515] | 1.51 |
+| `kolmogorovIncompressible` | `minShift` | 1001 | no (t=7.41) | [0.980, 1.015] | 1.98e-2 |
+| `randomFlowIncompressible --bounded` | either | 258 | yes (t=5.54) | [0.139, 2.452] | 1.45 |
+
+`pMean` under `minShift` settles at ~10-15 and oscillates there for the
+whole 1000 steps with no trend at all, against the clamp's monotone climb to
+2.4e6.
+
+**And validated as harmless on `tgv`**, the only other case the gauge
+reaches (periodic, complete support, and it uses `solveIncompressible`
+twice over — once for its 32-step lattice relaxation, once per step inside
+`finalize`). Unlike `kolmogorovIncompressible` there is a reference answer
+here, so the check is against physics, not just against not-blowing-up:
+`KE(t) = KE(0) exp(-4 nu k^2 t)`.
+
+| nx / steps | gauge | rate/analytic | KE_end/KE_0 | rho range (final) |
+|---|---|---|---|---|
+| 64 / 200 | `nonNegativeClamp` | 0.5489 | 0.99561 | — |
+| 64 / 200 | `minShift` | 0.5486 | 0.99562 | — |
+| 128 / 1000 | `nonNegativeClamp` | 0.5873 | 0.97696 | [0.99811, 1.00118] |
+| 128 / 1000 | `minShift` | 0.5898 | 0.97690 | [0.99768, 1.00192] |
+
+Agreement to ~0.4%, both monotone, neither diverging, both well inside the
+0.55-0.6 band `tests/test_physics.py::test_tgvKineticEnergyDecaysAtRoughly
+TheAnalyticRate` documents and asserts. (`scripts/probe_tgvShiftGauge.py`.)
+
+**On that basis `minShift` is the default** as of this session, rather than
+opt-in. The usual argument for keeping historical behavior as the default
+does not apply: the historical default provably NaNs a production case, and
+the new one is a scoped no-op on every case it does not apply to, so the
+blast radius is exactly the two cases above — one fixed, one unchanged.
+
+**The gauge is scoped, deliberately, to solves where the constant mode is
+actually free** — `solveIncompressible` falls back to the clamp when there
+are pinned pressure rows (`kind != 0`) or free-surface particles. This is
+measured, not assumed: forcing `minShift` through on the bounded
+`randomFlowIncompressible` diverges at t=0.69 against the clamp's t=5.54.
+Two independent reasons, and the second is the one that bites:
+
+- Pinned rows are Dirichlet data, and Dirichlet data already fixes the
+  constant — there is no null space left to gauge.
+- Where kernel support is truncated (a wall, a free surface) the kernel
+  gradients stop summing to zero, so a *constant* pressure exerts a large
+  real force. The offset stops being a gauge choice and becomes a background
+  pressure blowing wall-adjacent particles around.
+
+Both variants of the boundary handling were tried — translating the frozen
+boundary rows along with the fluid (so all pressure *differences* are
+preserved exactly) and leaving them in place — and they fail identically, at
+the same step, which is what pinned the cause on the second reason rather
+than the first. With the scoping in place, `minShift` on the bounded case is
+now byte-identical to the clamp (confirmed: same 258 steps, same density
+extrema to 5 digits), i.e. a genuine no-op rather than a silently different
+answer.
+
+**Checks:** full suite `241 passed, 1 skipped`;
+`scripts/gradcheck_incompressible.py` ALL PASSED. One test
+(`test_incompressibleKrylov.py::test_minresGivensMatchesDenseLstsq`) failed
+once and passed on re-run with identical code — a pre-existing flake in a
+tight-tolerance dense-lstsq comparison that never calls `solveIncompressible`,
+not a regression from this change.
+
+### Part 4 — the physics behind the fix, in full (2026-08-27)
+
+Written out properly because every one of the four gauge candidates is
+defensible on general PPE grounds, and only the physics of *this* operator
+picks between them. Four facts do all the work.
+
+**1. The particle-averaged summation density is bounded below by the lattice
+value, and rises quadratically with disorder.** For equal masses,
+
+    sum_i rho_i = m * sum_{i,j} W(x_i - x_j)
+
+and by Parseval, on a periodic domain, that is
+
+    sum_i rho_i = m * sum_k What(k) * |rhohat(k)|^2,    rhohat(k) = sum_i e^{i k . x_i}
+
+For a positive-definite kernel — and Wendland is one, which is exactly why
+it is used — `What(k) >= 0` for every `k`. A perfect lattice concentrates all
+of `|rhohat|^2` on reciprocal-lattice vectors, and the kernel is
+bandwidth-limited, so `What` is ~0 there: the lattice is the *minimum* of
+this sum. Any disorder moves spectral weight to small `k` where `What` is
+large, and every such contribution is non-negative, so it can only push the
+sum up. Expanding to second order in a displacement field gives the
+quadratic growth, which is what the jitter sweep measures (~3.9x per
+doubling, against 4x predicted).
+
+Consequence: `mean_i rho_i == rho0` is not a hard target the solver is
+missing, it is a target *below the attainable floor* for any configuration
+that is not a perfect lattice. `sourceTerm = rho0 - rhoStar` therefore keeps
+a permanently signed mean, by construction, forever. Nothing upstream is
+broken; there is nothing upstream to fix.
+
+**2. A uniform pressure exerts no force where the kernel support is
+complete, and a large force where it is not.** The SPH pressure force on `i`
+is a sum of pair terms weighted by `grad W_ij`. With complete support the
+gradients sum to zero by symmetry, so a *constant* pressure field produces
+(near-)zero acceleration — the operator has a constant null space, and the
+constant is a gauge. Truncate the support — a wall, a free surface — and
+that cancellation fails: the same constant now produces a large net force
+along the truncation normal. This is the well-known background-pressure
+mechanism transport-velocity formulations use deliberately (Adami et al.);
+here it is what decides where a gauge shift is legitimate.
+
+Measured, on the developed flow: `|A*1|` is 6.8e-11 against 2.8e-5 for a
+random field on the t=0 lattice (annihilated to 6 orders), rising to only
+~5% of a same-magnitude non-constant field's response by step 59 as the
+configuration disorders. So in the bulk the constant is *near*-null: the mean
+density error is weakly correctable, but only by a pressure ~20x larger than
+a normal mode would need. That factor is the drift.
+
+**3. This solver's "pressure" is a shifting potential, not a stress.** Both
+call sites (`systems/incompressible.py`'s `finalize`, `cases/tgv.py`'s
+relaxation) feed its output into a position shift, `dx = dt**2 * a_p`. So
+the non-negativity is not "a fluid cannot sustain tension" — it is "the
+shift never pulls particles together," which matters because a shift that
+can pull is the tensile instability that clumps particles. And the constant
+component of a shifting potential is not a physical pressure level at all,
+which is what makes translating it a free choice in the bulk.
+
+**Putting 1-3 together: the solver is an integral controller with a setpoint
+it cannot reach.** Fact 1 keeps the residual's mean signed every iteration;
+fact 2 says the only mode that answers a mean residual is the constant one,
+weakly; so each iteration adds another `omega * mean(residual) / mean(alpha)`
+to the field's mean, and never gets close enough to stop. Classic
+integrator wind-up. This is what makes `maxIterations=1024` *worse* than 64
+(16x more unopposed accumulation), what makes the clamp irrelevant (a floor
+does not oppose upward motion), and what makes the initial lattice's
+symmetry irrelevant (the bias re-develops dynamically). All three were
+measured in the previous session and none of them fit any other explanation.
+
+**4. Which gauge follows, and why the other three do not.** The fix must pin
+the constant mode without giving up non-negativity (fact 3) and without
+zeroing the background pressure that is doing real work near truncated
+support (fact 2):
+
+- *Mean-centering* (`p -= mean(p)`) pins the mode but forces half the field
+  negative, giving up the anti-clumping property, and drives the background
+  pressure to ~0. Diverges at step 155. It works in `solveDivergenceFree`
+  only because that solver's source is a divergence — mean-zero by pair
+  antisymmetry — so its constant mode is never driven in the first place.
+- *Centre-then-clamp* pins the mode but then chops the field's shape every
+  iteration, which is not a translation at all. Diverges at step 136.
+- *Zero-meaning the source* is the textbook compatibility projection, and it
+  does make the solver converge (nIter 64 -> 13.4). But fact 1 says only
+  *part* of the source's mean is unreachable; the rest is the genuine
+  de-clumping signal, and discarding it makes the density worse
+  (`mean|rho-1|` 3.9e-3 vs 2.9e-3, `rhoStd` 3.4x worse).
+- *Subtracting the fluid minimum* pins the constant mode, keeps the field
+  non-negative, translates rather than chops, and leaves the background
+  pressure at whatever the solution's own shape implies. This is `minShift`.
+
+**And why it is scoped.** Fact 2 also says exactly where a gauge shift stops
+being free: wherever support is truncated, the constant is not forceless, so
+translating it injects a spurious force. Fact 3's Dirichlet rows say the same
+thing from the algebraic side: pinned rows fix the constant, leaving no null
+space to gauge. Hence the fallback to the clamp whenever there are pinned
+rows or free-surface particles. The decisive check that this is fact 2 and
+not merely fact 3: translating the boundary rows *along with* the fluid (so
+all pressure differences are preserved exactly, which answers the Dirichlet
+objection completely) fails at the very same step as leaving them in place.
+
+### Part 4 — what is left after the fix (2026-08-27)
+
+- **Settled: `minShift` is the default** (2026-08-27), against this
+  codebase's usual convention of keeping historical solver behavior as the
+  default (`PressureSolverType.relaxedJacobi`, `mdbcNoPenetrationShift`).
+  The convention exists to avoid moving numbers under existing results, and
+  here it does not earn its keep: the historical default provably NaNs
+  `kolmogorovIncompressible` at nx=128, and the replacement is a scoped
+  no-op everywhere it does not apply, so the only numbers that move are
+  `kolmogorovIncompressible`'s (fixed) and `tgv`'s (unchanged to ~0.4% on
+  the analytic decay rate, verified at nx=64 and nx=128).
+  `nonNegativeClamp` stays selectable for reproducing older results.
+- **New, unrelated to this fix: the bounded case diverges on its own.**
+  `randomFlowIncompressible --bounded` at nx=128 reaches NaN at t=5.54 under
+  the untouched default. Part 2 validated that case only to t≈1.5, so this
+  is past the horizon anyone had looked at, not a regression — but it means
+  the bounded case has its own failure mode that the shifting-gauge work
+  does not touch (and cannot: the gauge correctly declines to act there).
+  Reproduced on both the committed tree and the working tree, so it is not
+  the uncommitted Part 3 velocity-resample fix either. Worth its own
+  investigation, and it is the natural successor to Part 2's still-open wall
+  gap.
+- **The Krylov path still has the original problem.** `solveIncompressible`
+  returns through `solvePressureKrylov` with `gauge='nonnegative'` *before*
+  reaching the relaxed-Jacobi loop, so `ShiftPressureGauge` does not reach
+  it. Its post-hoc clamp has the same "floor, not a gauge" character the
+  relaxed-Jacobi path just got fixed, and its intra-solve iterate has still
+  never been instrumented. Unchanged from the previous session's item 3.
+- **Part 2's wall-adjacent density gap** is still open and still untouched
+  by this. The previous session's item 4 (re-run the wall-distance profile
+  once a fix lands, to see whether it narrows) is now answerable, but the
+  expected answer is "no": the fix does not apply to wall-bounded solves at
+  all, by construction.

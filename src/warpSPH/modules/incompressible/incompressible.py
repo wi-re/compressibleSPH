@@ -7,7 +7,12 @@ formulation).
 Each iteration computes the pressure acceleration (`computePressureAccelIISPH`,
 scatter mode), its position-drift residual (`dt**2 * computePressureShiftIISPH`),
 and updates `pressure += omega * residual / alpha` (`dt**2 * computeAlpha`'s
-IISPH diagonal term), clamping pressures to be non-negative each step.
+IISPH diagonal term), keeping pressures non-negative each step -- either by
+clamping at zero (`ShiftPressureGauge.nonNegativeClamp`, the historical
+default) or by subtracting the fluid minimum (`ShiftPressureGauge.minShift`,
+which additionally pins the operator's constant null-space mode; see that
+enum's docstring, since the clamp alone lets that mode drift to a run-ending
+magnitude).
 `rhoStar` is clamped to a minimum of 0.9 and `alpha` to a maximum of -1e-6 to
 avoid division blow-up. Iterates between `solverConfig.pressureSolver.
 {minIterations,maxIterations,tolerance,relaxationFactor}`, stopping early once
@@ -32,7 +37,7 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType, JacobiRelaxationMode
+from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge
 from .krylov import solvePressureKrylov
 
 __all__ = ['solveIncompressible']
@@ -111,6 +116,13 @@ def solveIncompressible(
         )
 
         alphas = torch.clamp(alphas, max=-1e-6)  # Avoid division by zero
+
+        # How the constant (null-space) component of the pressure field is
+        # pinned each iteration -- see `ShiftPressureGauge`'s docstring for why
+        # this solver needs a gauge at all and why mean-centering (what
+        # `solveDivergenceFree` does) is not the answer here.
+        gauge = getattr(schemeConfig.solverConfig, 'shiftPressureGauge',
+                        ShiftPressureGauge.nonNegativeClamp)
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
 
         # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns:
@@ -118,12 +130,39 @@ def solveIncompressible(
         # (0 under `plain`, the mDBC-extrapolated/-projected value otherwise -- see
         # `BoundaryPressureMode`'s docstring and `divergenceFree.py`'s copy of this
         # comment for why freezing at the incoming value, not literal 0, matters),
-        # excluded from the gauge mean (this solver's gauge is a non-negativity
-        # clamp, not a mean-center, so there is no mean to exclude them from), and
-        # their `a_p` is zeroed post-solve. A no-op when there are no boundary
+        # excluded from the gauge statistic (under the default gauge there is
+        # none to exclude them from -- it is a non-negativity clamp, not a
+        # mean-center; under `minShift` the minimum is taken over fluid rows
+        # only), and their `a_p` is zeroed post-solve. A no-op when there are no boundary
         # particles (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
         boundaryPressure = particles.pressures.clone()
+
+        # `minShift` is a *gauge* fix, so it is only valid where the constant
+        # mode is genuinely free and genuinely forceless -- a domain with
+        # complete kernel support everywhere and no pinned pressure rows.
+        # Neither holds otherwise, for two independent reasons:
+        #   - pinned rows (kind != 0) are Dirichlet data, and Dirichlet data
+        #     already fixes the constant: there is no null space left to gauge.
+        #   - where the support is truncated (against a wall, at a free
+        #     surface) the kernel gradients no longer sum to zero, so a
+        #     *constant* pressure exerts a large real force -- the offset stops
+        #     being a gauge choice and becomes a background pressure blowing
+        #     the free/wall-adjacent particles outward.
+        # Measured, not assumed: on the bounded `randomFlowIncompressible` at
+        # nx=128, applying the shift anyway (with the boundary rows translated
+        # along with the fluid *or* left in place -- both were tried, and they
+        # fail identically at the same step) diverges at t=0.69, against t=5.5
+        # for the clamp. So fall back to the clamp instead of corrupting the
+        # solve; the drift it fails to defend against is a property of the
+        # pure-Neumann case, which by construction is not this one.
+        if gauge is ShiftPressureGauge.minShift:
+                gaugeable = bool(fluidMask.all())
+                surface = getattr(particles, 'surfaceIndicators', None)
+                if surface is not None and bool((surface > 0.5).any()):
+                        gaugeable = False
+                if not gaugeable:
+                        gauge = ShiftPressureGauge.nonNegativeClamp
 
         pressureA = particles.pressures.clone() * 0.
         pressureA = torch.where(fluidMask, pressureA, boundaryPressure)
@@ -133,6 +172,7 @@ def solveIncompressible(
         pressures = []
         i = 0
         error = 0.
+        gaugeOffset = torch.zeros((), device=pressureB.device, dtype=pressureB.dtype)
 
         # print(f"Solving for divergence-free velocities with maxIters={maxIters}, threshold={threshold:.6g}, omega={omega:.6g}")
 
@@ -155,9 +195,25 @@ def solveIncompressible(
 
                 residual = sourceTerm - dx_p
                 pressureB = pressureA + omega * residual / alphas
-                pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
-                pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
-                # pressureB = pressureB - pressureB.mean()  # Fix the pressure gauge without altering the RHS
+                if gauge is ShiftPressureGauge.minShift:
+                        # Non-negative *and* gauge-fixed: pinning the fluid
+                        # minimum at zero constrains the constant null-space mode
+                        # (which the clamp below does not -- it is a floor, so
+                        # that mode is free to drift upward without bound) while
+                        # translating rather than discarding the field's negative
+                        # part. The offset is a *gauge*, so it has to move the
+                        # frozen boundary rows with it (`gaugeOffset` accumulates
+                        # it, since `boundaryPressure` is a fixed pre-solve
+                        # snapshot): shifting the fluid rows alone would open a
+                        # fluid-vs-wall pressure jump of the offset's size, which
+                        # is a spurious wall-normal force, not a gauge choice.
+                        shift = pressureB[fluidMask].min()
+                        gaugeOffset = gaugeOffset + shift
+                        pressureB = pressureB - shift
+                        pressureB = torch.where(fluidMask, pressureB, boundaryPressure - gaugeOffset)
+                else:
+                        pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
+                        pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
 
                 residual_clamped = torch.clamp(-residual, min=-threshold)
 

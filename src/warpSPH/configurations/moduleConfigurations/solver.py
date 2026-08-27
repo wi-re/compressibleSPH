@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -84,6 +84,63 @@ class BoundaryPressureMode(Enum):
     mdbcMlsPressure = 2
 
 
+class ShiftPressureGauge(Enum):
+    """How `solveIncompressible` pins the constant (null-space) component of
+    its pressure field each iteration.
+
+    Both of this library's callers use `solveIncompressible` as an *implicit
+    particle-shifting* solve, not a momentum pressure solve
+    (`systems/incompressible.py`'s `finalize`, which feeds its output straight
+    into a position shift `dx = dt**2 * a_p`; and `cases/tgv.py`'s lattice
+    relaxation). Its "pressure" is therefore a shifting potential, and its
+    operator has the same (near-)constant null space every pure-Neumann PPE
+    has -- but unlike `solveDivergenceFree`, whose source term (a divergence)
+    is mean-zero by pair antisymmetry, this solver's source term
+    (`rho0 - rhoStar`) carries a persistent negative mean that no pressure
+    field can remove: the SPH summation density's particle average rises
+    quadratically with disorder and is bounded below by its lattice value, so
+    `mean_i rho_i == rho0` is unattainable for any disordered configuration
+    (`scripts/probe_densityBiasVsDisorder.py`). The solver reacts by driving
+    the only mode with a nonzero mean response -- the constant one, whose
+    response is weak -- to ever larger amplitude, i.e. it winds up like an
+    integral controller with an unreachable setpoint.
+
+    - `nonNegativeClamp`: the historical behavior. `clamp(p, min=0)` each
+      iteration. Physically motivated (a shifting potential that never pulls
+      particles together) but it is a floor, not a gauge: nothing pins the
+      constant mode, so it drifts upward without bound. Measured on
+      `kolmogorovIncompressible` at nx=128: the mean climbs to 2.4e6 and the
+      run NaNs at step 574.
+    - `minShift`: subtract the fluid minimum instead, `p -= p[fluid].min()`.
+      Non-negative by construction *and* gauge-fixed (the constant mode is
+      pinned by the field's own shape rather than left free), and, unlike the
+      clamp, it never discards the field's negative part -- it only
+      translates it, so the shift forces the solve actually computed survive.
+      Same case/resolution: bounded at ~29 over 1000 steps with no trend,
+      and mean/max density error roughly halved.
+
+    Mean-centering (`p -= p[fluid].mean()`, what `solveDivergenceFree` does)
+    is *not* an option here: it was tested and diverges within ~150 steps,
+    because it gives up the non-negativity that keeps the shift from pulling
+    particles together, and because the resulting near-zero mean removes the
+    background-pressure de-clumping force this solver relies on. See
+    `DFSPH_IMPROVEMENT_PLAN.md` Part 4 for the full comparison.
+
+    **`minShift` only applies where the constant mode is actually free.**
+    `solveIncompressible` falls back to `nonNegativeClamp` for any solve that
+    has pinned pressure rows (`kind != 0`) or free-surface particles, because
+    in both cases the constant is neither free (Dirichlet rows fix it) nor
+    forceless (where kernel support is truncated the gradients stop summing to
+    zero, so a uniform pressure exerts a large real force). Setting `minShift`
+    on a wall-bounded or free-surface case is therefore a no-op, not a
+    silently different answer -- and deliberately so: forcing it through on
+    the bounded `randomFlowIncompressible` at nx=128 diverges at t=0.69 where
+    the clamp reaches t=5.5.
+    """
+    nonNegativeClamp = 0
+    minShift = 1
+
+
 @dataclass
 class RelaxedJacobiSolverConfig:
     minIterations: int = field(default=1, metadata={"description": "Minimum number of iterations for the relaxed Jacobi solver"})
@@ -121,6 +178,7 @@ class IncompressibleSolverConfig:
     integrateRho: bool = field(default=False, metadata={"description": "Whether to integrate density in the incompressible solver"})
     boundaryPressureMode: BoundaryPressureMode = field(default=BoundaryPressureMode.mdbcDensity, metadata={"description": "How kind==1 boundary particles are handled by the pressure solvers: plain (no mDBC), mdbcDensity (mDBC density extrapolation only, matching this scheme's historical always-on behavior), or mdbcMlsPressure (mDBC density + MLS-projected boundary pressure)"})
     mdbcPressureRelaxation: float = field(default=0.3, metadata={"description": "Under-relaxation for BoundaryPressureMode.mdbcMlsPressure's boundary pressure update (new = old + factor*(projected - old), matching the divergence-free solver's own default relaxationFactor). Ignored by plain/mdbcDensity. The one-step-lagged MLS projection closes a positive feedback loop with the fluid pressure solve (a larger boundary pressure drives a larger nearby fluid pressure gradient, which projects to an even larger boundary pressure next step); without damping this diverges within single-digit steps even on a well-sampled boundary (see DFSPH_IMPROVEMENT_PLAN.md's mdbcMlsPressure instability finding)."})
+    shiftPressureGauge: ShiftPressureGauge = field(default=ShiftPressureGauge.minShift, metadata={"description": "How solveIncompressible (the implicit particle-shifting solve) pins the constant null-space component of its pressure field: minShift (the default; subtract the fluid minimum -- non-negative and gauge-fixed) or nonNegativeClamp (the historical clamp(p, min=0); a floor, not a gauge, so the constant mode drifts up without bound and NaNs kolmogorovIncompressible at nx=128/step 574). Only differs on solves where the constant mode is genuinely free -- see ShiftPressureGauge's docstring and DFSPH_IMPROVEMENT_PLAN.md Part 4."})
     mdbcNoPenetrationShift: bool = field(default=True, metadata={"description": "Whether dfsph_step applies computeMdbcNoPenShift's soft per-particle velocity-damping correction near mDBC boundaries. Default True preserves the scheme's historical always-on behavior; the original DFSPH paper (Bender & Koschier) has no such term and relies on the pressure projection alone to prevent penetration, so this is an experimental A/B toggle (DFSPH_IMPROVEMENT_PLAN.md) to check whether it is actually helping or is a crutch that makes the near-wall density error worse -- not a permanent design decision."})
 
 def buildDefaultIncompressibleSolverConfig() -> IncompressibleSolverConfig:
