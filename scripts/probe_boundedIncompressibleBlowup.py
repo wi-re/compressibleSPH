@@ -36,6 +36,35 @@ parser.add_argument('--maxSteps', type=int, default=2000)
 parser.add_argument('--mode', type=str, default='mdbcDensity')
 parser.add_argument('--tail', type=int, default=25)
 parser.add_argument('--every', type=int, default=20)
+parser.add_argument('--mlsBeforeSolve', action='store_true',
+                    help="also run `computeMdbcPressure` *before* "
+                         "`solveDivergenceFree`, not only after it. As shipped, "
+                         "the MLS projection is one full step stale by the time "
+                         "the solve reads it: it is computed from the previous "
+                         "step's fluid pressure at the previous step's positions")
+parser.add_argument('--mlsRelaxation', type=float, default=None,
+                    help="override `mdbcPressureRelaxation` (default 0.3)")
+parser.add_argument('--mdbcFinalize', action='store_true',
+                    help="apply the mDBC density extrapolation in `finalize` "
+                         "before the shifting solve. `dfsph_step` gives boundary "
+                         "particles an extrapolated density for the "
+                         "divergence-free solve, but `finalize` recomputes plain "
+                         "summation densities and never re-applies mDBC, so the "
+                         "shifting solve sees boundary rows whose density is "
+                         "systematically low (truncated outward support)")
+parser.add_argument('--dfMaxIters', type=int, default=None)
+parser.add_argument('--dfRelaxMode', type=str, default=None, choices=['fixed', 'optimal'])
+parser.add_argument('--psMaxIters', type=int, default=None)
+parser.add_argument('--shiftApplication', type=str, default=None,
+                    choices=['positionShift', 'positionAndVelocity'],
+                    help="how `finalize` applies the constant-density solve; "
+                         "`positionAndVelocity` is what makes this case stable "
+                         "at the default CFL (see ShiftApplication's docstring)")
+parser.add_argument('--fixedDt', type=float, default=None,
+                    help="pin dt instead of using the case's adaptive timestep "
+                         "hook -- required for any A/B whose variants change the "
+                         "velocity field, since dt is CFL-derived from vMax and "
+                         "would otherwise differ between the arms")
 parser.add_argument('--cflFactor', type=float, default=None,
                     help="override the case's CFL factor -- DFSPH runs an ~80x "
                          "larger dt than the deltaSPH sibling on this geometry, "
@@ -65,6 +94,8 @@ from warpSPH.runner.caseSpec import CaseSpec
 
 import warpSPH.systems.incompressible as sysmod
 import warpSPH.schemes.dfsph as dfsphmod
+from warpSPH.modules.mdbc import computeMdbcPressure as _mdbcPressure
+from warpSPH.configurations import BoundaryPressureMode as _BPMode
 
 solveLog = {}
 
@@ -73,6 +104,15 @@ def _wrap(module, name, tag):
     orig = getattr(module, name)
 
     def wrapped(*a, **kw):
+        if tag == 'DF' and args.mlsBeforeSolve:
+            particles = kw.get('particles', a[0] if a else None)
+            config = kw.get('config')
+            schemeConfig = kw.get('schemeConfig')
+            adjacency = kw.get('adjacency')
+            if (particles is not None and particles.pressures is not None
+                    and schemeConfig.solverConfig.boundaryPressureMode
+                    is _BPMode.mdbcMlsPressure):
+                particles.pressures = _mdbcPressure(particles, config, schemeConfig, adjacency)
         out = orig(*a, **kw)
         a_p, pressure, errors, _pressures = out
         if tag == 'PS' and args.shiftCap is not None:
@@ -118,6 +158,20 @@ def _depthOf(particles, index):
 
 _SDF = [None]
 
+if args.mdbcFinalize:
+    from warpSPH.modules.mdbc import computeMdbcDensity as _mdbcDensity
+    from warpSPH.configurations import BoundaryPressureMode as _BPM
+    _origDensities = sysmod.computeDensities
+
+    def _densitiesWithMdbc(state, config, schemeConfig, adjacency):
+        rho = _origDensities(state, config, schemeConfig, adjacency)
+        if schemeConfig.solverConfig.boundaryPressureMode != _BPM.plain:
+            state.densities = rho
+            rho = _mdbcDensity(state, config, schemeConfig, adjacency)
+        return rho
+
+    sysmod.computeDensities = _densitiesWithMdbc
+
 _wrap(sysmod, 'solveIncompressible', 'PS')
 for mod in (dfsphmod, sysmod):
     if hasattr(mod, 'solveDivergenceFree'):
@@ -134,13 +188,36 @@ spec = spec.merged(nx=args.nx, tLimit=args.tlimit, store=False, plot=False, quie
 if args.cflFactor is not None:
     spec = spec.merged(cflFactor=args.cflFactor)
 
+if args.fixedDt is not None:
+    spec = spec.merged(dt=args.fixedDt, adaptiveDt=False)
+
 ctx = buildContext(case, spec)
 case.configureScheme(ctx)
 if args.noPenShift is not None:
     ctx.schemeConfig.solverConfig.mdbcNoPenetrationShift = (args.noPenShift == 'on')
+ps = ctx.schemeConfig.solverConfig.pressureSolver
+df = ctx.schemeConfig.solverConfig.divergenceFreeSolver
+if args.dfMaxIters is not None:
+    df.maxIterations = args.dfMaxIters
+if args.psMaxIters is not None:
+    ps.maxIterations = args.psMaxIters
+if args.mlsRelaxation is not None:
+    ctx.schemeConfig.solverConfig.mdbcPressureRelaxation = args.mlsRelaxation
+if args.shiftApplication is not None:
+    from warpSPH.configurations import ShiftApplication
+    ctx.schemeConfig.solverConfig.shiftApplication = ShiftApplication[args.shiftApplication]
+if args.dfRelaxMode is not None:
+    from warpSPH.configurations import JacobiRelaxationMode
+    df.relaxationMode = JacobiRelaxationMode[args.dfRelaxMode]
+
 system = case.buildSystem(ctx)
 case.initialConditions(ctx, system)
 runningState = system.initializeNewState()
+
+if args.fixedDt is not None:
+    # Set on the config directly: the case's own `targetDt` param wins over
+    # `CaseSpec.dt`, so merging into the spec silently does nothing here.
+    ctx.config.dt = args.fixedDt
 
 sdf = domainBoundarySdf(ctx)
 dx = ctx.config.dx
@@ -166,7 +243,7 @@ for i in range(args.maxSteps):
         state=runningState, f=ctx.stepFunction, dt=ctx.config.dt,
         config=ctx.config, verbose=False, schemeConfig=ctx.schemeConfig)
     runningState = stepResult.state
-    if case.timestep is not None:
+    if case.timestep is not None and args.fixedDt is None:
         ctx.config.dt = case.timestep(ctx, runningState)
 
     s = runningState.state

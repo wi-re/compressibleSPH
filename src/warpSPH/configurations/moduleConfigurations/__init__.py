@@ -32,5 +32,5 @@ __all__.extend(['WeaklyCompressibleDiffusionParams', 'buildDefaultDiffusionParam
 from .gravity import GravityType, gravityConfiguration, buildDefaultGravityConfiguration, gravityConfigurationToDict, dictToGravityConfiguration
 __all__.extend(['GravityType', 'gravityConfiguration', 'buildDefaultGravityConfiguration', 'gravityConfigurationToDict', 'dictToGravityConfiguration'])
 
-from .solver import PressureSolverType, JacobiRelaxationMode, BoundaryPressureMode, ShiftPressureGauge, RelaxedJacobiSolverConfig, buildDefaultPSConfig, buildDefaultDFConfig, IncompressibleSolverConfig, buildDefaultIncompressibleSolverConfig
-__all__.extend(['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig'])
+from .solver import PressureSolverType, JacobiRelaxationMode, BoundaryPressureMode, ShiftPressureGauge, ShiftApplication, RelaxedJacobiSolverConfig, buildDefaultPSConfig, buildDefaultDFConfig, IncompressibleSolverConfig, buildDefaultIncompressibleSolverConfig
+__all__.extend(['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig'])

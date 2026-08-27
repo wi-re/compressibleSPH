@@ -76,8 +76,8 @@ causes. This session found the actual mechanism and landed a fix:
   historical clamp by construction, so nothing else moves. Full suite
   (241 passed) and gradcheck pass.
 
-**Part 5: bounded DFSPH stability root-caused, fix recommended not landed
-(2026-08-27).** `randomFlowIncompressible --bounded` NaNs on its own at
+**Part 5: bounded DFSPH stability root-caused; a working (opt-in)
+configuration landed (2026-08-27).** `randomFlowIncompressible --bounded` NaNs on its own at
 nx=128/t=5.54 (past the t≈1.5 Part 2 validated; not a regression, and not the
 Part 4 mechanism). Cause: fluid leaks into the wall band and piles up there
 at 30%+ over-density, monotonically, until it detonates. The deltaSPH sibling
@@ -88,9 +88,18 @@ the default `cflFactor=0.3` sits just past it at 1.2 spacings. At
 `cflFactor=0.125` the case runs to t=8 with penetration in a steady state.
 Not the boundary-pressure mode (all three diverge), not
 `mdbcNoPenetrationShift` (helps ~20%), and *not* the unbounded implicit shift
-(capping it makes things worse — a useful negative result). Fix recommended
-(a wall-aware `dt` constraint, scoped like Part 4's gauge) but left to the
-owner, since it trades ~2.4x throughput on bounded runs.
+(capping it makes things worse — a useful negative result). Two fixes exist. A wall-aware `dt`
+constraint would work but costs ~2.4x throughput, and is not landed. Better:
+the scheme turns out to have *no velocity-level response to a density error*
+at all (DFSPH proper applies its constant-density solve to the velocity; this
+scheme repurposes it as a position shift), and restoring that
+(`ShiftApplication.positionAndVelocity`, new) reaches t=8.0 at the *default*
+CFL in 387 steps with 9x lower near-wall error and penetration in a steady
+state. It is dissipative, though — it drives `tgv`'s kinetic-energy decay to
+1.93x the analytic rate — so it ships opt-in, with the near-wall-only
+refinement that would likely remove that cost written up but not done.
+MLS-projection timing and divergence-free solver options were both tested
+and neither matters (<=10%).
 
 ---
 
@@ -99,23 +108,30 @@ owner, since it trades ~2.4x throughput on bounded runs.
 Part 4 is closed and Part 5 is diagnosed but unfixed (both are written up at
 the bottom of this document). Nothing below is blocking; pick by preference.
 
-1. **Land (or reject) Part 5's wall-aware timestep constraint.** The
-   bounded case's divergence is fully diagnosed (see Part 5): it needs the
-   per-step displacement held under ~half a particle spacing near walls, and
-   the default `cflFactor=0.3` gives 1.2. The fix is scoped the same way
-   Part 4's gauge is — active only where there are boundary particles, a
-   no-op on periodic cases — but it costs ~2.4x more steps on bounded runs,
-   so it is a deliberate trade rather than a free correction. Part 5 also
-   lists the one measurement that would sharpen the constraint's form (a
-   sweep at a different `n_h`, to separate "half a spacing" from "an eighth
-   of h").
-2. **The Krylov path never got the fix.** `solveIncompressible` returns
+1. **Make `ShiftApplication.positionAndVelocity` act only near walls.**
+   This is the highest-value item left. It already turns the bounded case
+   from "NaN at t=5.54" into "steady to t=8.0 at the default CFL", but it is
+   dissipative in the bulk (`tgv`'s decay rate goes to 1.93x analytic), which
+   is why it is opt-in rather than default. The correction is only *needed*
+   where the position shift cannot act freely, so restricting it to a
+   wall-proximity band should keep the benefit and remove the cost — and
+   would make it a no-op on periodic cases by construction, the way Part 4's
+   gauge scopes itself. Needs a boundary-proximity measure available inside
+   `finalize` (a kernel sum over `kinds == 1` neighbours, or a field on the
+   state), with a smooth taper rather than a hard mask. See Part 5
+   continued.
+2. **Optionally, the wall-aware `dt` constraint** (Part 5). Still valid,
+   still ~2.4x throughput, and now largely superseded by the above — worth
+   landing only if the near-wall scoping does not pan out. Part 5 lists the
+   one measurement that would sharpen its form (a sweep at a different
+   `n_h`, to separate "half a spacing" from "an eighth of h").
+3. **The Krylov path never got the fix.** `solveIncompressible` returns
    through `solvePressureKrylov` with `gauge='nonnegative'` before reaching
    the relaxed-Jacobi loop, so `ShiftPressureGauge` does not reach it, and
    its post-hoc clamp has exactly the "floor, not a gauge" character that
    was just fixed on the Jacobi path. Its intra-solve iterate has still
    never been instrumented.
-3. **Part 2's wall-adjacent density gap** and **Part 3's
+4. **Part 2's wall-adjacent density gap** and **Part 3's
    `rotatingSquarePatch` corner loss** are both still open, both untouched.
 
 **Tooling** (all in `scripts/`, all confirmed working, none require source
@@ -1597,4 +1613,113 @@ Two caveats worth carrying into that work:
   leaks, it just leaks into an equilibrium instead of an avalanche. Part 2's
   still-open wall-adjacent density gap is very likely the same phenomenon
   measured at a time when it had not yet run away.
+
+### Part 5 continued — what actually helps: the missing velocity-level density correction (2026-08-27)
+
+Follow-up per project owner: try different points in the step at which the
+MLS boundary estimate is taken, and different solver options. Both were
+tested and neither moves the needle; a third thing, found while looking,
+does.
+
+**MLS timing: no effect.** As shipped, `computeMdbcPressure` runs *after*
+`solveDivergenceFree`, so the boundary pressure the solve reads is a full
+step stale — computed from the previous step's fluid pressure at the
+previous step's positions. That is exactly the kind of lateness Part 5's
+diagnosis points at, so it was the obvious thing to try. Running it before
+the solve as well (`--mlsBeforeSolve`) changes essentially nothing: 232
+penetrating particles at t=1.0 against 228 for the shipped ordering. The
+staleness of the boundary pressure is not what lets particles through.
+
+Also re-confirmed while there: `mdbcPressureRelaxation = 1.0` (undamped)
+NaNs within 7-8 steps, with or without the earlier projection — Part 2's
+damping is still load-bearing, and its 0.3 default is not obviously
+improvable from this direction.
+
+Worth recording: `mdbcMlsPressure` does have visibly better *early* wall
+behavior than `mdbcDensity` (228 penetrating particles at t=1.0 against
+349) yet still dies soonest of the three modes (t=4.83). Better early wall
+behavior does not translate into surviving longer, which is another way of
+saying the boundary pressure treatment is not the binding constraint.
+
+**Solver options: marginal.** Quadrupling the divergence-free solver's
+iteration cap (32 -> 128, and it does peg at the cap every step) buys ~10%:
+312 penetrating particles against 349. `JacobiRelaxationMode.optimal` buys
+nothing (353). Both together, 329. Consistent with the Part 5 reading: the
+projection is not failing because it is under-converged, it is failing
+because it is computed before the particle gets to the wall.
+
+**Found while reading `finalize`: two real inconsistencies, neither of which
+turned out to matter for this.** Recorded so nobody re-derives them.
+`dfsph_step` gives boundary particles an mDBC-extrapolated density for the
+divergence-free solve, but `finalize` recomputes *plain* summation densities
+and never re-applies mDBC, so the shifting solve sees boundary rows whose
+density is systematically low (truncated outward support). Applying mDBC
+there too changes nothing measurable (353 penetrating against 349), but the
+inconsistency is real. Separately, `systems/incompressible.py:235` assigns
+`self.state.surfaceIndicator` where the declared field is
+`surfaceIndicators` (plural) — so `finalize`'s own `detectFreeSurface` result
+is written to a typo'd attribute and discarded, making that call dead weight
+apart from the assignment. Neither is fixed here.
+
+**What does help: the scheme has no velocity-level response to a density
+error at all.** DFSPH proper runs two solves per step and applies both to
+the velocity — a divergence-free projection and a constant-density
+correction. This scheme applies only the first to velocity and repurposes
+the second as a one-shot *position* shift. In a periodic domain that is
+fine. Against a wall it is not, because `div v = 0` prevents *further*
+compression but never undoes compression that already exists, so the only
+mechanism that can relieve a wall-adjacent pile-up is moving particles —
+and near a wall that is precisely what pushes them through it.
+
+Tested by additionally applying the constant-density solution as a velocity
+correction (`v += dt * a_p`), the new `ShiftApplication.positionAndVelocity`.
+Matched-`dt` comparison (dt pinned at 0.015, since the variants change the
+velocity field and therefore the CFL-derived `dt` — an unmatched comparison
+flatters this option by ~30%):
+
+| application | penetrating | near-wall &#124;rho-1&#124; | bulk | rho_max | shift (spacings) |
+|---|---|---|---|---|---|
+| `positionShift` | 308 | 7.50e-2 | 3.0e-3 | 1.227 | 1.24 |
+| velocity only | 68 | 8.38e-2 | 4.7e-2 | 1.206 | 1.02 |
+| `positionAndVelocity` | **94** | **2.17e-2** | **1.4e-3** | **1.067** | **0.045** |
+
+Velocity-only is not an option — its bulk error is 16x worse (`rho_min`
+0.475). Both together is a large improvement on every measure, and the
+position shift's own magnitude collapses by ~28x: the velocity correction
+relieves compression continuously, so the shift has almost nothing left to
+do, which is the whole mechanism by which the wall stops being breached.
+
+**At the default CFL it turns the divergence into a steady state.** 387
+steps to t=8.0 with no timestep penalty at all — against 1352 steps for the
+`cflFactor=0.125` workaround, and against NaN at t=5.54 for the shipped
+default. Penetration rises early then plateaus around 250 and declines;
+`rho_max` sits at 1.147 for the whole run instead of climbing past 1.6;
+near-wall `mean|rho-1|` peaks at 0.048 and falls back to 0.033, against
+0.30 at the baseline's death.
+
+**But it is dissipative, and `tgv` is where that shows.** On the one case
+here with an analytic reference, `positionAndVelocity` drives the
+kinetic-energy decay rate to **1.93x the analytic rate** (against 0.59x,
+the value `tests/test_physics.py::test_tgvKineticEnergyDecaysAtRoughlyThe
+AnalyticRate` documents and asserts) and makes the decay **non-monotone**,
+which that file's other TGV test asserts against. The correction is a
+velocity the divergence-free projection never asked for, and it damps. On
+periodic `kolmogorovIncompressible` it is a wash — mean density band ~30%
+better, worst-case excursion ~3.6x worse.
+
+So it ships **opt-in**, unlike Part 4's gauge: that one was free everywhere
+it applied, this one is a measured trade. `ShiftApplication.positionShift`
+remains the default. Suite (241 passed) and gradcheck pass unchanged, since
+the default path is untouched.
+
+**The obvious refinement, not done: apply the velocity correction only near
+walls.** It is needed only where the position shift cannot act freely, and
+restricting it there would leave the bulk untouched — making it a no-op on
+periodic cases by construction, exactly the way Part 4's gauge scopes
+itself, and very likely removing the `tgv` regression entirely since TGV has
+no walls at all. The blocker is mechanical rather than conceptual:
+`finalize` has no wall-distance measure to hand (the SDF lives on the case,
+not the state), so this needs either a boundary-proximity field on the state
+or a kernel-sum over `kinds == 1` neighbours. A smooth taper rather than a
+hard mask, to avoid injecting a discontinuity into the velocity field.
 

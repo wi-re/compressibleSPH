@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -141,6 +141,56 @@ class ShiftPressureGauge(Enum):
     minShift = 1
 
 
+class ShiftApplication(Enum):
+    """How `IncompressibleSystem.finalize` applies `solveIncompressible`'s
+    constant-density solution.
+
+    DFSPH proper (Bender & Koschier) runs two solves per step and applies both
+    to the *velocity*: a divergence-free projection and a constant-density
+    correction. This scheme applies only the first to velocity; the second is
+    repurposed as an implicit particle shift, i.e. a one-shot *position*
+    displacement `dx = dt**2 * a_p`. That works in a periodic domain and is
+    what every case here has always used.
+
+    It does not work against a wall. Nothing in the scheme then produces a
+    velocity-level response to a density *error* -- the divergence-free solve
+    only enforces `div v = 0`, which prevents further compression but never
+    undoes existing compression -- so wall-adjacent compression can only be
+    relieved by moving particles, and near a wall that pushes them through it.
+    Measured on the bounded `randomFlowIncompressible` at nx=128: the shift
+    reaches ~1.2 particle spacings per step, fluid accumulates inside the
+    boundary band at `rho = 1.30-1.36`, and the run NaNs at t=5.54.
+
+    - `positionShift`: the historical behavior, and the default.
+    - `positionAndVelocity`: additionally applies the constant-density solution
+      as a velocity correction, `v += dt * a_p`. On that bounded case it is a
+      large improvement -- the run reaches t=8.0 at the *default* CFL (387
+      steps, no timestep penalty), near-wall `mean|rho-1|` drops 0.30 -> 0.033,
+      `rho_max` stays at 1.147 instead of climbing past 1.6, penetration
+      plateaus around 250 particles instead of accumulating, and the position
+      shift itself collapses from ~1.2 spacings to ~0.1, since the velocity
+      correction relieves compression continuously instead of in lumps.
+
+    **`positionAndVelocity` is not physics-neutral, which is why it is opt-in
+    rather than the default.** On `tgv` -- the one case here with an analytic
+    reference -- it drives the kinetic-energy decay rate to 1.93x the analytic
+    rate (against 0.59x for `positionShift`, the value
+    `tests/test_physics.py` documents and asserts) and makes the decay
+    non-monotone. The added correction is a velocity the divergence-free
+    projection never asked for, and it dissipates. On the periodic
+    `kolmogorovIncompressible` it is a wash: the mean density band improves
+    ~30% while the worst-case excursion gets ~3.6x worse.
+
+    So: a working configuration for wall-bounded DFSPH, at a cost in fidelity
+    that has been measured on the one case that can measure it. Applying it
+    only near walls (leaving the bulk untouched, which would make it a no-op on
+    periodic cases by construction) is the obvious next refinement and is not
+    done. See `DFSPH_IMPROVEMENT_PLAN.md` Part 5.
+    """
+    positionShift = 0
+    positionAndVelocity = 1
+
+
 @dataclass
 class RelaxedJacobiSolverConfig:
     minIterations: int = field(default=1, metadata={"description": "Minimum number of iterations for the relaxed Jacobi solver"})
@@ -178,6 +228,7 @@ class IncompressibleSolverConfig:
     integrateRho: bool = field(default=False, metadata={"description": "Whether to integrate density in the incompressible solver"})
     boundaryPressureMode: BoundaryPressureMode = field(default=BoundaryPressureMode.mdbcDensity, metadata={"description": "How kind==1 boundary particles are handled by the pressure solvers: plain (no mDBC), mdbcDensity (mDBC density extrapolation only, matching this scheme's historical always-on behavior), or mdbcMlsPressure (mDBC density + MLS-projected boundary pressure)"})
     mdbcPressureRelaxation: float = field(default=0.3, metadata={"description": "Under-relaxation for BoundaryPressureMode.mdbcMlsPressure's boundary pressure update (new = old + factor*(projected - old), matching the divergence-free solver's own default relaxationFactor). Ignored by plain/mdbcDensity. The one-step-lagged MLS projection closes a positive feedback loop with the fluid pressure solve (a larger boundary pressure drives a larger nearby fluid pressure gradient, which projects to an even larger boundary pressure next step); without damping this diverges within single-digit steps even on a well-sampled boundary (see DFSPH_IMPROVEMENT_PLAN.md's mdbcMlsPressure instability finding)."})
+    shiftApplication: ShiftApplication = field(default=ShiftApplication.positionShift, metadata={"description": "How finalize applies solveIncompressible's constant-density solution: positionShift (the default; a one-shot position displacement, this scheme's historical behavior) or positionAndVelocity (additionally apply it as a velocity correction, as DFSPH proper does). The latter is what makes the wall-bounded case stable -- it reaches t=8.0 at the default CFL instead of NaN-ing at t=5.54, with 9x lower near-wall density error -- but it is dissipative: it drives tgv's kinetic-energy decay to 1.93x the analytic rate. Opt-in for that reason. See ShiftApplication's docstring and DFSPH_IMPROVEMENT_PLAN.md Part 5."})
     shiftPressureGauge: ShiftPressureGauge = field(default=ShiftPressureGauge.minShift, metadata={"description": "How solveIncompressible (the implicit particle-shifting solve) pins the constant null-space component of its pressure field: minShift (the default; subtract the fluid minimum -- non-negative and gauge-fixed) or nonNegativeClamp (the historical clamp(p, min=0); a floor, not a gauge, so the constant mode drifts up without bound and NaNs kolmogorovIncompressible at nx=128/step 574). Only differs on solves where the constant mode is genuinely free -- see ShiftPressureGauge's docstring and DFSPH_IMPROVEMENT_PLAN.md Part 4."})
     mdbcNoPenetrationShift: bool = field(default=True, metadata={"description": "Whether dfsph_step applies computeMdbcNoPenShift's soft per-particle velocity-damping correction near mDBC boundaries. Default True preserves the scheme's historical always-on behavior; the original DFSPH paper (Bender & Koschier) has no such term and relies on the pressure projection alone to prevent penetration, so this is an experimental A/B toggle (DFSPH_IMPROVEMENT_PLAN.md) to check whether it is actually helping or is a crutch that makes the near-wall density error worse -- not a permanent design decision."})
 

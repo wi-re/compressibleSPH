@@ -161,6 +161,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
             'mdbcPressureRelaxation': config.solverConfig.mdbcPressureRelaxation,
             'mdbcNoPenetrationShift': config.solverConfig.mdbcNoPenetrationShift,
             'shiftPressureGauge': config.solverConfig.shiftPressureGauge.name,
+            'shiftApplication': config.solverConfig.shiftApplication.name,
         }
     }
 
@@ -229,6 +230,11 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         v = d.get('boundaryPressureMode', BoundaryPressureMode.mdbcDensity)
         return BoundaryPressureMode[v] if isinstance(v, str) else v
 
+    def _shiftApplication(d):
+        v = d.get('shiftApplication',
+                  buildDefaultIncompressibleSolverConfig().shiftApplication)
+        return ShiftApplication[v] if isinstance(v, str) else v
+
     def _shiftPressureGauge(d):
         v = d.get('shiftPressureGauge',
                   buildDefaultIncompressibleSolverConfig().shiftPressureGauge)
@@ -266,6 +272,7 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
         mdbcNoPenetrationShift=solverConfigDict.get(
             'mdbcNoPenetrationShift', buildDefaultIncompressibleSolverConfig().mdbcNoPenetrationShift),
         shiftPressureGauge=_shiftPressureGauge(solverConfigDict),
+        shiftApplication=_shiftApplication(solverConfigDict),
     )
     
 

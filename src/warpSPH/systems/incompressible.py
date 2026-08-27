@@ -58,6 +58,7 @@ class IncompressibleSystemUpdate:
 
 
 from ..modules.incompressible import solveIncompressible
+from ..configurations import ShiftApplication
 from ..modules.density import computeDensities
 import copy
 
@@ -273,6 +274,19 @@ class IncompressibleSystem(BaseIntegrationSystem):
 
         self.state.positions += dx
         self.state.velocities += proj_vel
+
+        if (schemeConfig.solverConfig.shiftApplication
+                is ShiftApplication.positionAndVelocity):
+            # Also apply the constant-density solution the way DFSPH proper
+            # does -- to the velocity -- rather than only as the position shift
+            # above. Without this the scheme has no velocity-level response to
+            # a density *error* at all (the divergence-free solve enforces
+            # `div v = 0`, which stops further compression but never undoes
+            # existing compression), so wall-adjacent compression can only be
+            # relieved by moving particles, which near a wall pushes them
+            # through it. Dissipative -- see `ShiftApplication`'s docstring for
+            # the measured cost on `tgv` and why this is opt-in.
+            self.state.velocities += dt * dvdt_incomp
         # print(f"Applied incompressible update with max position change magnitude: {dvdt_incomp.norm(dim=1).max().item() * dt}")
 
         # print(returnValues[-1][2])
