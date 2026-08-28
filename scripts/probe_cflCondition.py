@@ -40,7 +40,6 @@ parser.add_argument('--extra', nargs='*', default=['--bounded'])
 parser.add_argument('--nx', type=int, default=128)
 parser.add_argument('--steps', type=int, default=40, help="--mode verify")
 parser.add_argument('--tLimit', type=float, default=3.0, help="--mode sweep")
-parser.add_argument('--maxSteps', type=int, default=20000, help="--mode sweep")
 parser.add_argument('--cfls', nargs='*', type=float, default=[0.4, 0.2, 0.1, 0.05])
 parser.add_argument('--every', type=int, default=10)
 args = parser.parse_args()
@@ -148,7 +147,14 @@ def runSweep():
 
         sysmod.solveIncompressible = _watch
         try:
-            r = caseMain(case, argv=['--nx', str(args.nx), '--nSteps', str(args.maxSteps),
+            # **Do not pass `--nSteps` here.** `runner.py:246` sets
+            # `timeLimited = spec.nSteps is None and case.timestep is not None`,
+            # so supplying a step count silently turns `--tLimit` off and runs
+            # the full count instead -- which would make every row a
+            # *step*-matched comparison, the exact thing this mode exists not to
+            # do. The loop breaks on NaN (`runner.py:313`), so an uncapped
+            # time-limited run still terminates on a divergent configuration.
+            r = caseMain(case, argv=['--nx', str(args.nx),
                                      '--tLimit', str(args.tLimit), '--cflFactor', str(cfl),
                                      '--quiet', '--no-store', '--no-plot'] + args.extra)
         finally:

@@ -685,8 +685,10 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   `dt |v_max| / dx == cflFactor` exactly whenever the advective term binds
   (run: 39/40 steps, 0.4000 against 0.4); `--mode sweep` runs each `cflFactor`
   to the same simulated time and reports the sub-rest-density fraction
-  alongside the error, printing rows as they finish. **The sweep is the one
-  measurement §10 still owes.**
+  alongside the error, printing rows as they finish (run: 0.4 / 0.2 / 0.1, §10).
+  It must not be given `--nSteps` -- `runner.py:246` only honours `tLimit` when
+  `nSteps` is absent, so a step cap silently converts a time-matched sweep into
+  a step-matched one, which is the comparison the mode exists to avoid.
 - `probe_boundedIncompressibleBlowup.py` — step-by-step wall penetration,
   per-step worst particle, wall-depth density profile. Knobs for everything
   that turned out not to matter, so they stay cheap to re-check: `--mode`,
@@ -816,20 +818,52 @@ description now records that what it multiplies is scheme-dependent
 (compressible and weakly-compressible still use `h`), `tgv` is untouched (no
 `timestep` hook, `dt` pinned at 1e-3), and the suite passes.
 
-**What did not get done: `--mode sweep`.** Whether the error keeps falling
-*below* 0.4 — which §5's dilution result gives a concrete reason to expect —
-is still unmeasured. Three attempts were starved or killed on a GPU saturated
-by unrelated work. The probe now prints each row as it completes rather than at
-the end, so the next attempt yields a partial table instead of nothing. Only
-the *upper* side is measured, repeatedly: at 3x the constant the bounded case
-diverges at t=5.5 with `|rho-1|` 5.4e-1 against 1.8e-1 at the constant itself.
+**The sweep is now run, and §5's prediction is confirmed: there is a lot of
+room below 0.4.** Three earlier attempts failed for a reason that turned out
+not to be GPU contention — `--mode sweep` was passing `--nSteps`, and
+`runner.py:246` only honours `tLimit` when `nSteps` is *absent*
+(`timeLimited = spec.nSteps is None and case.timestep is not None`), so every
+"run to t=3" was silently a 20 000-step run. With that removed, the same
+simulated time on `randomFlowIncompressible --bounded`, nx=128, t=3.0, stock
+configuration otherwise:
+
+| `cflFactor` | steps | `rho` range | mean`｜rho-1｜` | mean`(rho-1)` | frac `rho<rho0` | wall s |
+|---|---|---|---|---|---|---|
+| **0.4** (published) | 457 | [0.902, 1.202] | 5.17e-3 | 4.84e-3 | 12.2% | 166.7 |
+| 0.2 | 903 | [0.969, 1.091] | **1.83e-3** | 1.58e-3 | 13.1% | 276.2 |
+| 0.1 | 1830 | [0.960, 1.044] | 1.37e-3 | 1.21e-3 | 8.2% | 511.5 |
+
+**Halving the published timestep cuts the density error 2.8x for 1.66x the
+wall time. Halving it again buys 1.33x for another 1.85x.** So the knee is at
+about 0.2 and the published 0.4 is not near it — on this case 0.4 is a
+permissive setting, not a safe one, exactly as §5's calibration-scale argument
+predicts. The tail says the same thing more strongly than the mean: `rho_max`
+falls 1.202 → 1.091 → 1.044, so at 0.4 the worst particles are still strongly
+timestep-limited.
+
+Two things worth keeping from the cost column. The scaling is **sub-linear** —
+2x the steps costs 1.66x the time, because a smaller `dt` hands the pressure
+solvers an easier problem and they terminate sooner — so halving `cflFactor` is
+cheaper than it looks. And this is the first measurement in this document where
+the two solvers' iteration counts are *not* pegged at their caps, which is a
+second, independent way of seeing §1.7.
+
+The upper side was already measured, repeatedly: at 3x the constant the bounded
+case diverges at t=5.5 with `|rho-1|` 5.4e-1 against 1.8e-1 at the constant
+itself. Both sides now agree that 0.4 is the edge of a plateau rather than the
+middle of one.
 
 ### What is left, in order
 
-1. **Run `probe_cflCondition.py --mode sweep`** (0.4 / 0.2 / 0.1 to the same
-   simulated time) — the one piece of Part 12 that a saturated GPU prevented.
-   Cheap, and §5's dilution result predicts the answer is "yes, there is room
-   below 0.4".
+1. ~~Run `probe_cflCondition.py --mode sweep`~~ — **done**, table above.
+   It answers "yes, there is room below 0.4", and adds a decision that did not
+   exist before: **whether to default the bounded case to `cflFactor=0.2`**
+   (2.8x the accuracy for 1.66x the cost) rather than to the literature's 0.4.
+   The argument for 0.4 is that it is the number the papers state and a default
+   that silently differs from a cited constant is the kind of thing this
+   document has spent four parts untangling; the argument for 0.2 is the table.
+   Owner's call, one line either way, and it should be decided *with* item 2
+   rather than before it — the four-way table may move the knee.
 2. **Run the four-way experiment** (§4): `cflFactor=0.4` × `minShift` ×
    `staticBoundary` × `consistent`. Each is individually 5-6x better at the
    published CFL and individually catastrophic at 3x it. Nobody has run them
@@ -846,8 +880,9 @@ diverges at t=5.5 with `|rho-1|` 5.4e-1 against 1.8e-1 at the constant itself.
 
 ### What is next, concretely
 
-Do 1 and 2. They are cheap, they are sequential, and 2 is the single
-highest-value measurement left in this document. Everything in §4's ranked
-list is gated on its result. 1 is now a 10-minute job on an idle GPU rather
-than a blocker: the CFL change itself is landed and verified, and the sweep
-only refines how far below the published constant it is worth going.
+Do 2. With 1 done, the four-way experiment is the single highest-value
+measurement left in this document, and everything in §4's ranked list is gated
+on its result. Run it at `cflFactor=0.4` (the published constant, so the table
+is quotable) and, if it is cheap enough, at 0.2 as well — the sweep says the
+error at 0.4 is still dominated by the timestep, which means a four-way table
+taken only at 0.4 risks measuring `dt` rather than the four changes.
