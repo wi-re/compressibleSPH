@@ -58,7 +58,7 @@ class IncompressibleSystemUpdate:
 
 
 from ..modules.incompressible import solveIncompressible
-from ..configurations import ShiftApplication
+from ..configurations import ShiftApplication, DensityEvolution, resolveDensityEvolution
 from ..modules.density import computeDensities
 import copy
 
@@ -126,10 +126,20 @@ class IncompressibleSystem(BaseIntegrationSystem):
         else:
             self.state.surfaceLambdas = lastState.surfaceLambdas.clone() if lastState.surfaceLambdas is not None else None
 
-        if self.state.densities is not None and lastState.densities is not None:
-            self.state.densities.copy_(lastState.densities)
-        else:
-            self.state.densities = lastState.densities.clone() if lastState.densities is not None else None
+        # Under `DensityEvolution.summation` (the default) the carried density
+        # is the one `dfsph_step` computed at the start of the step, and the
+        # re-sum further down replaces it anyway. Under `continuity`/`hybrid`
+        # this copy is exactly what used to make `integrateRho` inert: it
+        # discards the `rho + dt*drhodt` the integrator just produced. See
+        # `DensityEvolution`.
+        _densityEvolution = resolveDensityEvolution(
+            kwargs['schemeConfig'].solverConfig) if kwargs.get('schemeConfig') is not None \
+            else DensityEvolution.summation
+        if _densityEvolution is DensityEvolution.summation:
+            if self.state.densities is not None and lastState.densities is not None:
+                self.state.densities.copy_(lastState.densities)
+            else:
+                self.state.densities = lastState.densities.clone() if lastState.densities is not None else None
 
         velocity_magnitudes = torch.linalg.vector_norm(self.state.velocities, dim=-1)
         finite_velocity_magnitudes = velocity_magnitudes[torch.isfinite(velocity_magnitudes)]
@@ -149,6 +159,7 @@ class IncompressibleSystem(BaseIntegrationSystem):
 
         # print(f"Finalizing state at t={self.t + dt}, dt={dt}, with {self.state.positions.shape[0]} particles.")
         # print(f'Maximum Velocity Magnitude: {max_velocity_magnitude}')
+        dxDeltaShift = None
         if schemeConfig.shiftProperties.active:
             # shiftVector, self.adjacency = computeDeltaShift(
             #     currentState = self.state,
@@ -158,7 +169,7 @@ class IncompressibleSystem(BaseIntegrationSystem):
             #     adjacency = self.adjacency,
             # )
             with record_function("[warpSPH] - [deltaSPH] - solve shifting"):
-                dx = solveShifting(
+                dxDeltaShift = solveShifting(
                     systemState = self.state,
                     config = config,
                     schemeConfig = schemeConfig,
@@ -167,7 +178,7 @@ class IncompressibleSystem(BaseIntegrationSystem):
                 )
                 # print(f"Applied shifting update with max shift magnitude: {dx.norm(dim=1).max().item()}")
 
-                du = dx / dt
+                du = dxDeltaShift / dt
                 rho = self.state.densities
                 u = self.state.velocities
 
@@ -228,7 +239,17 @@ class IncompressibleSystem(BaseIntegrationSystem):
                             adjacency = self.adjacency
                         )
 
-        self.state.densities = computeDensities(self.state, config, schemeConfig, self.adjacency)
+        # The step's second full density summation. `continuity` skips it (the
+        # constant-density solve then runs on the integrated density too);
+        # `hybrid` runs it for this solve only and puts the integrated density
+        # back afterwards, because the shift repairs particle-distribution
+        # drift that `drho/dt = -rho div v` cannot see. See `DensityEvolution`.
+        densityEvolution = resolveDensityEvolution(schemeConfig.solverConfig)
+        carriedDensities = None
+        if densityEvolution is not DensityEvolution.continuity:
+            if densityEvolution is DensityEvolution.hybrid:
+                carriedDensities = self.state.densities
+            self.state.densities = computeDensities(self.state, config, schemeConfig, self.adjacency)
 
         kernel = copy.deepcopy(config.kernel)
         fs, fsm, n, renormalizationState_, lMin = detectFreeSurface(self.state, config, schemeConfig, schemeConfig.surfaceDetectionConfig, self.adjacency, returnNormals = True)
@@ -246,6 +267,10 @@ class IncompressibleSystem(BaseIntegrationSystem):
             verbose=False
         )
         # config.kernel = kernel
+
+        if carriedDensities is not None:
+            # `hybrid`: the summation density existed for the solve above only.
+            self.state.densities = carriedDensities
 
         # Gated on `verbose`, which the integrator forwards from the caller.
         # These fired unconditionally on every step, which made a DFSPH run
@@ -270,7 +295,49 @@ class IncompressibleSystem(BaseIntegrationSystem):
 
         dx = dt**2 * dvdt_incomp
 
+        # `shiftProperties.active` used to be a no-op *that still paid for
+        # itself*: `solveShifting`'s result was bound to `dx` above and then
+        # shadowed by this line, and the only `positions += dx` that would have
+        # applied it is commented out at the bottom of this method. So the flag
+        # ran a full shifting solve every step and threw it away. It now does
+        # what its name says -- the deltaSPH (explicit, concentration-gradient)
+        # shift is applied *on top of* the implicit VD+PS shift, which is the
+        # "relax the distribution more directly" configuration. Still opt-in:
+        # every incompressible case ships `shifting=False`, so the default path
+        # is byte-identical (`dxDeltaShift is None` short-circuits below).
+        if dxDeltaShift is not None:
+            dx = dx + dxDeltaShift
+
+        # Resample against the *total* displacement: Cornelis et al. Eq. 17's
+        # correction is a first-order Taylor step over however far the particle
+        # actually moved, so if a second shift contributes to that move it
+        # belongs here too.
         proj_vel = torch.einsum('nij, nj -> ni', gradVel, dx)
+
+        # The density half of that same resample. Under `summation` it is
+        # pointless -- the next step re-sums from the shifted positions, so the
+        # shift's effect on density is picked up exactly -- but under
+        # `continuity`/`hybrid` nothing else ever tells the carried density that
+        # the particles moved: `drho/dt = -rho div v` describes advection, not
+        # the shift, so the carried field drifts from the truth by the whole
+        # accumulated shift. This is Cornelis et al. Eq. 17 applied to `rho`
+        # instead of `v`, i.e. exactly the correction `proj_vel` already is.
+        proj_rho = None
+        if densityEvolution is not DensityEvolution.summation:
+            gradRho = warpOperation(
+                self.state,
+                operationProperties = OperationProperties(
+                    operation=WarpOperation.Gradient,
+                    kernel = config.kernel,
+                    supportMode = SupportScheme.Gather,
+                    operationMode = OperationDirection.AllToAll,
+                    gradientMode = GradientScheme.Difference
+                ),
+                queryValues = self.state.densities,
+                domain = config.domain,
+                adjacency = self.adjacency
+            )
+            proj_rho = torch.einsum('ni, ni -> n', gradRho, dx)
 
         shiftApplication = schemeConfig.solverConfig.shiftApplication
 
@@ -283,6 +350,8 @@ class IncompressibleSystem(BaseIntegrationSystem):
             # removing it (kinetic energy *grows* 6.6x over 200 steps).
             self.state.positions += dx
             self.state.velocities += proj_vel
+            if proj_rho is not None:
+                self.state.densities = self.state.densities + proj_rho
 
         if shiftApplication is ShiftApplication.positionAndVelocity:
             # Also apply the constant-density solution the way DFSPH proper

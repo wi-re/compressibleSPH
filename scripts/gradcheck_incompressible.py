@@ -78,8 +78,20 @@ def _build_case():
     return domain, positions, supports, masses, densities, adjacency, kinds, areas
 
 
-def _run() -> bool:
+def _run(label: str, includeBoundaryReaction: bool = True, staticKinds: bool = False) -> bool:
     domain, positions, supports, masses, densities, adjacency, kinds, areas = _build_case()
+
+    if staticKinds:
+        # Mark two of the five as static (`kind == 1`), so that with
+        # `includeBoundaryReaction=False` a single launch takes *both* sides of
+        # the `sumB` branch -- the accumulator is skipped for some neighbors of
+        # a given `i` and taken for others. A branch that skips an accumulation
+        # inside the neighbor loop is exactly the shape this file's docstring
+        # is about, so it gets its own gradcheck rather than an argument that
+        # it is obviously safe.
+        kinds = kinds.clone()
+        kinds[1] = 1
+        kinds[3] = 1
 
     def f(pos, sup, mass, area):
         p = ParticleState(positions=pos, supports=sup, masses=mass, densities=densities, kinds=kinds)
@@ -89,9 +101,10 @@ def _run() -> bool:
             domain=domain,
             queryApparentAreas=area,
             adjacency=adjacency,
+            includeBoundaryReaction=includeBoundaryReaction,
         )
 
-    print("\n=== computeAlphaWarp: torch.autograd.gradcheck ===")
+    print(f"\n=== computeAlphaWarp ({label}): torch.autograd.gradcheck ===")
     inputs = (positions, supports, masses, areas)
     try:
         ok = torch.autograd.gradcheck(f, inputs, eps=1e-6, atol=1e-5)
@@ -106,7 +119,9 @@ def main():
     wp.init()
     torch.manual_seed(0)
 
-    ok = _run()
+    ok = _run("includeBoundaryReaction=True")
+    ok &= _run("includeBoundaryReaction=False, mixed kinds",
+               includeBoundaryReaction=False, staticKinds=True)
 
     print()
     if ok:

@@ -55,8 +55,10 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType, JacobiRelaxationMode
+from ...configurations import PressureSolverType, JacobiRelaxationMode, BoundaryOperatorTerms
 from .krylov import solvePressureKrylov
+from .consistent import applyConsistentCoupling
+from ...configurations import BoundaryPressureMode
 
 from typing import Any, Optional, Union
 
@@ -72,6 +74,7 @@ def _solveDivergenceFreeOptimal(
         alphas: torch.Tensor,
         dt: float,
         dfSolver: Any,
+        boundaryMoves: bool = True,
         verbose: bool = False,
 ):
         """Optimal-step relaxed Jacobi (see the module docstring): same warm
@@ -104,6 +107,10 @@ def _solveDivergenceFreeOptimal(
         # (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
         boundaryPressure = particles.pressures.clone()
+        if getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                   BoundaryPressureMode.mdbcDensity) is BoundaryPressureMode.consistent:
+                # No boundary pressure exists in the consistent formulation.
+                boundaryPressure = torch.zeros_like(boundaryPressure)
 
         pressureA = particles.pressures.clone() * 0.75
         pressureB = torch.where(fluidMask, pressureA, boundaryPressure)
@@ -121,6 +128,8 @@ def _solveDivergenceFreeOptimal(
                     supportScheme = SupportScheme.Scatter,
                     adjacency = adjacency,
             )
+            if not boundaryMoves:
+                a = torch.where(fluidMask.unsqueeze(-1), a, torch.zeros_like(a))
             return dt * computePressureShiftIISPH(
                     state = particles,
                     config = config,
@@ -143,6 +152,8 @@ def _solveDivergenceFreeOptimal(
                         supportScheme = SupportScheme.Scatter,
                         adjacency = adjacency,
                 )
+                if not boundaryMoves:
+                        a_p = torch.where(fluidMask.unsqueeze(-1), a_p, torch.zeros_like(a_p))
                 q = dt * computePressureShiftIISPH(
                         state = particles,
                         config = config,
@@ -192,7 +203,7 @@ def _solveDivergenceFreeOptimal(
         return a_p, pressureB, errors, pressures
 
 
-def solveDivergenceFree(
+def _solveDivergenceFreeImpl(
         particles: Any, 
         config: SimulationConfig, 
         schemeConfig: Any, 
@@ -241,12 +252,25 @@ def solveDivergenceFree(
                 particles, config, schemeConfig, adjacency, sourceTerm, dt,
                 dfSolver, gauge='center', verbose=verbose)
 
+        # Which terms a static (`kind != 0`) neighbour contributes to -- see
+        # `BoundaryOperatorTerms`, and `incompressible.py`'s copy of this
+        # comment. Both solvers build the same operator, so both read the same
+        # setting.
+        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                                BoundaryOperatorTerms.full)
+        # See `incompressible.py`: the consistent-coupling mode *is* the
+        # static-boundary operator, so it forces the terms to match.
+        if getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                   BoundaryPressureMode.mdbcDensity) is BoundaryPressureMode.consistent:
+                boundaryTerms = BoundaryOperatorTerms.staticBoundary
+
         alphas = dt * computeAlpha(
                 currentState = particles,
                 config = config,
                 schemeConfig = schemeConfig,
                 adjacency = adjacency,
                 apparentVolumes = apparentArea,
+                includeBoundaryReaction = boundaryTerms.alphaIncludesBoundaryReaction,
         )
 
         # print(f'Alpha: {alphas.mean().cpu().item():.6g}, min: {alphas.min().cpu().item():.6g}, max: {alphas.max().cpu().item():.6g}')
@@ -257,7 +281,8 @@ def solveDivergenceFree(
         if dfSolver.relaxationMode is JacobiRelaxationMode.optimal:
             return _solveDivergenceFreeOptimal(
                 particles, config, schemeConfig, adjacency, sourceTerm, alphas, dt,
-                dfSolver, verbose=verbose)
+                dfSolver, boundaryMoves=boundaryTerms.operatorMovesBoundary,
+                verbose=verbose)
 
         # kind==1 (boundary) and kind==2 (ghost) particles are not pressure unknowns:
         # their pressure is held fixed at its incoming `particles.pressures` value
@@ -269,6 +294,10 @@ def solveDivergenceFree(
         # (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
         boundaryPressure = particles.pressures.clone()
+        if getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                   BoundaryPressureMode.mdbcDensity) is BoundaryPressureMode.consistent:
+                # No boundary pressure exists in the consistent formulation.
+                boundaryPressure = torch.zeros_like(boundaryPressure)
 
         pressureA = particles.pressures.clone() * 0.75
         pressureA = torch.where(fluidMask, pressureA, boundaryPressure)
@@ -293,6 +322,11 @@ def solveDivergenceFree(
                         supportScheme = SupportScheme.Scatter,
                         adjacency = adjacency,
                 )
+                if not boundaryTerms.operatorMovesBoundary:
+                        # A static neighbour contributes no pressure
+                        # displacement of its own -- only `i`'s. See
+                        # `BoundaryOperatorTerms`.
+                        a_p = torch.where(fluidMask.unsqueeze(-1), a_p, torch.zeros_like(a_p))
                 dx_p = dt * computePressureShiftIISPH(
                         state = particles,
                         config = config,
@@ -341,3 +375,23 @@ def solveDivergenceFree(
             print(f'[DF] final Residual: {residual.mean().cpu().item():.6g}, min: {residual.min().cpu().item():.6g}, max: {residual.max().cpu().item():.6g}')
 
         return a_p, pressureB, errors, pressures
+
+
+def solveDivergenceFree(
+        particles: Any,
+        config: SimulationConfig,
+        schemeConfig: Any,
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]],
+        dvdt: torch.Tensor,
+        dt: float,
+        verbose: bool = False,
+):
+        """Thin wrapper, matching `solveIncompressible`'s: applies the active
+        `BoundaryPressureMode`'s boundary state for the duration of the solve.
+        Only `BoundaryPressureMode.consistent` changes anything. See
+        `consistent.py`."""
+        mode = getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                       BoundaryPressureMode.mdbcDensity)
+        with applyConsistentCoupling(particles, config, schemeConfig, adjacency, mode):
+                return _solveDivergenceFreeImpl(
+                        particles, config, schemeConfig, adjacency, dvdt, dt, verbose)

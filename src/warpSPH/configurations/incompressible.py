@@ -157,9 +157,13 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'krylovFp64': config.solverConfig.divergenceFreeSolver.krylovFp64,
             },
             'integrateRho': config.solverConfig.integrateRho,
+            'densityEvolution': config.solverConfig.densityEvolution.name,
+            'boundaryOperatorTerms': config.solverConfig.boundaryOperatorTerms.name,
+            'forceShiftPressureGauge': config.solverConfig.forceShiftPressureGauge,
             'boundaryPressureMode': config.solverConfig.boundaryPressureMode.name,
             'mdbcPressureRelaxation': config.solverConfig.mdbcPressureRelaxation,
             'mdbcNoPenetrationShift': config.solverConfig.mdbcNoPenetrationShift,
+            'akinciBoundaryVolume': config.solverConfig.akinciBoundaryVolume,
             'shiftPressureGauge': config.solverConfig.shiftPressureGauge.name,
             'shiftApplication': config.solverConfig.shiftApplication.name,
         }
@@ -235,6 +239,16 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
                   buildDefaultIncompressibleSolverConfig().shiftApplication)
         return ShiftApplication[v] if isinstance(v, str) else v
 
+    def _densityEvolution(d):
+        v = d.get('densityEvolution',
+                  buildDefaultIncompressibleSolverConfig().densityEvolution)
+        return DensityEvolution[v] if isinstance(v, str) else v
+
+    def _boundaryOperatorTerms(d):
+        v = d.get('boundaryOperatorTerms',
+                  buildDefaultIncompressibleSolverConfig().boundaryOperatorTerms)
+        return BoundaryOperatorTerms[v] if isinstance(v, str) else v
+
     def _shiftPressureGauge(d):
         v = d.get('shiftPressureGauge',
                   buildDefaultIncompressibleSolverConfig().shiftPressureGauge)
@@ -266,11 +280,17 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             krylovFp64=dfDict.get('krylovFp64', buildDefaultDFConfig().krylovFp64),
         ),
         integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho),
+        densityEvolution=_densityEvolution(solverConfigDict),
+        boundaryOperatorTerms=_boundaryOperatorTerms(solverConfigDict),
+        forceShiftPressureGauge=solverConfigDict.get(
+            'forceShiftPressureGauge', buildDefaultIncompressibleSolverConfig().forceShiftPressureGauge),
         boundaryPressureMode=_boundaryPressureMode(solverConfigDict),
         mdbcPressureRelaxation=solverConfigDict.get(
             'mdbcPressureRelaxation', buildDefaultIncompressibleSolverConfig().mdbcPressureRelaxation),
         mdbcNoPenetrationShift=solverConfigDict.get(
             'mdbcNoPenetrationShift', buildDefaultIncompressibleSolverConfig().mdbcNoPenetrationShift),
+        akinciBoundaryVolume=solverConfigDict.get(
+            'akinciBoundaryVolume', buildDefaultIncompressibleSolverConfig().akinciBoundaryVolume),
         shiftPressureGauge=_shiftPressureGauge(solverConfigDict),
         shiftApplication=_shiftApplication(solverConfigDict),
     )

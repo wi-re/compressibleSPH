@@ -123,6 +123,28 @@ parser.add_argument('--gauge', default='clamp',
                          "minshift that is not hostage to a single outlier "
                          "particle); 'none' = nothing")
 parser.add_argument('--gaugeQuantile', type=float, default=0.01)
+parser.add_argument('--cflFactor', type=float, default=None,
+                    help="override the case's cflFactor. Part 8 item 3: the "
+                         "default 0.3 is applied to the support radius h, and "
+                         "n_h=4 makes that 1.2 particle spacings per step, 3x "
+                         "Bender & Koschier's published `dt <= 0.4 d/|v_max|`. "
+                         "0.1 matches the paper.")
+parser.add_argument('--setpointEps', type=float, default=0.0,
+                    help="DFSPH_IMPROVEMENT_PLAN.md Part 8 item 1: move the "
+                         "solve's setpoint off the lattice floor. The case "
+                         "normalises mass so the *lattice* summation density "
+                         "equals rho0 (kolmogorovIncompressible.py:71), and "
+                         "Part 4 proved the lattice MINIMISES mean(rho) -- so "
+                         "rho0 sits exactly at a value no disordered "
+                         "configuration can reach, and `sourceTerm = rho0 - "
+                         "rhoStar` keeps a permanent negative mean. This "
+                         "rescales mass by 1/(1+eps) after the case builds, "
+                         "putting the lattice at rho0/(1+eps) so a "
+                         "configuration carrying a density bias of eps lands "
+                         "*on* rho0. eps=0 reproduces the historical setpoint "
+                         "byte-for-byte. Neither DFSPH nor IISPH ties rho0 to "
+                         "the sampled configuration at all; this flag is the "
+                         "cheapest way to ask what happens when it doesn't.")
 parser.add_argument('--null-test', action='store_true',
                     help="each step, apply the IISPH operator to a constant "
                          "field and to a random field and log the means, to "
@@ -279,14 +301,37 @@ if args.jitter is not None:
 
     wcsample.sampleRegularParticles = _jittered
 
-result = caseMain(mod.kolmogorovIncompressibleCase, argv=[
-    '--nx', str(args.nx), '--nSteps', str(args.nsteps), '--tLimit', '1000.0',
-    '--quiet', '--no-store', '--no-plot',
-])
+if args.setpointEps != 0.0:
+    # Post-scale the case's own mass normalisation rather than editing it, so
+    # the eps=0 path stays byte-identical to the shipped case.
+    _origBuild = mod.kolmogorovIncompressibleCase.buildSystem
+
+    def _offsetBuild(ctx, _origBuild=_origBuild):
+        system = _origBuild(ctx)
+        system.state.masses = system.state.masses / (1.0 + args.setpointEps)
+        # Recompute rather than clear: the runner takes a t=0 diagnostics
+        # sample before the first step, which reads `densities` directly.
+        # (Every step recomputes it anyway -- `integrateRho` is False by
+        # default -- so this only matters for that one pre-step sample.)
+        from warpSPH.modules.density import computeDensities
+        system.state.densities = computeDensities(
+            system.state, ctx.config, ctx.schemeConfig, None)
+        # The forcing is `accel * mass` and `dfsph_step` divides it back out,
+        # so the applied acceleration is unchanged by the rescale.
+        return system
+
+    mod.kolmogorovIncompressibleCase.buildSystem = _offsetBuild
+
+_argv = ['--nx', str(args.nx), '--nSteps', str(args.nsteps), '--tLimit', '1000.0',
+         '--quiet', '--no-store', '--no-plot']
+if args.cflFactor is not None:
+    _argv += ['--cflFactor', str(args.cflFactor)]
+result = caseMain(mod.kolmogorovIncompressibleCase, argv=_argv)
 
 n = len(log)
 label = (f"nx={args.nx} no_clamp={args.no_clamp} maxIters={args.maxIters} jitter={args.jitter} "
-         f"project_source={args.project_source}")
+         f"project_source={args.project_source} setpointEps={args.setpointEps} gauge={args.gauge} "
+         f"cflFactor={args.cflFactor}")
 print(f"\n=== {label}: {n} steps recorded ===")
 print(f"{'step':>5} {'stMean':>11} {'pMean':>11} {'pStd':>11} {'pMax':>11} {'nIter':>6} "
       f"{'rhoBias':>11} {'rhoErr':>11} {'rhoMax':>11} {'nClamped':>9} {'fin':>4}")

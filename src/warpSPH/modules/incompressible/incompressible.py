@@ -37,13 +37,15 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge
+from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge, BoundaryOperatorTerms
 from .krylov import solvePressureKrylov
+from .consistent import applyConsistentCoupling
+from ...configurations import BoundaryPressureMode
 
 __all__ = ['solveIncompressible']
 
 
-def solveIncompressible(
+def _solveIncompressibleImpl(
     
         particles: Any, 
         config: SimulationConfig, 
@@ -107,12 +109,30 @@ def solveIncompressible(
                 "non-negative each iteration, which breaks the exact residual "
                 "recurrence the optimal step relies on")
 
+        # Which terms a static (`kind != 0`) neighbour contributes to. `full`
+        # (the default) is the historical AllToAll behaviour; `staticBoundary`
+        # drops its reaction on both sides at once -- out of `alpha`'s second
+        # sum here, and out of the operator's neighbour-acceleration term in
+        # the loop below -- so the diagonal keeps matching the operator it
+        # preconditions. See `BoundaryOperatorTerms`.
+        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                                BoundaryOperatorTerms.full)
+
+        # `BoundaryPressureMode.consistent` is Bender/Westhofen/Jeske 2023 in
+        # full: their Eqs. 32 and 34 *are* `staticBoundary`, so the mode forces
+        # it on rather than letting the two settings disagree.
+        boundaryPressureMode = getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                                       BoundaryPressureMode.mdbcDensity)
+        if boundaryPressureMode is BoundaryPressureMode.consistent:
+                boundaryTerms = BoundaryOperatorTerms.staticBoundary
+
         alphas = dt**2 * computeAlpha(
                 currentState = particles,
                 config = config,
                 schemeConfig = schemeConfig,
                 adjacency = adjacency,
                 apparentVolumes = apparentArea,
+                includeBoundaryReaction = boundaryTerms.alphaIncludesBoundaryReaction,
         )
 
         alphas = torch.clamp(alphas, max=-1e-6)  # Avoid division by zero
@@ -137,6 +157,11 @@ def solveIncompressible(
         # particles (`fluidMask` all-True).
         fluidMask = particles.kinds == 0
         boundaryPressure = particles.pressures.clone()
+        if boundaryPressureMode is BoundaryPressureMode.consistent:
+                # Eq. 33 has no boundary pressure term at all, so there is no
+                # value to carry: pin it at exactly 0 rather than at whatever
+                # the state happens to hold.
+                boundaryPressure = torch.zeros_like(boundaryPressure)
 
         # `minShift` is a *gauge* fix, so it is only valid where the constant
         # mode is genuinely free and genuinely forceless -- a domain with
@@ -156,7 +181,8 @@ def solveIncompressible(
         # for the clamp. So fall back to the clamp instead of corrupting the
         # solve; the drift it fails to defend against is a property of the
         # pure-Neumann case, which by construction is not this one.
-        if gauge is ShiftPressureGauge.minShift:
+        if gauge is ShiftPressureGauge.minShift and not getattr(
+                        schemeConfig.solverConfig, 'forceShiftPressureGauge', False):
                 gaugeable = bool(fluidMask.all())
                 surface = getattr(particles, 'surfaceIndicators', None)
                 if surface is not None and bool((surface > 0.5).any()):
@@ -185,6 +211,15 @@ def solveIncompressible(
                         supportScheme = SupportScheme.Scatter,
                         adjacency = adjacency,
                 )
+                if not boundaryTerms.operatorMovesBoundary:
+                        # `dx_p_i = sum_j V_j (a_i - a_j).gradW_ij` counts the
+                        # neighbour's pressure displacement; a static particle
+                        # has none, so only `i`'s own term survives for those
+                        # `j` (this is SPlisHSPlasH's boundary loop in
+                        # `TimeStepIISPH::pressureSolveIteration`). `i`'s own
+                        # acceleration still feels their frozen pressure --
+                        # that is the wall force, computed above.
+                        a_p = torch.where(fluidMask.unsqueeze(-1), a_p, torch.zeros_like(a_p))
                 dx_p = dt**2 * computePressureShiftIISPH(
                         state = particles,
                         config = config,
@@ -250,3 +285,28 @@ def solveIncompressible(
             # if residual.mean() > 
         return a_p, pressureB, errors, pressures
 
+
+def solveIncompressible(
+        particles: Any,
+        config: SimulationConfig,
+        schemeConfig: Any,
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]],
+        dvdt: torch.Tensor,
+        dt: float,
+        verbose: bool = False,
+):
+        """Thin wrapper that puts `kind != 0` rows into the boundary state the
+        active `BoundaryPressureMode` calls for, then runs the solve.
+
+        Only `BoundaryPressureMode.consistent` changes anything: it enters the
+        solve with boundary densities pinned at `rho0` (Bender/Westhofen/Jeske
+        2023 treat boundary particles as "static fluid particles" at the rest
+        density) and restores the mDBC-extrapolated values afterwards, so
+        nothing outside the pressure solve sees the substitution. Every other
+        mode passes straight through. See `consistent.py`.
+        """
+        mode = getattr(schemeConfig.solverConfig, 'boundaryPressureMode',
+                       BoundaryPressureMode.mdbcDensity)
+        with applyConsistentCoupling(particles, config, schemeConfig, adjacency, mode):
+                return _solveIncompressibleImpl(
+                        particles, config, schemeConfig, adjacency, dvdt, dt, verbose)

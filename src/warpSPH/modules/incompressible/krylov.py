@@ -35,7 +35,7 @@ from ..shifting.gmres import gmresSolve
 from ..shifting.cg import cgSolve
 from ..shifting.bicg import bicgSolve
 from ..shifting.minres import minresSolve
-from ...configurations import PressureSolverType
+from ...configurations import PressureSolverType, BoundaryOperatorTerms
 
 __all__ = [
     'buildIISPHMatvec',
@@ -55,10 +55,20 @@ def buildIISPHMatvec(state, config, schemeConfig, adjacency, dt_scale,
     constant-density variant). It is a closure over the current state, so it
     stays matrix-free: each call runs two SPH gather/scatter passes.
     """
+    # Static (`kind != 0`) neighbours contribute no pressure displacement of
+    # their own under `BoundaryOperatorTerms.staticBoundary`; the Krylov path
+    # builds the same operator as the Jacobi one, so it reads the same setting.
+    # See `BoundaryOperatorTerms`.
+    boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                            BoundaryOperatorTerms.full)
+    fluidMask = None if boundaryTerms.operatorMovesBoundary else (state.kinds == 0).unsqueeze(-1)
+
     def matvec(p):
         a_p = computePressureAccelIISPH(
             state=state, pressureValues=p, config=config,
             supportScheme=supportScheme, adjacency=adjacency)
+        if fluidMask is not None:
+            a_p = torch.where(fluidMask, a_p, torch.zeros_like(a_p))
         return dt_scale * computePressureShiftIISPH(
             state=state, config=config, pressureAccels=a_p,
             supportScheme=supportScheme, adjacency=adjacency)
@@ -91,9 +101,12 @@ def buildIISPHPrecond(state, config, schemeConfig, adjacency, dt_scale,
     (``Mx = precond * x``), so we return the reciprocal ``1/D``, not ``D``.
     """
     apparentArea = state.masses / state.densities
+    boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                            BoundaryOperatorTerms.full)
     alphas = dt_scale * computeAlpha(
         currentState=state, config=config, schemeConfig=schemeConfig,
-        adjacency=adjacency, apparentVolumes=apparentArea)
+        adjacency=adjacency, apparentVolumes=apparentArea,
+        includeBoundaryReaction=boundaryTerms.alphaIncludesBoundaryReaction)
     alphas = torch.clamp(alphas, max=-1e-6)
     return 1.0 / alphas
 

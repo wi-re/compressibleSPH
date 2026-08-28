@@ -7,6 +7,27 @@ constant (unchanged), no-slip (mirrored fluid velocity), free-slip
 `interpolateLiuLiu`). Each non-extended policy interpolates fluid velocities
 to ghost points via a Shepard-normalized SPH gather. No-ops (returns
 `currentState.velocities` unchanged) when there are no boundary particles.
+
+Two measured deviations from the published mDBC forms, neither fixed -- see
+`DFSPH_IMPROVEMENT_PLAN.md` Part 9's addendum and
+`scripts/probe_boundaryVelocityModes.py --mode verify`, which grades both
+conditions against the wall normal:
+
+- **Both slip conditions project the normal component out rather than
+  reflecting it.** Decomposed against the wall normal, `noSlip` measures
+  (normal, tangential) = (0, -1) and `freeSlip` (0, +1), where the published
+  forms are (-1, -1) and (-1, +1). The tangential half is exactly right in
+  both; the boundary particle simply never opposes an approaching fluid
+  particle's normal velocity, so a wall contributes half the compression
+  signal it should to the SPH divergence. Running the reflecting form instead
+  was measured and is *worse* on the bounded DFSPH case, with or without
+  `mdbcNoPenetrationShift` -- so this is recorded, not "fixed" blind.
+- **`noSlip`'s `2 * u_wall` term is dead.** It reads `currentState.velocities`
+  at the *ghost* rows, and nothing writes a body velocity there except
+  `rigidBody/update.py`'s `BCType.constant` branch, so on a moving no-slip wall
+  it degenerates to a stationary one. `lidDrivenCavity` does not show it
+  because `enforceDirichlet` runs after this function and re-imposes the lid
+  velocity on the boundary rows.
 """
 
 import warp as wp
@@ -67,7 +88,11 @@ def noSlip(currentState: Any, config: SimulationConfig, schemeConfig: WeaklyComp
     # Normalize interpolated velocities
     qVel = qVel / (shepValue.view(-1,1) + 1e-7)
 
-    # Compute the no-slip condition: u_g = 2 * u_f - u_g
+    # The no-slip condition. Two caveats, both measured -- see this module's
+    # docstring: `bodyVelocity` is read at the *ghost* rows, where nothing
+    # writes a moving body's velocity, and the `projected_vels` step below
+    # drops the normal component instead of reflecting it, so what this
+    # actually returns is `-tangential(u_f)`.
     bodyVelocity = currentState.velocities
     bIndices = currentState.ghostIndices[currentState.kinds == 2]
     u_g = 2 * bodyVelocity - qVel
@@ -115,7 +140,11 @@ def freeSlip(currentState: Any, config: SimulationConfig, schemeConfig: WeaklyCo
     # Normalize interpolated velocities
     qVel = qVel / (shepValue.view(-1,1) + 1e-7)
 
-    # Compute the free-slip condition: u_g = u_f - 2 * (u_f . n_b) * n_b
+    # The free-slip condition. NOTE: the published form is
+    # `u_g = u_f - 2 * (u_f . n_b) * n_b` (reflect the normal component); what
+    # is computed below is `u_f - 1 * (u_f . n_b) * n_b` (project it out), so
+    # the boundary particle ends up with no normal velocity rather than the
+    # reversed one. Measured and left as is -- see this module's docstring.
     bodyVelocity = currentState.velocities
     bIndices = currentState.ghostIndices[currentState.kinds == 2]
     

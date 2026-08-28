@@ -23,8 +23,9 @@ from warpSPH.modules.mdbc import (
     computeBoundaryVelocities, computeMdbcDensity, computeMdbcNoPenShift,
     computeMdbcPressure,
 )
-from warpSPH.configurations import BoundaryPressureMode, ShiftApplication
+from warpSPH.configurations import BoundaryPressureMode, ShiftApplication, DensityEvolution, resolveDensityEvolution
 from warpSPH.modules.momentum import computeMomentum
+from warpSPH.modules.momentum.incompressible import computeMomentumIncompressible
 from warpSPH.modules.surfaceDetection import detectFreeSurface
 from warpSPHCore import SupportScheme, buildVerletList
 
@@ -65,7 +66,13 @@ def dfsph_step(
     # 2. Compute density if density is none
     # with TimedBlock('compute density', use_cuda=True, device=config.device) as tb_density:
     with record_function("[warpSPH] - [deltaSPH - 02] - compute density"):
-        if currentState.densities is None or not schemeConfig.solverConfig.integrateRho:
+        # `DensityEvolution.summation` (the default) re-sums here every step;
+        # `continuity`/`hybrid` keep the density the integrator advanced with
+        # `drhodt` instead. `finalize`'s own re-sum is controlled separately --
+        # see `DensityEvolution`, and note that this branch alone used to be
+        # `integrateRho`'s whole effect, which `finalize` then overwrote.
+        densityEvolution = resolveDensityEvolution(schemeConfig.solverConfig)
+        if currentState.densities is None or densityEvolution is DensityEvolution.summation:
             # print("Computing densities...")
             currentState.densities = computeDensities(currentState, config, schemeConfig, adjacency)
 
@@ -236,6 +243,24 @@ def dfsph_step(
     # dvdt_correction = vCorrection / dt
     # dvdt += dvdt_correction
 
+
+    # Under `summation` the carried density is discarded and re-summed next
+    # step, so it does not matter that `drhodt` above was evaluated on
+    # `currentState.velocities` -- the velocity *before* the divergence-free
+    # projection. Under `continuity`/`hybrid` it matters completely: the
+    # particles are advected with the projected velocity, whose divergence the
+    # solve just drove to ~0, so integrating the *unprojected* divergence feeds
+    # the carried density exactly the error the solver was there to remove,
+    # every step. Re-evaluate it on the velocity the integrator will actually
+    # use, with the same operator the solvers form `rhoStar` from.
+    if densityEvolution is not DensityEvolution.summation:
+        with record_function("[warpSPH] - [deltaSPH - 12b] - recompute drhodt (projected)"):
+            advection = currentState.velocities + dt * (
+                dvdt + dvdt_diss + dvdt_pressure
+                + (dvdt_inStep if dvdt_inStep is not None else 0.0))
+            drhodt = computeMomentumIncompressible(
+                currentState = currentState, config = config, schemeConfig = schemeConfig,
+                adjacency = adjacency, advectionVelocities = advection)
 
     # 16. build update
     # with TimedBlock('build update', use_cuda=True, device=config.device) as tb_update:

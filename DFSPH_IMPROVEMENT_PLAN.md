@@ -120,6 +120,178 @@ sequencing and a list of questions for a literature session on DFSPH and its
 derivatives are written up in Part 6; the owner wants that session before any
 restructuring.
 
+**Part 7: the literature session is done (2026-08-27).** Run against
+Cornelis et al.'s VD+PS source-term paper and Band et al.'s MLS pressure
+boundaries paper. Headline: **this scheme is not a mis-named DFSPH, it is a
+faithful implementation of Cornelis et al.'s VD+PS**, step for step — so the
+position shift is the method rather than a deviation from it, the velocity
+modes are the departures, and the `tgv` over-dissipation Part 5 measured is
+the published, expected behaviour of a velocity-applied density-invariant
+solve (the paper's abstract says so; its Fig. 3 measures it). Part 6's naming
+proposal changes target accordingly: the file is `vdps.py`, not a broken
+`dfsph.py`. The unreachable setpoint is real in the paper too — it is avoided
+by never putting the residual in momentum, by a tolerance set *above* the
+structural floor (theirs 1e-3, this codebase's 5e-4 against a measured floor
+of 2.7e-3), and by keeping the sampling ordered enough that the floor stays
+under it. Six discrepancies against the papers are listed and ranked, three
+of them one-line changes; the boundary-pressure feedback loop this codebase
+damps turns out to be a documented failure mode of holding boundary pressure
+as *state*, which the standard formulation avoids by recomputing it inside
+every solver iteration. **"Next session" item 1 is superseded** — see Part 7.
+
+**Part 8: the DFSPH and IISPH originals (2026-08-27).** Bender & Koschier
+2015 and Ihmsen et al. 2014 arrived after Part 7 and **correct it**. Three
+things. (1) Part 7's account of why published solvers converge was wrong —
+DFSPH runs a *tighter* density tolerance than this codebase (1e-4 vs 5e-4)
+and still converges in 4.5 iterations. The real cause is local: two case
+files (`kolmogorovIncompressible.py:71`, `tgv.py:53`) normalise mass so
+`rho0` equals the *lattice* summation density, which Part 4 proved is the
+structural **minimum** — so the setpoint is pinned exactly at the
+unreachable floor, by one line, in exactly the two cases where the wind-up
+was ever seen. (2) DFSPH's Algorithm 1 runs its solvers in the order
+density -> integrate -> divergence, deliberately, so the divergence solve
+cleans up the density solve's velocity side-effect; `inStepVelocity` has
+them **swapped**, so it is not "DFSPH proper" as Part 5/6 claim. Both
+inputs to every `tgv` dissipation number in this document are therefore
+suspect. (3) `computeAlpha` is confirmed to discretise IISPH's diagonal but
+carries an extra power of `rho` and the wrong neighbour set on one sum —
+measurable directly, and a candidate explanation for `omega < 0.355`
+against both papers' 0.5. Also closed: one-sided source clamping and the
+Krylov-on-clamped-solve path both have published negative results. The
+scheme split the owner proposed is now fully specified rather than open.
+**Part 8's items 1 and 2 were then run, and both were falsified** ("Part 8 —
+results", end of document): moving the setpoint kills the run 150 steps
+*sooner* (the source's negative mean is the shifting solve's de-clumping
+drive), and `computeAlpha` measures as the true operator diagonal to within
+1.6% with `rho` out to 1.30, so `omega_eff = omega` exactly. What those two
+negative results expose is the **stopping criterion**: `minShift` runs its
+full 64 iterations every step for 1000 steps and never terminates, yet those
+iterations are productive (`rhoErr` 1.15e-3 at 64 against 3.80e-3 at 8), so
+an *absolute* compression threshold is simply the wrong test. `rtol` already
+exists in the config and the Jacobi path ignores it.
+**Item 3 (the CFL constant) then landed as the session's one positive result**:
+[BK]'s `dt <= 0.4 d/|v_max|` is stated in particle *diameters*, this codebase
+applies `cflFactor` to the support radius `h`, and `n_h=4` makes the default
+1.2 spacings per step — 3x the published limit. At `cflFactor=0.1` the bounded
+case reaches t=8.0 **at stock settings** (near-wall `|rho-1|` 2.6e-2 against
+0.30 at the default's death, beating the opt-in `positionAndVelocity` mode
+without its 3.2x `tgv` dissipation), `kolmogorovIncompressible` improves 23%,
+`tgv` is provably unaffected (its `dt` is pinned at 1e-3; the CFL never binds),
+and Part 4's step-574 NaN disappears even under the *historical* gauge. A
+fourth correction also landed: Part 8's solver-ordering claim was overstated —
+under `semiImplicitEuler` the ordering is equivalent to [BK]'s up to loop
+phase. Then a fifth correction, from the project owner: **this codebase's walls are
+not support-truncated.** `BOUNDED_BAND = 5` samples the boundary as a solid
+five-layer band against a 4-spacing support radius, so the Shepard sum is
+~1.00 to the wall and the operator's constant mode is as near-null there
+(`|A.1|/|A.rand|` 0.19) as in the bulk (0.17). That falsifies half of
+`ShiftPressureGauge`'s stated justification for refusing to gauge bounded
+solves — and re-testing the other half showed Part 4's "minShift diverges at
+t=0.69" was measuring the 3x-oversized timestep: **at the published CFL,
+`minShift` on the bounded case does not diverge, covers 38% more time per
+step budget, has 19% lower density error, and costs half the wall time.**
+Also this session: MINRES *without the non-negativity clamp* is the largest
+accuracy win found (2.15x on the periodic case, ~nothing at a wall), exactly
+as [I] Sec. 3.2 and [BK] Sec. 5 predict; and the deltaSPH shift-on-top was
+found to be an inert-but-expensive no-op (now fixed, then tested and
+rejected). **Start from "Part 8 item 3"'s landing recommendation, which is
+now entangled with the `minShift` scoping — the two default changes should
+land together or not at all.**
+
+**Part 9: the boundary terms the papers do not compute (2026-08-28).** The
+project owner's next objection, checked against SPlisHSPlasH and confirmed:
+the published solvers do not evaluate every operator term for a *static*
+boundary particle, and this codebase evaluates all of them. Two terms --
+`computeAlpha`'s second sum (`dp_i/dx_j`) and the operator's neighbour-
+acceleration term `a_j` -- describe a reaction a particle that never moves
+cannot have; [BK] 3.2 says so in one sentence and SPlisHSPlasH's
+`computeDFSPHFactor`/`compute_aij_pj` implement it literally. In the
+wall-adjacent bin those terms are **40% of the diagonal** (55% inside the
+band) and exactly zero beyond 3 spacings. Dropping both
+(`BoundaryOperatorTerms.staticBoundary`, new, default-off) cuts the bounded
+case's density error **5.9x** at the published CFL (1.78e-1 -> 3.00e-2,
+`rho_max` 1.247 -> 1.007) for the same cost -- but only there: at the shipped
+`cflFactor=0.3` it dies sooner than the baseline, the same entanglement
+`minShift` has. Dropping the term from the diagonal *alone* NaNs in 47 steps,
+which is measurement 1's 1.6x oversized relaxation showing up on schedule.
+The sharpest result is that **the win belongs to the constant-density/shifting
+solve, and the same change applied to the divergence-free solve alone diverges
+at t=1.65** — so a future default belongs on `RelaxedJacobiSolverConfig` (per
+solver), not where the experiment hook currently sits.
+**Part 10: the initial sampling, and integrating the density (2026-08-28).**
+Two owner requests. **(a) The sampling is exact and the mass is not.** The
+as-sampled fluid is uniform to float precision -- std 0.000000, the same value
+in every wall-depth bin -- at `rho = 1.001206`, because `sample/regular.py`
+uses the nominal `rho0*dx^d` and never corrects for the kernel's discrete
+normalisation. It shows up as a 1.2e-3 error on step 1 and a global factor
+removes it exactly (to 7.5e-6). **There is no startup shock**: step 0 is
+exactly uniform and the transient is the noise field spinning up. Removing the
+bias is a 30% win on the periodic case and a **35% loss** on the bounded one --
+the same setpoint knob Part 8 item 1 swept, in the direction it did not cover:
+the un-normalised lattice sits *above* `rho0`, which biases the source negative,
+which is the shifting solve's de-clumping drive. **(b) `integrateRho` is now
+real** (`DensityEvolution`, default `summation` = unchanged). Pure `continuity`
+fails everywhere but `tgv`, and the reason is measurable rather than arguable:
+the carried density reports 7.1e-3 while the truth is 4.3e-2, because
+`drho/dt = -rho div v` cannot represent particle *rearrangement* at zero
+divergence -- and that is not the position shift's doing either (dropping it
+via `inStepVelocity` leaves the drift at 3.5e-2). One real bug was found on that
+path and fixed: `drhodt` was evaluated on the *pre-projection* velocity, so the
+integrated density re-accumulated exactly the divergence the solve had just
+removed -- worth **1800x** on the divergence-free residual (2.6e+2 -> 1.5e-1).
+The owner's proposed split is confirmed by measurement: **`hybrid` -- integrate
+for the divergence-free path, re-sum for the shift -- matches `summation`
+exactly where support is complete** (periodic `|rho-1|` 1.917e-3 against
+1.926e-3, `tgv` 1.588e-4 against 1.608e-4 with identical energy decay and 21%
+less wall time) while its carried density drifts 3.3e-2, because the
+divergence-free solve genuinely only needs `div v`. It still dies at 286 steps
+at an mDBC wall; the leading hypothesis is that `computeMdbcDensity`
+extrapolates the boundary rows from the drifted field.
+
+**Part 11: the consistent rigid-fluid coupling paper (2026-08-28).** Bender,
+Westhofen & Jeske 2023 arrived and **it is the derivation Part 9 was missing**:
+their constraint-based DFSPH defines the density constraint for fluid particles
+only, so `dC_i/dx_k = 0` for a static boundary, and their Eqs. 32 and 34 *are*
+`BoundaryOperatorTerms.staticBoundary` term for term -- which Part 9 had
+reached from SPlisHSPlasH's source without the theory. Their Eq. 33 (no
+boundary pressure value anywhere) is an identity for this codebase's symmetric
+gradient whenever `p_b = 0`, which the default already arranges. What is new is
+the boundary *state*: the paper treats boundary particles as "static fluid
+particles" at `rho_k = rho0`, where this codebase feeds them an
+mDBC-extrapolated density that reaches 1.3+ in a compressed band -- and that
+value reaches every sum in the solve through the apparent volume `m_j/rho_j`.
+Shipped as `BoundaryPressureMode.consistent` (opt-in): on the bounded case at
+the published CFL it is **6.2x better than the shipped configuration**
+(`|rho-1|` 2.86e-2 against 1.78e-1) and 5% better than the operator terms
+alone. The sharper result is at the other end of the table: **`mdbcMlsPressure`
+-- the MLS extrapolation the paper is written against, and which Part 2 called
+this codebase's most accurate mode -- is the worst configuration measured**
+(1.86e-1, worse than the baseline), correcting Part 2, which measured it at 3x
+the published CFL out to t=1.5. The paper's Akinci volume correction `m~_k`
+(measured mean 1.10, max 1.46 on this five-layer band) splits: applied inside
+the operator it is the best row in the table (2.38e-2), applied as the
+particles' actual mass -- the faithful reading, where Eq. 14's density sum sees
+it -- it **diverges in nine steps**, because Akinci's correction assumes a
+one-layer sampling and this codebase's band already contains the volume it adds.
+`consistent` is entangled with `cflFactor` the same way everything else in
+Parts 8-9 is, which now makes **four** independent changes that are better at
+the published CFL and worse at 3x it. A first explanation of
+that split (mDBC boundary rows are static in position but not in velocity) was
+**tested by the owner's follow-up question and falsified**: setting the
+boundary velocity to the rigid body's, as DFSPH does, delays the divergence
+from step 283 to 482 but does not prevent it, and neither the Jacobi stability
+window (`rho(D^-1 A)` 6.3777 vs 6.3782) nor the iteration budget (32 -> 96 ->
+192 delays, then *reverses*) accounts for it either. What is measured is a
+weaker contraction: each divergence-free solve removes ~20% of its residual
+under `staticBoundary` against ~50% under `full`, and the leftover accumulates
+for ~250 steps before detonating. Applied to *both* solves the same change
+*improves* both solvers' final residuals (5x and 1.7x), so the harm is a
+property of the mismatched half-state. That follow-up also found two live
+defects in the mDBC slip conditions themselves — the normal component is
+projected out where the published form (and `freeSlip`'s own comment) reflects
+it, and `noSlip`'s moving-wall term reads a ghost-row velocity that nothing
+ever writes — neither of which, measured, is worth fixing blind.
+
 ---
 
 ## Next session: start here
@@ -127,29 +299,18 @@ restructuring.
 Part 4 is closed and Part 5 is diagnosed but unfixed (both are written up at
 the bottom of this document). Nothing below is blocking; pick by preference.
 
-0. **A literature session on DFSPH and its derivatives**, to establish what
-   belongs where before any restructuring — the project owner's stated next
-   step. Part 6 lists the questions, each tied to a specific measurement in
-   this document rather than to general reading. The first of them (how
-   published implementations avoid integrating the constant-density solve's
-   permanent residual into momentum) is the same question item 1 below
-   attacks empirically, so the two inform each other.
-1. **Drive the velocity correction from the *attainable* part of the source
-   only.** This is the highest-value item left, and the one experiment that
-   could make a velocity mode safe enough to default to.
-   `ShiftApplication.inStepVelocity` already gives the bounded case a 30x
-   better near-wall density error and turns its NaN into a steady state, but
-   it damps `tgv` at 3.3x the analytic rate. Part 5 continued (2) argues that
-   dissipation *is* Part 4's unreachable setpoint integrated into the
-   momentum equation — the constant-density solve never converges, and its
-   permanent residual becomes a permanent unphysical force. Projecting the
-   structurally-unreachable mean out of the source for the velocity path
-   (while leaving the position shift on the raw source, where Part 4 showed
-   the mean carries the de-clumping signal) should remove it. One flag on
-   `solveIncompressible`'s source term. Note two refinements already tried
-   and *rejected*, so they are not re-run: confining the correction to a wall
-   band (diverges sooner than not doing it at all — its value is not
-   wall-local) and scaling it down (no lambda satisfies both cases).
+0. ~~A literature session on DFSPH and its derivatives~~ — **done, see
+   Part 7.** It reordered everything below it; the ranked list of what to do
+   next now lives at the end of Part 7 ("What this changes, in order").
+   Shortest version: try the PS solver's **tolerance** (5e-4 against a
+   measured 2.7e-3 structural bias) before anything else.
+1. ~~Drive the velocity correction from the attainable part of the source
+   only.~~ **Superseded by Part 7 Q1.** This was a fix for the velocity
+   formulation, which is the one Cornelis et al.'s VD+PS was written to
+   replace — and the residual it targets is handled in the literature by a
+   convergence tolerance set above the structural floor, not by projecting
+   the mean out. The original text is preserved in git history if the
+   tolerance experiment fails to explain the wind-up.
 2. **Optionally, the wall-aware `dt` constraint** (Part 5). Still valid,
    still ~2.4x throughput, and now largely superseded by the above — worth
    landing only if the near-wall scoping does not pan out. Part 5 lists the
@@ -1961,3 +2122,2143 @@ answer from the published methods, not a general reading topic.
   transport-velocity formulations, which add such a background pressure
   deliberately?
 
+
+---
+
+## Part 7 — the literature session (2026-08-27)
+
+Ran against two papers supplied as full text, plus the code each question is
+tied to. **Read this section before acting on Part 6's naming proposal or on
+"Next session" item 1** — it changes the recommended order of both.
+
+**Sources actually available.**
+
+- **[C]** Cornelis, Bender, Gissler, Ihmsen, Teschner, *An Optimized Source
+  Term Formulation For Incompressible SPH* (TVCJ 2018/19). The VD+PS paper.
+- **[B]** Band, Gissler, Peer, Teschner, *MLS pressure boundaries for
+  divergence-free and viscous SPH fluids* (C&G 76, 2018). Boundary handling
+  for a DFSPH framework; its Algorithm 1 is the clearest published statement
+  of the DFSPH step available here.
+
+**Not available, and every claim resting on them is marked "[unverified]".**
+Bender & Koschier 2017 (DFSPH proper), Band et al. 2018a (Pressure
+Boundaries), Adami et al. 2012 (wall BC), Akinci et al. 2012 (rigid-fluid
+coupling), Ihmsen et al. 2010 (adaptive timestep), Adami et al. 2013
+(transport velocity). [B] describes the first four second-hand and that is
+what is used below.
+
+### The headline: this scheme is not a mis-named DFSPH, it is VD+PS
+
+Part 6 framed the scheme as "DFSPH with the second solve repurposed as a
+position shift". Against [C] that framing is backwards. What
+`dfsph_step` + `IncompressibleSystem.finalize` implement is [C]'s VD+PS,
+step for step and in the right order:
+
+| [C] | this codebase |
+|---|---|
+| `v* = v + dt a_nonp` (Eq. 2) | `dvdt` assembled in `schemes/dfsph.py` |
+| `dt grad^2 p* = rho0 div v*` (Eq. 12) | `solveDivergenceFree`, source `-divergence` |
+| `v' = v* - dt grad p*/rho0` (Eq. 13) | `dvdt_pressure` |
+| `x** = x + dt v'` (Eq. 14) | integrator |
+| `dt grad^2 p** = (rho0 - rho**)/dt` (Eq. 15) | `solveIncompressible`, source `rho0 - rhoStar` |
+| `x(t+dt) = x** - dt^2 grad p**/rho0` (Eq. 16) | `dx = dt**2 * dvdt_incomp`, `positions += dx` |
+| `v(t+dt) = v' + grad v' . (x(t+dt) - x**)` (Eq. 17) | `proj_vel` einsum (fixed in Part 3) |
+
+Including the detail that [C] Eq. 19 evaluates `grad v'` on the *current*
+neighbourhood rather than the shifted one, justified in the paper purely on
+cost — which is what `finalize` does.
+
+Three consequences, all of which cut against Part 6's proposal:
+
+1. **The position shift is not a deviation to be corrected. It is the
+   method.** [C]'s entire contribution is *not* applying the density-invariant
+   solve to velocity. So the default `ShiftApplication.positionShift` is
+   paper-faithful, and `positionAndVelocity` / `inStepVelocity` are the
+   departures.
+2. **The `tgv` over-dissipation those two modes show is the published,
+   expected behaviour of a velocity-applied DI solve**, not a defect of this
+   implementation. [C]'s abstract: "the DI source term suffers from
+   significant artificial viscosity". Its Fig. 3 measures it — the DI
+   variant's shear-wave amplitude decays from ~0.95 to ~0.1 by t≈15 s while
+   VD+PS still holds ~0.75 at t=40 s. Part 5's measured 3.3x is that effect.
+3. **The naming question has a cleaner answer than either option in Part 6.**
+   The file is not a broken `dfsph.py`; it is `vdps.py` (or
+   `divergenceFree.py`, matching the already-correct registered scheme name).
+   A real `dfsph` scheme would be a *different* method, not a rescue of this
+   one — and per Q1 below it would be the method [C] was written to replace.
+
+### Q1 — the unreachable setpoint
+
+> **Superseded in part by Part 8.** The reasoning below about *why published
+> solvers terminate* (a tolerance above the structural floor) is wrong:
+> Bender & Koschier run a **tighter** tolerance than this codebase and still
+> converge in 4.5 iterations. The real answer is that this codebase pins
+> `rho0` to the lattice minimum in two case files. See Part 8. Everything
+> else in this section — that the paper's PS solve carries the same bias, and
+> that it is spent on positions rather than momentum — stands.
+
+**[C]'s PS solve has exactly the same structural bias, and does not avoid it.
+It avoids *integrating* it.** Its second PPE (Eq. 15) is driven by
+`(rho0 - rho**)/dt` with `rho** = rho(t) - dt rho0 div v'` — a summation
+density, same as here, so Part 4's Parseval argument applies to the paper
+verbatim. What [C] does with the result is the whole trick (§6, "Relation of
+VD+PS to existing PPE solvers with DI source term"): "we do not update the
+velocities using the solution of the PPE solver with the DI source term …
+this velocity update does not constitute a change in the velocity field.
+Instead, it is just a resampling." The permanent residual is spent on
+positions, where it is momentum-neutral. That is `positionShift`.
+
+**Why their solve nonetheless terminates, and this one does not.** [C] §4:
+the DI/PS stopping criterion is an average density error of **0.1%**, the VD
+residual is 0.01, `omega = 0.5`, and the DI solver is warm-started at
+`p_i(t+dt) = 0.5 p_i(t)`. [B] §6: no warm start at all, pressures initialised
+to zero, `omega = 0.5`. Against this codebase:
+
+| | [C] | here |
+|---|---|---|
+| PS/DI tolerance | 1e-3 (0.1% avg density error) | **5e-4** (`buildDefaultPSConfig`) |
+| PS warm start | `0.5 p(t)` | none (`incompressible.py:167`, `pressures.clone() * 0.`) |
+| omega | 0.5 | 0.3 (and Part 1 measured the window as `omega < 0.355`) |
+| max iterations | not stated; Fig. 10 shows PS iterations falling to ~0 | 64, **pegged there from step ~30 onward** (Part 4) |
+
+Now combine that with this document's own jitter table (Part 4): the bias
+grows as the *square* of the disorder — `mean(rho-1)` is 8.5e-4 at
+`jitter = 0.1 dx` and 3.3e-3 at `0.2 dx`. So:
+
+- At [C]'s sampling quality (Fig. 4: max density flat at ~1000 for 40 s, i.e.
+  a configuration the shift keeps near-lattice), the structural floor sits
+  **just under** their 1e-3 tolerance. Their solver converges — Fig. 10 shows
+  PS iterations dropping to ~0 after the initial transient while VD stays at
+  10–20 — because the setpoint is unreachable by *less than the tolerance*.
+- Here the developed flow's floor is 2.7e-3 (Part 4), **5.4x above** this
+  codebase's own 5e-4 tolerance. The solve cannot terminate, so it runs 64
+  wind-up iterations every step, forever.
+
+**So the answer to Part 6's question is not one of the exotic options it
+listed.** Neither paper uses one-sided source clamping, rest-density
+recalibration against the sampled configuration (except at boundaries, see
+Q2), or a special treatment of the mean for fluid particles. The published
+answer is three ordinary things at once: (i) never put the DI residual in
+momentum, (ii) set the tolerance above the structural floor, (iii) keep the
+sampling ordered enough that the floor stays under the tolerance.
+
+**This retargets "Next session" item 1.** Projecting the unreachable mean out
+of the velocity path is a fix for a formulation the literature says not to
+use. The cheaper and more paper-faithful experiment, which item 1 never
+considered, is: **raise `pressureSolver.tolerance` from 5e-4 to at least the
+measured structural bias (~3e-3) and see whether the wind-up simply stops.**
+Prediction: `nIter` comes off the 64 cap, `pMean` stops climbing, and the
+Part 4 blowup does not need a gauge at all. `ShiftPressureGauge.minShift`
+would then be defending against a self-inflicted wound. That is one number,
+and it is testable with the existing `probe_shiftPressureGauge.py` /
+`probe_incompressibleGaugeDrift.py` pair (the latter needs a `--tolerance`
+knob added; it has `--maxIters` but not that).
+
+### Q2 — which density
+
+Summation density, in both papers, with a one-step divergence prediction on
+top: [C] Eq. 11 `rho* = rho(t) - dt rho0 div v*`; [B] Algorithm 1's density
+source is the relative form `(1/dt^2)(1 - rho0/rho_f(t)) - (1/dt) div v**`.
+Neither integrates density. **`integrateRho = False` is therefore the
+paper-faithful default, and Part 3's dead `True` branch is a cleanup item,
+not a physics decision.**
+
+One difference, and it favours this codebase: `finalize` recomputes the
+summation density at the *shifted* positions `x**` before the solve, then
+adds `dt * drhodt` (`incompressible.py:79`). [C] predicts `rho**` from the
+density at the *old* positions instead. This codebase's is the more accurate
+of the two and the extra term is small once `div v' ~ 0`. Not a bug; noted so
+it is not "fixed" toward the paper later.
+
+**Rest-quantity calibration against the sampled configuration is real but
+boundary-only.** [B] Eqs. 6–7 replace the boundary density ratio with a
+volume ratio `rho0_b/rho_b = V_b/V_b^0`, with the rest volume
+`V_b^0 = gamma / sum_bb W_bb_b` computed *from the actual boundary sampling*
+and two hand-set coefficients `gamma`, `beta` for incomplete neighbourhoods.
+That is Part 6's "rest-density calibration" hypothesis — but it is published
+only for boundary particles, only in the Pressure Boundaries variant, and [B]
+§6.1 blames `beta` (which assumes a planar boundary) for that variant's worst
+error in the rotating-sphere test. Not a lead worth pulling for fluid rows.
+
+### Q3 — shifting versus the constant-density solve
+
+**No published variant here does both at full strength, and that is the
+point.** [C] §1 explicitly reviews prior two-PPE combinations — its refs
+[5] (Bender & Koschier, DFSPH), [18] (Hu & Adams), [23] (Kang & Sagong) —
+and says they "typically result in inconsistent particle positions and
+velocities, i.e. the particles are not advected with their velocity", then
+offers VD+PS as the resolution. The shift *replaces* the DI velocity
+application; it is never stacked on top of it.
+
+So this codebase's measured "doing both injects energy into `tgv` (KE grows
+6.6x over 200 steps)" is the expected outcome of correcting the same density
+error twice per step, and `finalize`'s guard that drops the position shift
+under `inStepVelocity` is correct.
+
+Also relevant to a rejected Part 5 experiment: [C] §6 contrasts its global
+PPE-based shift with the local, concentration-gradient shifting variants
+(its refs [30] Nestor, [35] Skillen, [41] Xu), whose defining weakness is a
+user-tuned shift magnitude — "if this user-defined parameter is too small,
+the resulting sampling quality is not as good as it could be … if the
+parameter is too large, over-correction occurs which can result in even worse
+sampling qualities after the particle shift." Part 5's `--shiftCap` is that
+parameter, reintroduced. The paper predicts it degrades sampling in both
+directions, which is what Part 5 measured ("capping it makes things worse").
+That negative result is now explained rather than just recorded.
+
+### Q4 — boundary coupling
+
+**What published DFSPH-family work pairs with.** [B] §3 enumerates four
+treatments — Akinci mirroring, Adami SPH extrapolation (Eq. 3, which carries
+an explicit hydrostatic `g . sum rho x W` term), Band Pressure Boundaries (a
+PPE with boundary unknowns), and its own MLS extrapolation (Eqs. 19–21) — and
+recommends the last. [C]'s VD+PS ships with Akinci one-layer boundaries
+(§4, refs [3, 20]) and deliberately runs its headline test on a *periodic*
+domain "such that boundary handling does not influence the solution".
+
+**So there is no published VD+PS x mDBC/MLS pairing.** This codebase's
+combination is novel, which is the context Part 6's inverted boundary-mode
+ranking belongs in: nothing in the literature licenses carrying a boundary
+ranking across formulations.
+
+**Yes — the feedback loop is a known failure mode, and it is known as the
+reason *not* to hold boundary pressure as state.** [B] §3.3: Band et al. [6]
+"reported convergence issues in case of large volume ratios between fluid and
+boundary particles", and handled it with a *separate* relaxation for boundary
+rows, `omega_b = 0.5 V_b^0/h^3` against `omega_f = 0.5`. That is structurally
+`mdbcPressureRelaxation = 0.3`. And [B] §5 lists as an advantage of MLS over
+Pressure Boundaries that "it does not depend on a relaxation factor `omega_b`
+for boundary particles."
+
+**The formulation that avoids it rather than damping it is a placement
+change.** [B] Algorithm 1 recomputes boundary pressure **inside every solver
+iteration**, from the current iterate's fluid pressures:
+
+```
+while not converged do
+    for all boundary particle b do   compute pressure p_b using MLS   (Eq. 21)
+    for all fluid particle f    do   compute pressure acceleration a_f (Eq. 1)
+    for all fluid particle f    do   p_f <- p_f + (omega/lambda_f)(s_f - div a_f)
+```
+
+with pressures initialised to zero each step (§6, no warm start). Under that
+placement `p_b` is a pure *function* of `p_f` — no state, no lag, no
+autonomous dynamics — and the composition is just part of the Jacobi
+operator. [B] explicitly contrasts it with Pressure Boundaries, where
+"pressure at the boundary is not re-computed in each iteration, but updated
+with a Jacobi step (Eq. 8)" — i.e. carried as state, which is the variant
+that needed `omega_b`.
+
+This codebase runs `computeMdbcPressure` **once per step, after
+`solveDivergenceFree`** (`schemes/dfsph.py`), carrying `p_b` across steps
+under-relaxed. That is the Pressure-Boundaries-style stateful update, and it
+reproduced its documented failure exactly: Part 2 traced boundary pressure
+roughly doubling per step to NaN, and needed a relaxation factor to survive.
+
+**This is not the change Part 5 tested and rejected.** `--mlsBeforeSolve`
+moved the projection *earlier in the step* but left it outside the iteration
+— it changed the lag, not the statefulness — and correctly found nothing
+("232 penetrating particles against 228"). Moving it *inside* the Jacobi loop
+is a different change and remains untried. [B] Table 1's timings say the cost
+is affordable: MLS boundary pressure is 1.87 ms per iteration against 1.12 ms
+for Adami extrapolation and 1.95 ms for a full boundary PPE.
+
+**One more guard this codebase lacks.** [B] solves the MLS gradient system
+(Eq. 20) with **SVD safe inversion**, because boundary particles whose fluid
+neighbours are co-linear or co-planar give a singular 3x3. Its zeroth-order
+term (Eq. 19, `alpha_b`, the Shepard-weighted average) is always well-posed;
+only the gradient needs the guard. `modules/mdbc/pressure2025.py` falls back
+on a *neighbour-count* threshold (9) and has no conditioning guard — and the
+Part 2 blowup's worst offender had `numNeighbors = 22`, well past that cutoff,
+with `|grad p| = 153`. A neighbour count does not detect a co-linear
+neighbourhood. That is a concrete, cheap, paper-backed fix for the mode that
+Part 6 found NaNs under `inStepVelocity` at t=0.21.
+
+### Q5 — reference values
+
+**Neither paper reports a Taylor-Green decay rate.** [B]'s quantitative
+comparisons are density error (0.037% on the rotating sphere), iteration
+counts and computation times (Table 1). So `tests/test_physics.py`'s 0.55x
+still has no published counterpart, and the comparison Part 6 wanted cannot
+be closed from these two.
+
+**But [C] supplies the benchmark that was actually wanted** (§5.1, Figs. 2–4):
+the **shear-wave decay** — a 2D square, periodic on all sides, sinusoidal
+initial velocity `v_x = v0 sin(2 pi y / L)`, no gravity and no explicit
+viscosity, so any amplitude decay is solver artifact. It grades the two
+failure modes this document keeps conflating on *separate axes*:
+
+- Fig. 3, sinus amplitude vs time — isolates artificial viscosity.
+- Fig. 4, max density vs time — isolates disorder/volume error (VD climbs
+  1000 → 1300; DI and VD+PS stay flat).
+
+Published outcome: DI decays fastest, VD holds amplitude but loses sampling
+quality, VD+PS holds both. **Over-dissipation from velocity-level density
+correction is therefore a documented artifact, stated in [C]'s abstract.**
+
+**Action: port the shear-wave case.** It is cheaper than `tgv`, periodic (so
+boundary handling cannot contaminate it), has published curves to compare
+against, and grades the three `ShiftApplication` modes on exactly the axis
+they differ on. Part 3 already wanted it for the Eq. 17 resample fix, whose
+effect it said "accumulates gradually in the velocity field, not in an
+instantaneous density band"; it now has a second and stronger justification.
+This is the highest-value new case to add.
+
+### Q6 — timestep near boundaries
+
+**Neither paper carries a wall-proximity timestep constraint.** [B] uses a
+standard adaptive CFL (its ref [38], Ihmsen et al. 2010) and its answer to
+bad wall behaviour is a better boundary pressure, not a smaller `dt` near the
+wall — §6.6: under pressure mirroring the washing machine "requires a time
+step that is half as large compared to our MLS extrapolation", a global 1.8x
+speedup.
+
+**The interesting finding is a unit mismatch, and it is arithmetic, not
+opinion.** This codebase's advective limit is `dt = cflFactor * h / v_max`
+(`cases/kolmogorovIncompressible.py:130`) where `h` is the **support radius**.
+With the default `n_h = 4`, `n_h_to_nH` fixes `N_h = pi * n_h^2` in 2D, i.e.
+`h = n_h * dx = 4 particle spacings`. So `cflFactor = 0.3` permits
+**1.2 spacings of displacement per step** — which is exactly the 1.2 Part 5
+measured independently. The published CFL for this family is stated in
+particle *diameters*, not support radii, so it is sub-one-spacing by
+construction. **[Verified in Part 8]** — Bender & Koschier §3.1 state it directly:
+`dt <= 0.4 d/||v_max||`, `d` the particle diameter.
+
+That much can be corroborated from [B] Table 2, which *is* attached, without
+relying on the unverified constant. Its scenes: washing machine, 20 mm
+spacing at 0.5 ms; vase, 20 mm at 0.47 ms; teacup, 3 mm at 0.28 ms; glasses,
+1.5 mm at 0.16 ms. For any plausible velocity in those scenes (a 10 m vase
+implies ~14 m/s at impact) the per-step displacement lands at roughly
+**0.1–0.35 spacings**. No run in either paper goes near one spacing per step.
+
+**This reframes Part 5's rejected wall-aware `dt` constraint.** Part 5 found
+stability turning over between half a spacing and a whole one, and recorded
+`cflFactor = 0.125` (= 0.5 spacings) as the working value at a "~2.4x
+throughput cost". That threshold is not a peculiarity of this scheme — it is
+where published practice already sits, and the 2.4x is measured against a
+default that is 3–12x outside every published operating point. **The
+constraint does not need to be wall-aware, and it does not need to be new:
+express `cflFactor` against `dx` instead of `h`, or drop the default to
+~0.1.** That is a smaller and better-supported change than either option
+Part 5 costed.
+
+### Q7 — background pressure
+
+**Open; neither attached paper answers it.** Transport-velocity formulations
+(Adami et al. 2013) are not among the sources and [B] cites Adami 2012 only
+for its wall boundary condition. The two adjacent data points here:
+
+- [B] Eq. 3 (Adami-style boundary extrapolation) carries an explicit
+  hydrostatic term `g . sum_bf rho_bf x_bb_f W_bb_f` — a deliberately
+  non-zero, geometry-derived boundary pressure offset, i.e. published
+  precedent for a background pressure that is *set*, not allowed to drift.
+- [C]'s PS solve is itself a de-clumping potential that is never applied to
+  momentum — the closest published analogue to Part 4's finding that the
+  drifting constant was acting as a de-clumping background pressure. The
+  difference is that [C]'s is bounded because it converges (Q1).
+
+Needs a transport-velocity paper to close.
+
+### Discrepancies against the papers, ranked by expected impact
+
+1. **MLS boundary pressure is computed outside the solver iteration** and
+   carried as under-relaxed state across steps (Q4). [B] recomputes it inside
+   every Jacobi sweep from the current iterate, which removes the feedback
+   loop instead of damping it. Untested — and *not* what Part 5's
+   `--mlsBeforeSolve` tested.
+2. **The PS tolerance (5e-4) sits below the measured structural bias
+   (2.7e-3)** (Q1), so the solve provably cannot terminate; [C] runs at 1e-3
+   with a sampling whose floor is under it. One-number experiment.
+3. **`cflFactor` is applied to `h`, not `dx`** (Q6), putting the default at
+   1.2 spacings/step against ~0.1–0.35 in [B]'s own scenes.
+4. **`computeAlpha`'s second sum includes boundary neighbours.** [B]
+   Algorithm 1: `lambda_f = (||sum_j m_j grad W_fj||^2 + sum_ff m_f m_ff
+   ||grad W_f ff||^2) / (-rho_f^2)` — the first sum runs over **all**
+   neighbours, the second over **fluid neighbours only**. `wp_alpha.py:110-128`
+   accumulates both over the same set, and `computeAlpha`'s wrapper takes
+   `OperationProperties`' default `operationMode = AllToAll`, so boundary
+   neighbours enter both. Near a wall that inflates `|alpha|`, and since the
+   update is `p += omega * residual / alpha`, it **under-corrects pressure
+   exactly where Part 5 found the correction failing.** Cheap to test and
+   directly on Part 5's open item.
+5. **`omega = 0.3` against both papers' 0.5**, with Part 1's measured
+   stability window `omega < 0.355`. Both papers use relaxed Jacobi at 0.5
+   without qualification. A solver whose window excludes the universal
+   published value suggests the diagonal is scaled differently — item 4 is
+   the first place to look, and there is a second candidate: this codebase's
+   `alpha` carries an extra `1/rho_i` relative to [B]'s form (both agree at
+   `rho = rho0 = 1`, which is why a normalised case would not show it).
+   Hypothesis, not a finding.
+6. **The Krylov path is applied to the clamped solve.** `solveIncompressible`
+   routes through `solvePressureKrylov(..., gauge='nonnegative')`
+   (`incompressible.py:97-101`) whenever `solverType != relaxedJacobi`. [B]
+   §6.3 states the rule this breaks: PCG is used for the *divergence* solve
+   "because we do not have to clamp pressure values in-between the iterations
+   (unlike for the density-invariant error)". The codebase already enforces
+   this for `JacobiRelaxationMode.optimal` (it raises, with that exact
+   reasoning) but not for the Krylov path. **"Next session" item 3's concern
+   is correct and now has a citation.** [B] Fig. 5 also quantifies what is
+   being given up on the solve where PCG *is* valid: peak iteration counts
+   ~140 (Jacobi) against ~10 (PCG).
+
+### What this changes, in order
+
+> **Superseded by Part 8's revised list.** Items 2–6 below survive; item 1
+> (the PS tolerance) is demoted behind the setpoint fix, and a diagonal
+> measurement and a solver-reordering experiment come ahead of both.
+
+1. **PS tolerance vs the structural bias** (Q1, discrepancy 2). One number,
+   answers Part 4's residual question and may retire the gauge workaround.
+   Do this first; it is the cheapest and the most consequential.
+2. **`cflFactor` units** (Q6, discrepancy 3). One line, and it supersedes
+   Part 5's costed wall-aware `dt` proposal.
+3. **`alpha`'s neighbour sets** (discrepancy 4). Directly on Part 5's open
+   near-wall item, and a real deviation from the published diagonal.
+4. **Port [C]'s shear-wave decay case** (Q5). The missing reference case,
+   with published curves, on the axis the `ShiftApplication` modes differ on.
+5. **Move `computeMdbcPressure` inside the solver iteration** (Q4,
+   discrepancy 1), and add [B]'s SVD guard on the MLS gradient. The
+   paper-standard fix for the loop `mdbcPressureRelaxation` currently damps.
+6. **Rename toward VD+PS, not DFSPH** (headline). Part 6's step 1 stands but
+   the target name changes; its step 2 (gate a second `dfsph` scheme on the
+   source-projection experiment) should wait for item 1 above, which may
+   remove the motivation entirely.
+
+**Item 1 of "Next session: start here" is superseded**: projecting the
+unreachable mean out of the velocity path is a fix for a formulation [C] was
+written to replace. Try the tolerance first.
+
+---
+
+## Part 8 — the two originals (DFSPH, IISPH) (2026-08-27)
+
+Part 7 was run against Cornelis (VD+PS) and Band (MLS boundaries) only, and
+flagged six papers it was reasoning about second-hand. Two of those are now
+available in full:
+
+- **[BK]** Bender & Koschier, *Divergence-Free Smoothed Particle
+  Hydrodynamics* (SCA 2015). DFSPH proper.
+- **[I]** Ihmsen, Cornelis, Solenthaler, Horvath, Teschner, *Implicit
+  Incompressible SPH* (TVCG 2014). IISPH — the solver this codebase's
+  relaxed-Jacobi loop is a discretisation of.
+
+**These correct one of Part 7's central claims and add four findings, one of
+which is a one-line explanation for Part 4.** Read this before acting on
+Part 7's ranked list; the order changes.
+
+### Correction to Part 7 Q1 — the tolerance answer was wrong
+
+Part 7 argued that published solvers terminate because their tolerance sits
+*above* the structural bias, citing Cornelis's 0.1%. [BK] §4 refutes that
+directly: DFSPH "enforced an average density error of less than **0.01 %** and
+a density error due to the density change rate of less than 0.1 % in all
+simulations" — i.e. a constant-density tolerance of **1e-4, five times
+*tighter* than this codebase's 5e-4**, and far below the 2.7e-3 structural
+floor Part 4 measured. And it converges: [BK] Table 1 reports **4.5 iterations**
+for the constant-density solver at its largest timestep. A solver that hits
+1e-4 in 4.5 iterations is not fighting an unreachable setpoint.
+
+So the question sharpens rather than closes: if the structural floor is real
+(and Part 4's Parseval argument is not in doubt), how is DFSPH's setpoint
+attainable at 1e-4?
+
+### The actual answer: this codebase calibrates `rho0` to the lattice
+
+> **Tested and falsified — see "Part 8 — results" at the end of this
+> document.** The diagnosis below is correct (the two cases do pin `rho0` to
+> the lattice minimum) but the prescription is not: the source's permanent
+> negative mean is the shifting solve's de-clumping drive, and cancelling it
+> kills `kolmogorovIncompressible` 150 steps *sooner*.
+
+`cases/kolmogorovIncompressible.py:71`:
+
+```python
+# Normalise mass so the sampled density lands on rho0, matching `tgv`'s
+# own `buildSystem` for this same scheme.
+system.state.masses = system.state.masses / densities.mean() * rho0
+```
+
+The initial state is an unjittered lattice. Part 4 proved the lattice
+*minimises* the particle-averaged summation density. So this line sets `rho0`
+to exactly that minimum — **it places the setpoint precisely at the
+unattainable floor, by construction.** Any subsequent disorder can only raise
+`mean rho` above `rho0`, never reach it, and the solver integrates that gap
+forever.
+
+Neither paper does this. [BK] §3 and [I] §2 both define `rho_i = sum_j m_j W_ij`
+with `rho0` an independent fluid constant and `m` from the nominal particle
+volume; nothing ties `rho0` to the sampled configuration's density. Their
+setpoint therefore sits at a generic value that a disordered configuration
+can straddle, which is why a 1e-4 tolerance is reachable in 4.5 iterations.
+
+**`grep` says this is exactly the two cases where the wind-up was observed:**
+
+```
+src/warpSPH/cases/kolmogorovIncompressible.py:71
+src/warpSPH/cases/tgv.py:53
+```
+
+and no others. Those are also, precisely, the two periodic complete-support
+cases that `ShiftPressureGauge.minShift` was scoped to in Part 4. That is not
+a coincidence worth ignoring: **the population that needed a gauge fix and the
+population that pins `rho0` to the lattice minimum are the same two cases.**
+
+So Part 4's conclusion needs one amendment. "The systematic density bias is
+structural, not a bug anyone can go find and fix" is still true. But *the
+setpoint's placement at the floor* is a code decision, in one line, in two
+case files — and it is the half that makes the bias unreachable rather than
+merely present. `minShift` is a correct and well-argued defence against the
+symptom; it may not be needed once the setpoint moves.
+
+**The experiment this licenses** (cheaper and more decisive than Part 7's
+tolerance test, which should now be run second): drop the normalisation line,
+or offset it — set `rho0` to the lattice density times `(1 + eps)` for `eps`
+around the operating disorder's bias (~3e-3) — and re-run
+`probe_shiftPressureGauge.py` on `kolmogorovIncompressible` at nx=128 under
+the *historical* `nonNegativeClamp`. Prediction: `nIter` comes off the 64 cap,
+`pMean` stops climbing, and the step-574 NaN does not occur without any gauge
+at all. If it holds, Part 4's fix becomes a belt-and-braces measure rather
+than load-bearing, and `tgv`'s decay rate should be re-graded on the corrected
+setpoint before any conclusion about `ShiftApplication` is trusted — including
+Part 5's and Part 6's, since **every `tgv` dissipation number in this document
+was measured with the setpoint pinned to the floor.**
+
+### DFSPH runs its two solvers in the opposite order, and `inStepVelocity` has it backwards
+
+> **Overstated — see "Part 8 — correction" at the end of this document.**
+> Under `semiImplicitEuler` the position advances with the *updated* velocity,
+> which makes this ordering equivalent to [BK]'s up to loop phase. The
+> surviving difference is that `DF` is computed before `CD` and so does not
+> see it within the step -- a one-step lag, not an absence.
+
+[BK] Algorithm 1, lines 11–23:
+
+```
+v* = v + dt F_adv/m
+correctDensityError(alpha, v*)        <- constant density solver FIRST
+x(t+dt) = x(t) + dt v*                <- integrate with the corrected v*
+find neighborhoods; compute rho, alpha
+correctDivergenceError(alpha, v*)     <- divergence solver LAST
+v(t+dt) = v*
+```
+
+[BK] §3.1 states the reason outright: "The pressure forces determined by the
+constant density solver must be integrated twice to get the required position
+changes. Therefore, as a side-effect, it also modifies the velocities. For
+this reason, first, we execute the constant density solver and modify the
+velocities and positions, and then the divergence-free solver which corrects
+the resulting velocities to obtain a divergence-free state."
+
+**The density solve's velocity modification is a known side-effect, and the
+divergence solve is deliberately placed after it to clean it up.** The step
+ends on a divergence-free velocity.
+
+`ShiftApplication.inStepVelocity` does the reverse: `solveDivergenceFree`
+runs first in `schemes/dfsph.py`, then the constant-density correction is
+folded into the same `dvdt` the integrator advects with. Nothing projects it.
+That is exactly the concern `ShiftApplication`'s own docstring raises about
+`positionAndVelocity` ("applied here, after the integrator, nothing ever
+removes the non-divergence-free part of it") — and it applies to
+`inStepVelocity` too, which was introduced to fix it.
+
+**So `inStepVelocity` is not "DFSPH proper", as Part 5 continued (2) and
+Part 6 both claim. It is DFSPH with the two solvers swapped**, and the
+un-projected divergence injected every step by the density solve is a
+credible mechanism for the 3.3x `tgv` decay that Part 6 treated as intrinsic
+to velocity-level correction. Combined with the setpoint finding above, both
+inputs to that measurement are now suspect.
+
+This is a reordering, not a new algorithm, and it is the single most
+informative experiment left on the velocity path.
+
+### `computeAlpha` versus the published diagonal — three confirmations and one new deviation
+
+> **The `rho`-power half is tested and falsified — see "Part 8 — results".**
+> `computeAlpha` *is* the true diagonal (1.0000 +/- 0.016 with `rho` out to
+> 1.30). The boundary-neighbour-set half is untested and still open.
+
+Part 7 discrepancy 4 (boundary neighbours entering both sums) is now
+confirmed by all three primary sources, with the mechanism stated:
+
+- **[BK] §3.2**, right after Eq. 8: "since `F^p_{j<-i} = 0` if particle j is
+  not dynamic, the equation for `kappa^v_i` must be adapted accordingly for
+  static boundary particles." Static boundary particles take no reaction
+  force, so they belong in the first sum and not the second.
+- **[I] §4**: with Akinci coupling, boundary particles enter `d_ii` (the
+  self-displacement term) via `-dt^2 sum_b Psi_b(rho0) (1/rho_i^2) grad W_ib`,
+  and appear nowhere in `d_ij`. Same asymmetry, derived independently.
+- **[B]** Algorithm 1's `lambda_f`, as recorded in Part 7.
+
+`wp_alpha.py:110-128` accumulates `sumA` and `sumB` over one neighbour set,
+under `OperationProperties`' default `operationMode = AllToAll`. Unchanged
+finding, now much better supported.
+
+**New, and separate: the density powers do not match IISPH's diagonal.**
+Expanding [I] Eq. 12 with Eq. 9's `d_ii`/`d_ij`:
+
+```
+a_ii = -dt^2 (1/rho_i^2) [ ||sum_j m_j grad W_ij||^2 + m_i sum_j m_j |grad W_ij|^2 ]
+```
+
+The codebase (`apparentArea = m/rho`, `incompressible.py:66`; `wp_alpha.py`)
+gives, for uniform `rho_j = rho`:
+
+```
+alpha = -dt^2 (1/(rho_i rho^2)) [ ||sum_j m_j grad W_ij||^2 + m_i sum_j m_j |grad W_ij|^2 ]
+```
+
+Identical brackets — including the `m_i` on the second term, which confirms
+the codebase is discretising IISPH's diagonal and not [BK]'s `alpha` (they
+differ there). But the prefactor carries **one extra power of `rho`**:
+`1/rho^3` against `1/rho^2`. At `rho = rho0 = 1` the two agree exactly, which
+is why no normalised test would ever show it. In the wall band, where Part 5
+measured `rho` climbing to 1.30–1.60, `|alpha|` is too small by a factor
+`1/rho`, so the Jacobi step `p += omega * residual / alpha` **over-corrects by
+30–60%, exactly in the over-dense band that runs away.** Note this pushes the
+opposite way to the boundary-neighbour issue above, so the two are not
+interchangeable and both need testing separately.
+
+**Do not act on this algebra — measure it.** The decisive test is cheap and
+settles the `omega` question at the same time: extract the *true* diagonal of
+the operator actually being iterated (`computePressureShiftIISPH` composed
+with `computePressureAccelIISPH`) by applying it to unit vectors, and compare
+against `computeAlpha`'s output particle by particle. If they differ by a
+factor `c`, then the effective relaxation is `omega/c`, which would explain
+Part 1's measured stability window `omega < 0.355` against the value **both**
+originals report as optimal — [I] §3.1.1: "We observed an optimal convergence
+for the relaxation factor `omega = 0.5` in all settings." A diagonal that is
+off by ~1.4x would put 0.5 exactly at the observed edge.
+
+### Two of Part 6's hypotheses have published negative results
+
+- **One-sided source clamping** ("correct compression only, never expansion")
+  was tried and rejected. [I] §3.2: "Intuitively, we could disallow a positive
+  change of density due to pressure by clamping `b_i` to negative values with
+  `b_i = min(0, rho0 - rho_i^adv)`. Unfortunately, this adaptation causes
+  implausible alignments of single particles at the fluid surface for CG and
+  Jacobi." Do not spend a session on it.
+- **Krylov on the clamped solve** is confirmed invalid, closing "Next session"
+  item 3 with a citation stronger than Part 7's. [I] §3.2: "For CG, however,
+  clamping in between the iterations leads to invalid states. We also observed
+  instabilities in case of any change in the final pressure field, such as
+  clamping of negative pressure values." [BK] §5 says the same from the other
+  direction — dropping the clamp is listed as *future work* precisely so that
+  "more sophisticated solving algorithms like the conjugate gradient method
+  could be employed". `solveIncompressible` currently routes to
+  `solvePressureKrylov(..., gauge='nonnegative')` whenever `solverType !=
+  relaxedJacobi` (`incompressible.py:97-101`). That path should raise, the way
+  the `JacobiRelaxationMode.optimal` path already does.
+
+### Warm start: every paper does one, this codebase does none
+
+| | initial pressure/stiffness each step |
+|---|---|
+| [BK] DFSPH | **full** warm start — sum of last step's `kappa_i`, applied as a pre-solve velocity update (§3.2, §4: "reduced the number of iterations by a factor of approximately 3") |
+| [I] IISPH | `p_i^0 = 0.5 p_i(t - dt)` — "close to optimal convergence" (§3.1.1) |
+| [C] VD+PS | `p_i(t+dt) = 0.5 p_i(t)` for the DI solve — inherited from [I] |
+| [B] | none, deliberately |
+| here | none: `pressureA = particles.pressures.clone() * 0.` (`incompressible.py:167`) |
+
+[BK] §4 notes the split explicitly: "While DFSPH performs best for a full warm
+start, IISPH has its best performance when multiplying the solution of the
+last step with a factor of 0.5". The codebase is at neither end. This is worth
+a factor of ~3 in iteration count on a solve that currently runs 64 iterations
+every step and never converges — but it is a *performance* fix, and it should
+be applied **after** the setpoint is corrected, not before: warm-starting a
+solver that is winding up would carry the wind-up across steps, which is the
+one thing the current cold start prevents.
+
+### The CFL constant, now verified
+
+Part 7 flagged `dt <= 0.4 d/|v_max|` as `[unverified]`. Confirmed, in the
+canonical source: [BK] §3.1, "adapt the time step size by the
+Courant-Friedrich-Levy (CFL) condition `dt <= 0.4 d/||v_max||` [Monaghan
+1992], where **d is the particle diameter**". [BK]'s own numbers are
+self-consistent with it — breaking dam at particle radius 0.02 m runs best at
+`dt = 4 ms`, which at a few m/s is ~0.4 particle diameters of displacement.
+[I] §5.2.1 writes the same condition as `dt = min(0.4 h/|v_i^adv|)`; given
+[BK] §3.4 defines `h` as the *support radius* and [BK] states the constraint
+in diameters, that `h` is loose usage for the particle diameter, not the
+support radius.
+
+So Part 7 Q6 stands and is now on a firm footing: this codebase's
+`dt = cflFactor * h / v_max` with `n_h = 4` gives **1.2 particle spacings per
+step at the default `cflFactor = 0.3`, three times the published limit.**
+Matching [BK] exactly means `cflFactor = 0.1`. Part 5's empirically-stable
+`cflFactor = 0.125` (0.5 spacings) is *still looser* than the published
+condition, which is a satisfying independent confirmation of both.
+
+### Free-surface clustering is a documented DFSPH limitation
+
+Relevant to Part 3's unexplained `rotatingSquarePatch` corner density loss.
+[BK] §5: "In SPH simulations the density near a free surface is
+underestimated which causes unnatural particle clustering artifacts. In our
+implementation this problem is solved by clamping negative pressures to zero.
+However, a better solution would be to introduce ghost particles as suggested
+by Schechter and Bridson [2012]". [I] §6 says the same and calls it open. So
+Part 3's corner loss is a known artifact of the method with a known published
+remedy (ghost particles), not a bug specific to this implementation — worth
+knowing before more time goes into root-causing it.
+
+### Where this leaves the scheme split
+
+The owner's proposal — make the current scheme VD+PS, and add DFSPH in its
+pressure-boundaries form — is the right shape, and Part 8 makes it cheaper
+than Part 6 assumed, because the second scheme is now fully specified by
+[BK] Algorithm 1 rather than being an open design question.
+
+**Scheme A — VD+PS** (`schemes/vdps.py`, registered `divergenceFree`, keep the
+name for compatibility). This is the current code, unchanged. Part 7
+established it is a faithful implementation of [C] step for step.
+Defaults: `shiftApplication = positionShift`, `boundaryPressureMode =
+mdbcDensity`, DI tolerance and `cflFactor` per the corrections above.
+
+**Scheme B — DFSPH** (`schemes/dfsph.py`, registered `dfsph`). Differs from A
+in five specific, enumerable ways, all of them now sourced:
+
+1. **Solver order**: density solve, integrate, divergence solve (Algorithm 1).
+   Not A's order. This is the substantive difference and the one Part 6 did
+   not know about.
+2. **No position shift.** The density solve reaches positions through the
+   velocity, within the step.
+3. **Warm start**: full, per [BK] §3.2 — accumulate `kappa_i` and apply it
+   before the divergence solve.
+4. **Tolerances**: 1e-4 average density error, 1e-3 on the density change
+   rate ([BK] §4).
+5. **Boundary coupling**: [B]'s MLS pressure boundaries, recomputed *inside*
+   each solver iteration (Part 7 Q4), with [B]'s SVD guard on the gradient
+   fit. Not the current one-per-step under-relaxed projection.
+
+Shared, unforked: `computeAlpha`, `computePressureAccelIISPH`,
+`computePressureShiftIISPH`, the relaxed-Jacobi loop, the boundary-mode
+machinery, every case and diagnostic. Part 6's recommendation of two
+`SchemeBundle`s over one step function still holds for items 2–5, but item 1
+is a genuine control-flow difference, so expect one branch or two thin step
+functions over a shared body rather than pure config.
+
+**Sequencing note.** Do not build Scheme B before the setpoint correction and
+the diagonal measurement land. Both feed directly into it: B is the
+formulation that puts the density solve into momentum, so it is the one that a
+setpoint pinned to the unreachable floor damages most, and it is the one whose
+wall behaviour the `alpha` deviations bear on. Building it first would
+measure the bugs, not the method.
+
+### Revised order of work (supersedes Part 7's list)
+
+> **Superseded by "Part 8 — results"'s own list.** Items 1 and 2 below were
+> run and both failed; 3-6 stand.
+
+1. **Move the setpoint off the lattice floor** (`kolmogorovIncompressible.py:71`,
+   `tgv.py:53`). One line, two files, explains Part 4, and re-grades every
+   `tgv` number in this document. Everything else is measured against it.
+2. **Measure the true operator diagonal against `computeAlpha`.** Cheap,
+   decisive, and settles `omega < 0.355` versus both papers' 0.5 at the same
+   time. Then fix the boundary-neighbour sets and the `rho` power.
+3. **`cflFactor` units** — `0.3 * h` = 1.2 spacings against the published
+   `0.4 d`. One line; supersedes Part 5's costed wall-aware `dt` proposal.
+4. **Re-run the `ShiftApplication` comparison** with 1–3 landed, including
+   `inStepVelocity` **reordered to [BK] Algorithm 1**. Part 5's and Part 6's
+   conclusions about velocity-level correction were all measured with a pinned
+   setpoint and the wrong solver order; none of them should be carried
+   forward as-is.
+5. **Port [C]'s shear-wave decay case** (Part 7 Q5) — still the missing
+   reference case, and now the right instrument for step 4.
+6. **Then** the scheme split, and the MLS-inside-the-iteration boundary work
+   that Scheme B needs.
+
+Dropped from Part 7's list: nothing. Demoted: the PS tolerance experiment
+(item 1 there) — still worth running, but as a confirmation *after* the
+setpoint moves, since [BK]'s 1e-4 shows a tight tolerance is not itself the
+problem. Closed: "Next session" item 3, the Krylov path, which should now
+simply raise.
+
+---
+
+### Part 8 — results: items 1 and 2 run, both hypotheses falsified (2026-08-27)
+
+Ran Part 8's first two items. **Both predictions are wrong, both for
+instructive reasons, and the pair of negative results points at a third thing
+that neither Part 7 nor Part 8 considered.** Nothing in `src/` changed;
+tooling is `scripts/probe_incompressibleGaugeDrift.py --setpointEps` (new
+flag) and `scripts/probe_operatorDiagonal.py` (new).
+
+**Baseline first, to make the rest trustworthy.** `--nx 128 --nsteps 1000
+--gauge clamp` reproduces Part 4 bit-for-bit: NaN at step **574**, `pMean`
+peaking at **2.3838e6**. `minshift` reproduces its "~29" as `pMean` max
+**28.87**. The instrument is sound.
+
+#### Item 1 — moving the setpoint off the lattice floor: falsified
+
+`--setpointEps eps` rescales mass by `1/(1+eps)` after the case builds, putting
+the lattice at `rho0/(1+eps)` so a configuration carrying a bias of `eps`
+lands *on* `rho0`. `eps=0` is byte-identical to the shipped case.
+
+nx=128, 1000 steps, second-half means:
+
+| gauge | eps | outcome | nIter | `pMean` max | `rhoBias` | `rhoErr` | `rhoMax` |
+|---|---|---|---|---|---|---|---|
+| clamp | 0 | **NaN @574** | 64.0 | 2.38e6 | 5.70e-3 | 6.31e-3 | 5.38e-2 |
+| clamp | 0.005 | **NaN @424** | 64.0 | 4.06e3 | 5.14e-3 | 6.58e-3 | 7.11e-2 |
+| minShift | 0 | finite 1000 | 64.0 | 28.9 | 9.24e-4 | 1.15e-3 | 7.91e-3 |
+| minShift | 0.005 | finite 1000 | **6.0** | 9.67 | -2.69e-3 | 4.08e-3 | 2.88e-2 |
+
+And an nx=64/300 sweep under the clamp, `eps` in {0, 1e-3, 2.7e-3, 5e-3, 1e-2,
+2e-2}: `rhoBias` falls 2.88e-3 -> 3.57e-4 up to `eps=5e-3` then goes
+non-monotone, `|pMean|` falls 3.88 -> 1.41, **`nIter` stays pegged at ~64
+throughout**, and `rhoMax` degrades monotonically 2.1e-2 -> 9.8e-2.
+
+**Under the clamp it kills the run 150 steps sooner.** The offset shrinks
+`pMean`'s peak by 580x and still dies earlier, because the blowup at nx=128 is
+a *density* runaway that `pMean` follows rather than causes (`rhoBias` climbs
+3.1e-3 -> 5.5e-3 -> 1.1e-2 -> 2.6e-2 over steps 494-570, with `rhoStar`
+starting to hit its 0.9 floor). The offset makes it worse because
+`sourceTerm = rho0 - rhoStar`'s persistent *negative* mean **is the
+de-clumping drive** — it is what makes the shifting solve push particles
+apart. Cancelling it is a static version of the mean-centering Part 4 already
+tested and called "the worst option", and it fails the same way for the same
+reason. `rhoStd` at the `nIter` peak rises 1.22e-3 -> 4.22e-3: the
+configuration disorders faster without that drive.
+
+**Under `minShift` the `nIter=6` is not convergence — it is the stopping
+criterion going slack.** With `eps=5e-3` the fluid sits *below* `rho0`
+(`rhoBias = -2.69e-3`), so `sourceTerm` has a positive mean, so `-residual` is
+negative for most particles, so the compression-only metric
+(`error = mean(clamp(-residual, min=-threshold))`, `incompressible.py:218-220`)
+floors nearly every contribution at `-threshold` and reports convergence at
+`minIterations`. The accuracy confirms it is not solving anything better:
+`rhoErr` 3.5x worse (1.15e-3 -> 4.08e-3), `rhoMax` 3.6x worse. It converges by
+declaring victory.
+
+**So Part 8's headline recommendation is withdrawn.** The *diagnosis* stands —
+`kolmogorovIncompressible.py:71` and `tgv.py:53` do pin `rho0` to the lattice
+minimum, and that is why the source carries a permanent negative mean. The
+*prescription* was wrong: for a position-shift (PS/VD+PS) scheme that
+permanent negative mean is load-bearing, not a defect. Which sharpens
+Part 7's conclusion rather than replacing it: **the papers differ precisely on
+where the constant-density solve's permanent residual is allowed to land.** In
+VD+PS it lands on positions, where it is momentum-neutral *and* does useful
+de-clumping work. In DFSPH it lands in momentum, where it is a permanent
+unphysical force. The setpoint question is therefore live only for a velocity
+path (Scheme B), and moot for the current default.
+
+#### Item 2 — `computeAlpha` versus the true diagonal: falsified, decisively
+
+`probe_operatorDiagonal.py` extracts the diagonal *exactly* rather than
+estimating it: for a sampled row `i`, apply the real operator
+(`dt**2 * computePressureShiftIISPH(computePressureAccelIISPH(.))`) to the unit
+vector `e_i` and read entry `i`. One matvec per row, sampled across the
+density range.
+
+| case | rho range | `diag(A)/alphas` | best fit |
+|---|---|---|---|
+| `kolmogorovIncompressible`, 80 steps | [0.965, 1.021] | **1.00011 +/- 0.0051** | constant (2.6x better than `k*rho`) |
+| `randomFlowIncompressible --bounded`, 120 steps | [0.959, **1.303**] | **0.99987 +/- 0.0160** | constant (5.2x better) |
+| boundary rows (`kind != 0`) | — | **0.99993 +/- 0.0314** | — |
+
+**`computeAlpha` is the true diagonal.** Part 8's "extra power of `rho`"
+algebra was simply wrong — the operator uses the same apparent-volume
+convention `computeAlpha` does, so the `rho` powers are self-consistent even
+though they do not match [I] Eq. 12 read literally. The bounded case has real
+lever arm (`rho` to 1.30, where a `1/rho` error would show as a 30% deviation)
+and shows none: at `rho = 1.303` the ratio is 0.931, not 1.303.
+
+Two consequences:
+
+- **`omega_eff = omega` exactly**, so Part 1's measured window `omega < 0.355`
+  is *not* a mis-scaled-diagonal artifact and needs another explanation.
+  A candidate worth one measurement, not pursued here: [I] §2.2 notes
+  "typically a particle has 30-40 neighbors", while this codebase's `n_h = 4`
+  gives `pi * n_h^2 ~ 50` in 2D. The IISPH operator reaches neighbours-of-
+  neighbours, so its spectral radius is sensitive to that count.
+- **The boundary-neighbour-set question is untouched by this.** The probe
+  shows `computeAlpha` is a faithful diagonal *of the operator as
+  implemented*; whether that operator's boundary coupling matches [I] Eq. 16
+  and [BK] §3.2 is a separate question and still open.
+
+#### What the two negative results expose instead: the criterion, not the setpoint
+
+`minShift` at the shipped defaults runs **64 iterations every step for 1000
+steps** and never satisfies its tolerance. That was never recorded — Part 4
+established the gauge bounds the wind-up, not that the solve terminates. It
+does not.
+
+The obvious follow-up was that those iterations are wasted. They are not:
+
+| maxIterations | `rhoErr` | `rhoMax` | `pMean` max | outcome |
+|---|---|---|---|---|
+| 64 (default) | 1.15e-3 | 7.91e-3 | 28.9 | finite 1000 |
+| 16 | 2.29e-3 | 1.08e-2 | 15.9 | finite 1000 |
+| 8 | 3.80e-3 | 1.87e-2 | 9.57 | finite 1000 |
+
+Accuracy degrades ~2x at 16 and ~3.3x at 8, so **the iterations are doing real
+work and the cap should not be lowered.** The solve is converging in the sense
+that matters — the error falls steadily with iteration count — while never
+meeting a criterion that is structurally unreachable.
+
+**So the broken component is the stopping criterion.** An *absolute*
+compression threshold (`error < 5e-4`) cannot be met when the source carries a
+structural mean the operator cannot remove, no matter how well the solve is
+going. A *relative* criterion — stop when the residual has fallen by a set
+factor from its own initial value — is reachable by construction and measures
+the thing the iterations are actually delivering. `RelaxedJacobiSolverConfig`
+**already has `rtol`** (`solver.py:223`), documented as "Relative residual
+tolerance for the Krylov solvers"; the relaxed-Jacobi path ignores it. Wiring
+it in, as a disjunction with the existing absolute test, is a small change
+with a clear prediction: `nIter` comes off the cap on the steps where the
+solve has converged as far as it usefully can, and the accuracy numbers above
+say what that costs at each stopping point.
+
+This also reframes Part 8's puzzle about [BK]'s 1e-4 tolerance one more time.
+Both papers' criteria are one-sided on the *average* (`rho_avg - rho0 > eta`,
+[BK] Alg. 3; [I] §5.1), so under-dense particles cancel over-dense ones
+without limit. This codebase floors each particle's negative contribution at
+`-threshold`, which forbids exactly that cancellation. That is a real and
+deliberate-looking difference in strictness, it is the difference that makes
+the structural bias binding here and not there, and it is one line.
+
+#### Revised next steps
+
+1. **Wire `rtol` into the relaxed-Jacobi path** as an alternative stopping
+   test, and re-measure the table above against it. This is now the item that
+   Part 8's item 1 slot was reaching for.
+2. **The one-sided-average vs floored-average criterion.** Match the papers
+   (plain signed average) behind a flag and compare; it is the other end of
+   the same question.
+3. **`cflFactor` units** (Part 8 item 3) — unaffected by any of the above,
+   still a one-line change against a now-verified published constant.
+4. **Re-measure `ShiftApplication` with `inStepVelocity` reordered to
+   [BK] Algorithm 1** (Part 8 item 4). Untouched by these results and still
+   the most informative experiment on the velocity path.
+5. Dropped: the setpoint offset (item 1) and the `alpha` rescale (item 2's
+   `rho`-power half). Both tested, both wrong. The boundary-neighbour-set half
+   of item 2 survives and needs a different probe than
+   `probe_operatorDiagonal.py`.
+
+---
+
+### Part 8 — correction: the solver-ordering claim was overstated (2026-08-27)
+
+Part 8 claimed `ShiftApplication.inStepVelocity` "is DFSPH with the two
+solvers swapped" and that the constant-density correction's divergence is
+"never projected". **Checking the integrator's actual semantics shows that is
+wrong**, and the in-code comment at `schemes/dfsph.py:190-196` — which says the
+correction "is visible to the *next* step's divergence-free projection" — was
+right. Recorded before anyone spends a session reordering on my say-so.
+
+**What the integrator actually does.** `kolmogorovIncompressible.py:181` selects
+`semiImplicitEuler`, whose position update is `semi_implicit_position_step`
+(`warpSPHIntegrators/specs.py:102-111`): `derivative_dt = 0.0`,
+`current_velocity_dt = dt`. So the position advances with the **updated**
+velocity, and `dfsph_step`'s `dxdt = currentState.velocities.clone()` is
+multiplied by zero. **Do not delete it on that basis**: all three
+incompressible cases (`tgv.py:171`, `kolmogorovIncompressible.py:181`,
+`randomFlowIncompressible.py:118`) set `semiImplicitEuler` explicitly, but
+`CaseSpec`'s default is `rungeKutta2` (`caseSpec.py:53`), which *does*
+consume `dxdt`. It is inert for every case that exists today and live for
+any future one that takes the default — worth a comment, not a deletion.
+(Usefully, this also rules out an integrator confound between Part 5's wall
+measurements and Part 6's `tgv` ones: all three cases use the same one.)
+The step is therefore
+
+```
+v(t+dt) = v(t) + dt (F_adv + diss + DF + CD)      # DF, CD both evaluated at x(t)
+x(t+dt) = x(t) + dt v(t+dt)
+```
+
+against [BK] Algorithm 1's
+
+```
+v*      = v(t) + dt F_adv
+v*     += dt CD                                   # CD evaluated at x(t)
+x(t+dt) = x(t) + dt v*                            # DF of this step not yet applied
+v*     += dt DF                                   # DF evaluated at x(t+dt)
+v(t+dt) = v*
+```
+
+**Unrolled over steps these are the same sequence of solves, differing in
+phase.** Both advect with a velocity carrying exactly one step's worth of
+un-projected `CD`; both project it on the following divergence solve. The
+claim that the codebase never projects it does not survive contact with the
+loop.
+
+Two genuine differences survive, and both are smaller than what was claimed:
+
+1. **The `DF` correction participates in the codebase's position update and
+   not in [BK]'s.** The codebase computes `DF` at `x(t)` and folds it into the
+   velocity that then advects; [BK] applies its `DF` after the position update,
+   so that step's `DF` only reaches positions on the following step.
+2. **`DF` is evaluated on stale neighbourhoods.** The codebase solves it at
+   `x(t)`; [BK] at `x(t+dt)`, after rebuilding (Algorithm 1 lines 16-20). [BK]
+   also recomputes `rho` and `alpha` there, which the codebase does not.
+
+Neither is obviously worth a scheme fork, and neither is a credible mechanism
+for a 3.3x `tgv` decay on its own. **So Part 8's item 4 is demoted**: the
+reordering is a small, phase-level change, not the structural difference it
+was written up as, and the `tgv` dissipation of the velocity modes still lacks
+an explanation. The one thing Part 8 got right on this axis is narrower: in
+the codebase `DF` is computed *before* `CD` and so does not see it within the
+step, whereas [BK]'s does — a one-step lag, not an absence.
+
+**Method note, since this is the third correction in a row.** All three
+over-claims (Part 7's tolerance argument, Part 8's `rho`-power algebra,
+Part 8's ordering) came from reasoning off published pseudocode without
+checking what this codebase's surrounding machinery actually does with the
+values. The two that were *measured* rather than argued
+(`probe_operatorDiagonal.py`, `--setpointEps`) settled in one run each. Prefer
+the measurement.
+
+---
+
+### Part 8 item 3 — the published CFL constant fixes the bounded case on its own (2026-08-27)
+
+The first positive result of this session, and the simplest thing tried.
+
+[BK] §3.1 gives the constraint as `dt <= 0.4 d/||v_max||` with `d` the particle
+**diameter**. This codebase computes `dt = cflFactor * h / v_max` against the
+**support radius**, and `n_h = 4` makes `h = 4` particle spacings, so the
+default `cflFactor = 0.3` permits 1.2 spacings per step — 3x the published
+limit. Matching [BK] means `cflFactor = 0.1`.
+
+Ran `probe_boundedIncompressibleBlowup.py --nx 128 --tlimit 8.0 --cflFactor
+0.1` at **stock scheme settings** — `positionShift`, `mdbcDensity`, no opt-in
+flags:
+
+| configuration | outcome | near-wall `mean｜rho-1｜` | `rho` range | steps to t=8 |
+|---|---|---|---|---|
+| default `cflFactor=0.3` (Part 5) | **NaN at t=5.54** | 0.30 at death | — | — |
+| **`cflFactor=0.1`, else stock** | **t=8.003** | **2.6e-2** | [0.963, 1.155] | 1624 |
+| `positionAndVelocity` @ 0.3 (Part 5) | t=8.0 | 3.3e-2 | max 1.147 | 387 |
+| `inStepVelocity` @ 0.3 (Part 6) | t=8.0 | 9.7e-3 | [0.986, 1.140] | — |
+
+**The default scheme, with one number changed to the published value, is
+stable to t=8 and beats `positionAndVelocity` on near-wall density error** —
+without either velocity mode, without their `tgv` dissipation (0.55x analytic
+against 3.2-3.4x), and without an opt-in flag. `inStepVelocity` still has the
+best wall numbers by ~2.7x.
+
+The mechanism is exactly Part 5's diagnosis, read forwards: the implicit shift
+`PS.shiftDx` settles at **0.20 particle spacings** per step instead of the 1.2
+Part 5 measured at the death, so the shift can no longer throw a particle
+through a wall in one step.
+
+Wall-depth profile at t=8 confirms a steady state rather than an accumulation
+(`nOutside` flat at 482-488 over the final 25 steps, `rhoMax` flat at ~1.15):
+
+| depth (spacings) | n | mean rho | `mean｜rho-1｜` |
+|---|---|---|---|
+| [-6,-1) | 64 | 1.14 | 1.4e-1 |
+| [-1,0) | 85 | 1.050 | 5.1e-2 |
+| [0,1) | 349 | 1.021 | 2.4e-2 |
+| [1,2) | 531 | 1.013 | 1.4e-2 |
+| [2,4) | 903 | 1.002 | 2.3e-3 |
+| [4,inf) | ~14100 | 1.000 | ~6e-4 |
+
+The bulk is clean to ~6e-4; the error is confined to the two bands nearest the
+wall plus a stalled group of 64 particles sitting outside it at `rho ~ 1.14`.
+
+**Caveat on the penetration count, so it is not misread**: `nOutside = 482` is
+an *instantaneous* count at t=8. Part 5's 4506 / 239 / 63 were "particles
+*ever* inside the boundary band" — a cumulative statistic. The two are not
+comparable and the table above deliberately omits it. The near-wall
+`mean|rho-1|` column *is* the same statistic across all four rows.
+
+**Cost: 4.2x the steps** (1624 against `positionAndVelocity`'s 387 to the same
+`t`). That is the real trade, and it is a better-posed one than Part 5's
+"wall-aware `dt` at ~2.4x throughput": this is a global constant matching
+published practice, not a new term, and it buys the bulk physics that both
+velocity modes give up.
+
+**Recommendation.** Change the incompressible cases' `cflFactor` default from
+0.3 to 0.1, or — better, since it removes the trap rather than papering over
+it — express the advective limit against the particle spacing instead of `h`,
+so the number means what it means in every paper. Not landed here: it changes
+the default for `tgv` and `kolmogorovIncompressible` too, and those should be
+re-graded first (`tgv`'s decay rate is asserted in `tests/test_physics.py`).
+That re-grading is the natural next step and is cheap.
+
+#### Status of Part 8's items
+
+| item | result |
+|---|---|
+| 1. move the setpoint off the lattice floor | **falsified** — kills the run 150 steps sooner |
+| 2. `computeAlpha` vs the true diagonal | **falsified** — it *is* the diagonal, to 1.6% |
+| 3. `cflFactor` units | **confirmed** — fixes the bounded case at stock settings |
+| 4. reorder `inStepVelocity` to [BK] Alg. 1 | **demoted** — equivalent up to loop phase |
+| 5. port [C]'s shear-wave case | not started |
+| 6. scheme split | not started |
+
+Next, in order: re-grade `tgv` and `kolmogorovIncompressible` at `cflFactor
+0.1` (cheap, and gates landing item 3); then the relative stopping criterion
+(`rtol`, from the Part 8 results section); then the shear-wave case.
+
+#### Re-grading the two periodic cases at `cflFactor = 0.1`
+
+The gate on landing item 3 was "does dropping the default break `tgv`, whose
+decay rate `tests/test_physics.py` asserts?" **It cannot: `cflFactor` does not
+bind on `tgv` at all.**
+
+| case | cfl | steps | `dt` (min/max/mean) | result |
+|---|---|---|---|---|
+| `tgv` nx=64, t=2 | 0.3 | 2001 | 1e-3 / 1e-3 / 1e-3 | — |
+| `tgv` nx=64, t=2 | 0.1 | 2001 | 1e-3 / 1e-3 / 1e-3 | identical |
+| `kolmogorovIncompressible` nx=128, t=2 | 0.3 | 109 | 1e-3 / 0.1 / 1.86e-2 | worst `｜rho-1｜` 5.17e-3 |
+| `kolmogorovIncompressible` nx=128, t=2 | 0.1 | 323 | 1e-3 / 0.1 / 6.22e-3 | worst `｜rho-1｜` **3.98e-3** |
+
+`tgv`'s `dt` is pinned at exactly its configured `dt = 1e-3` for every step of
+both runs — the advective limit is never the binding constraint there, so the
+CFL constant is inert and the asserted decay band cannot move. (Measured
+anyway, for the record: `measured/analytic = 0.78` at nx=32, monotone, inside
+the test's [0.33, 0.87].)
+
+`kolmogorovIncompressible` does bind, and 0.1 is **better**: the density band
+tightens 23% (5.17e-3 -> 3.98e-3) for 3x the steps, exactly the `dt` ratio.
+Both stable.
+
+So item 3's blast radius is one case, in the improving direction, with `tgv`
+untouched. **The re-grading gate is cleared.**
+
+#### The published CFL also removes Part 4's NaN — without any gauge
+
+Asked because it follows: if 1.2 spacings per step is the real defect, does the
+*historical* `nonNegativeClamp` survive at 0.1? It does. nx=128, 1800 steps at
+`cflFactor=0.1` (≈ t=11.2, i.e. **more** physical time than the baseline's
+death at step 574 ≈ t=10.7):
+
+| gauge | cfl | outcome | `pMean` max | `rhoErr` | `rhoMax` | nIter |
+|---|---|---|---|---|---|---|
+| clamp | 0.3 | **NaN @574** | 2.38e6 | 6.31e-3 | 5.38e-2 | 64 |
+| clamp | **0.1** | **finite 1800** | **47.8** | **1.42e-3** | **5.34e-3** | 64 |
+| minShift | 0.3 | finite 1000 | 28.9 | 1.15e-3 | 7.91e-3 | 64 |
+
+`pMean` plateaus at ~25 from step 1620 on rather than growing. So **the
+timestep, not the gauge, is sufficient to stop the Part 4 blowup** — the
+constant mode still winds up, it just no longer wins the race against the
+step.
+
+This does **not** retire `ShiftPressureGauge.minShift`, and the two results fit
+together cleanly rather than competing:
+
+- On **periodic, complete-support** cases `minShift` is the *cheaper* remedy:
+  it costs nothing, where `cflFactor=0.1` costs 3x the steps for a comparable
+  answer (`rhoErr` 1.15e-3 against 1.42e-3). Part 4's fix stands as the right
+  default for exactly the two cases it was scoped to.
+- On **wall-bounded** cases `minShift` is a no-op *by construction* — it falls
+  back to the clamp whenever there are pinned pressure rows or free-surface
+  particles (`incompressible.py:160-166`). So the bounded case has always been
+  running the historical clamp *and* a timestep 3x past the published limit,
+  and the CFL is the only one of the two remedies available to it.
+
+That is why item 3 fixes the case Part 5 could not, and why Part 4's fix could
+never have. `nIter` stays pegged at 64 in every row above, which is the
+stopping-criterion problem from the previous section — independent of both
+`dt` and the gauge, and still the outstanding item.
+
+**Landing recommendation, now fully gated.** Change the advective limit to be
+expressed against particle spacing rather than `h` (equivalently, default
+`cflFactor` 0.3 -> 0.1 for the incompressible cases). Evidence: fixes the
+bounded case at stock settings; improves `kolmogorovIncompressible` 23%;
+provably inert on `tgv`; and removes the Part 4 NaN even under the historical
+gauge. Cost is 3-4x steps, which is the published operating point. Not landed
+in this session — it is a default change and the owner should make that call
+with these numbers in hand.
+
+---
+
+### Part 8 — a different linear solver, and the deltaSPH shift on top (2026-08-28)
+
+Two suggestions from the project owner, both aimed at the outstanding item
+(the PS solve running its cap every step). **One works and is the largest
+accuracy win found so far; the other does not, and turns out to have never
+been running at all.** New tooling:
+`scripts/probe_incompressiblePressureSolvers.py`.
+
+#### Prior work this rests on, which I should have read first
+
+`INCOMPRESSIBLE_SOLVER_PLAN.md` already characterises this operator and every
+method on it: symmetric to fp32 (`‖A−Aᵀ‖/‖A‖ ≈ 1e-6`), **negative-semi-definite
+with a gauge mode**, `kappa(sym) ≈ 2.4e7`, `kappa(M⁻¹A) ≈ 1.1e8`; MINRES best on
+residual (9.7e-4 @200 iters), CG strong, BiCGStab stagnating then diverging by
+1200; `krylovFp64` worth ~10x.
+
+It also **already contains the measurement Part 8 spent an item re-deriving**:
+"`computeAlpha` vs true `Diag(A)` | rel-L2 **3.3e-7** | the IISPH diagonal is
+the exact operator diagonal". And it already explains `omega < 0.355` exactly —
+`omega < 2/rho(D⁻¹A)` with `rho(D⁻¹A) ≈ 5.636`, a degenerate high-frequency
+lattice cluster, `dt`-invariant and robust to deformation. So Part 8's item 2
+was a *known* result, and my "extra power of rho" hypothesis was contradicted by
+a measurement already in the repo. The two independent measurements agree
+(3.3e-7 there, 1.6% there-and-back here), which is worth something, but the
+session cost was avoidable.
+
+What was genuinely untested is the thing the owner asked for: **any of these
+solvers running end-to-end inside a case.** The plan's numbers are all single
+solves on a seeded state.
+
+#### Krylov end-to-end: the clamp is the whole story
+
+`kolmogorovIncompressible`, `cflFactor=0.1`, `maxIterations=64`:
+
+| solver | gauge | nx=64/200: `rhoErr` | outcome |
+|---|---|---|---|
+| relaxedJacobi (`minShift`) | per-iteration | 5.27e-3 | 201 steps |
+| relaxedJacobi (`clamp`) | per-iteration | 9.60e-3 | 201 steps |
+| minres | post-hoc `nonnegative` | 3.59e-1 | survives, **garbage** |
+| cg | post-hoc `nonnegative` | — | **NaN at step 4** |
+| bicgStab | post-hoc `nonnegative` | — | **NaN at step 4** |
+| minres | **none** | **2.89e-3** | 201 steps |
+| cg | **none** | 1.13e-2 | 201 steps |
+| bicgStab | **none** | 5.82e-3 | 201 steps |
+
+**Both papers predicted this exactly.** [I] Sec. 3.2: for CG "clamping in
+between the iterations leads to invalid states", and they "observed
+instabilities in case of any change in the final pressure field, such as
+clamping of negative pressure values" — the shipped path's *post-hoc*
+`gauge='nonnegative'` is precisely that change. [BK] Sec. 5 names dropping the
+clamp as the precondition: "without pressure clamping more sophisticated
+solving algorithms like the conjugate gradient method could be employed and
+would enhance the convergence rate even more."
+
+Confirmed at production resolution — nx=128, 600 steps, `cflFactor=0.1`, no
+clamp:
+
+| solver | steps | nIter mean | @cap | `rhoErr` | `rhoMax` | wall |
+|---|---|---|---|---|---|---|
+| relaxedJacobi (`minShift`) | 601 | 60.2 | 86% | 3.79e-3 | 7.34e-3 | 31.3 s |
+| **minres (no clamp)** | 601 | 66.0 | 100% | **1.76e-3** | **3.35e-3** | 54.3 s |
+| bicgStab (no clamp) | 601 | 56.0 | 75% | 4.49e-3 | 1.38e-1 | 64.5 s |
+
+**MINRES is 2.15x better on mean density error and 2.2x on the worst case, for
+1.73x the wall time.** BiCGStab is parity at best and spikes to `rhoMax`
+1.38e-1 — consistent with the plan's finding that it stagnates then diverges on
+this spectrum. This is the largest single accuracy improvement measured in this
+document.
+
+Three caveats, none of which are small:
+
+1. **It requires dropping the non-negativity.** A shifting potential that may
+   go negative can *pull* particles together. On this periodic, complete-support
+   case that is evidently fine; [BK] Sec. 5 clamps specifically because "the
+   density near a free surface is underestimated which causes unnatural particle
+   clustering", and names ghost particles as the better fix. **So this must be
+   tested on a free-surface case (`rotatingSquarePatch`) before it could ever
+   be a default.**
+2. **It does not fix the stopping criterion.** MINRES is at the 66-iteration cap
+   100% of the time. The win is accuracy per unit work, not termination — the
+   criterion problem from the previous section is untouched.
+3. `minres` at 1.73x wall time is roughly break-even against just running the
+   Jacobi path longer; that comparison was not made and should be
+   (`relaxedJacobi` at `maxIterations=128` versus `minres` at 64).
+
+#### The deltaSPH shift on top: it was never running
+
+**First finding: `shiftProperties.active` was inert on this scheme, and paid
+full price for it.** `IncompressibleSystem.finalize` bound `solveShifting`'s
+result to `dx` (line 161), then **shadowed it** with `dx = dt**2 * dvdt_incomp`
+(line 271); the only `positions += dx` that would have applied the deltaSPH
+shift is in the commented-out block at line 320. So enabling the flag ran a
+full shifting solve every step and discarded it. **Any previous test of "the
+deltaSPH shift on top of the incompressible scheme" was measuring a no-op.**
+
+Fixed (`systems/incompressible.py`): the shift now has its own name
+(`dxDeltaShift`) and is added to the implicit shift before the position update
+and the Eq. 17 velocity resample. Opt-in and default-inert — every
+incompressible case ships `shifting=False`, and `dxDeltaShift is None`
+short-circuits, so the default path is byte-identical.
+
+**Second finding: with it actually applied, it does not help.**
+`kolmogorovIncompressible` nx=128, 600 steps, `cflFactor=0.1`:
+
+| shift | `shiftProperties.CFL` | `｜rho-1｜` 2nd half | worst | outcome |
+|---|---|---|---|---|
+| off | — | 3.79e-3 | 7.34e-3 | 601 steps |
+| on | 0.3 (default) | 3.65e-3 | 6.90e-3 | 601 steps |
+| on | 1.0 | 4.17e-3 | 7.83e-3 | 601 steps |
+| on | 3.0 | 1.36e-2 | 2.60e-1 | **NaN at 567** |
+
+4% better at the default magnitude — inside run-to-run noise — then
+monotonically worse, then divergent. And on the bounded case at
+`cflFactor=0.3`, where clustering *is* the failure mode, it does not rescue
+anything: baseline NaN at step 258, shift(0.3) at **234**, shift(1.0) at 247.
+
+**This is [C] Sec. 6's argument, measured.** Cornelis et al. contrast their
+global PPE-based shift with the local concentration-gradient variants (their
+refs [30] Nestor, [35] Skillen, [41] Xu) exactly on this point: the local ones
+carry a user-tuned magnitude, and "if this user-defined parameter is too small,
+the resulting sampling quality is not as good as it could be … if the parameter
+is too large, over-correction occurs which can result in even worse sampling
+qualities". The `shiftProperties.CFL` sweep above is that sentence as a table.
+The implicit VD+PS shift is already a global, parameter-free version of the
+same correction, so stacking a tuned local one on top has nothing to add and a
+magnitude to get wrong. Same conclusion as Part 5's rejected `--shiftCap`, from
+the opposite direction.
+
+#### Where this leaves the outstanding item
+
+Neither suggestion fixes the stopping criterion, which remains the one thing
+that has survived every experiment: relaxed-Jacobi, MINRES, BiCGStab, every
+`dt`, every gauge, and both shift configurations all sit at their iteration cap.
+The relative-residual criterion (`rtol`, already in the config and ignored by
+the Jacobi path) is still the untried item.
+
+Revised standing:
+
+1. **`cflFactor` units** — confirmed, ready to land, still unlanded.
+2. **MINRES without the clamp** — best accuracy result so far; needs the
+   free-surface test and the equal-cost Jacobi comparison before it can be
+   recommended as anything but opt-in.
+3. **Relative stopping criterion** — untried, and now the only remaining
+   candidate for the cap problem.
+4. deltaSPH shift on top — **tested and rejected**; the flag fix stays (it
+   makes an inert-but-expensive option honest), the configuration does not.
+
+#### Scoping the MINRES win: it is a complete-support result only
+
+Same comparison on the bounded case (`randomFlowIncompressible --bounded`,
+nx=128, 900 steps, `cflFactor=0.1`, no clamp):
+
+| solver | steps | @cap | `rhoErr` | `rhoMax` | wall |
+|---|---|---|---|---|---|
+| relaxedJacobi | 901 | 100% | 1.778e-1 | 2.474e-1 | 113.7 s |
+| minres (no clamp) | 901 | 100% | 1.721e-1 | 2.348e-1 | 140.0 s |
+
+**3% better for 23% more time — nothing.** Both stable at the published CFL,
+both dominated by the near-wall band rather than by solver quality.
+
+So the 2.15x is a *periodic, complete-support* result, and it does not
+transfer to a wall. That is the same conclusion Part 5 reached from the other
+direction ("the projection is not failing because it is under-converged, it is
+failing because it is computed before the particle gets to the wall") and it
+sharpens the recommendation: **MINRES-without-the-clamp is worth having for
+`kolmogorovIncompressible`/`tgv`-class problems and is not a wall fix.** At a
+wall, the boundary treatment is still the binding constraint, and `cflFactor`
+is still the thing that mattered.
+
+---
+
+### Part 8 — correction: the wall is NOT support-truncated, and that unblocks `minShift` on bounded cases (2026-08-28)
+
+Raised by the project owner against Part 8's "a complete-support result only"
+framing, and against a premise this document has leaned on since Part 4.
+**The objection is correct, and acting on it overturns a shipped design
+decision.** Tooling: `scripts/probe_wallSupportCompleteness.py` (new).
+
+#### The premise was false
+
+`ShiftPressureGauge`'s docstring justifies downgrading `minShift` to the clamp
+on any wall-bounded solve with two reasons. The second is:
+
+> where the support is truncated (against a wall, at a free surface) the kernel
+> gradients no longer sum to zero, so a *constant* pressure exerts a large real
+> force
+
+That is imported from the literature's one-layer boundaries (Akinci et al., as
+used by both [BK] and [C]). **This codebase does not use one-layer boundaries.**
+`randomFlow.BOUNDED_BAND = 5` samples the boundary as a solid five-layer band,
+against a support radius of `h = n_h * dx = 4` spacings — the band is *wider
+than the kernel*, so a fluid particle on the wall has a full neighbourhood. It
+is a deliberate deviation, commonly made, paid for in particle count.
+
+Measured on `randomFlowIncompressible --bounded`, nx=128, after 120 steps:
+
+| depth (spacings) | n | Shepard `sum V_j W_ij` | `｜sum V_j grad W_ij｜` | `｜A.1｜/｜A.rand｜` |
+|---|---|---|---|---|
+| (<0, inside wall) | 84 | 1.00857 | 5.63 | 0.245 |
+| [0,1) | 436 | **1.00100** | 6.29 | **0.194** |
+| [1,2) | 621 | 0.99123 | 3.78 | 0.536 |
+| [2,3) | 455 | 0.99786 | 1.67 | 0.189 |
+| [4,6) | 931 | 0.99989 | 1.29 | 0.167 |
+| [10,inf) bulk | 11608 | 0.99997 | 1.80 | 0.166 |
+
+Shepard sits at ~1.00 right down to the wall (min 0.970 across all fluid), so
+**support is complete**. And the quantity that actually governs the gauge —
+the real operator applied to a constant, relative to its response to a
+same-scale random field — is **0.194 in the wall-adjacent bin against 0.166 in
+the bulk**. The constant mode is no less null at the wall than anywhere else,
+so a uniform pressure does *not* exert a large force there.
+
+One nuance worth keeping: `|sum V_j grad W_ij|` **is** elevated ~4x at the wall
+(6.3 against 1.3). But that is not missing neighbours — it is the volume field
+being discontinuous across the interface, since boundary particles carry
+mDBC-extrapolated densities and so different `V_j = m_j/rho_j`. Complete
+support does not imply a consistent volume field. The composite operator
+absorbs it; the raw gradient sum does not.
+
+**So the docstring's second reason is wrong for walls.** It remains correct for
+free surfaces, which are genuinely truncated. Its *first* reason — Dirichlet
+rows pin the constant, so there is no free null space left to gauge — is
+untouched and is on its own sufficient to justify a guard.
+
+#### But the guard's empirical evidence was measured at 3x the published CFL
+
+Part 4 recorded that forcing `minShift` through on the bounded case "diverges
+at t=0.69, against t=5.5 for the clamp". That was at `cflFactor=0.3` — which
+Part 8 item 3 has since established is 3x [BK]'s `dt <= 0.4 d/|v_max|`. Re-run
+at both, with a new opt-in `forceShiftPressureGauge` bypass, nx=128, 900 steps:
+
+| cfl | gauge | steps | diverged | t_final | `rho` range | `｜rho-1｜` 2nd half | wall |
+|---|---|---|---|---|---|---|---|
+| 0.3 | clamp | 258 | yes | 5.535 | [0.139, 2.452] | 5.38e-1 | 35.4 s |
+| 0.3 | minShift | 38 | yes | **0.690** | [0.681, 1.257] | 2.16e-1 | 3.0 s |
+| 0.1 | clamp | 901 | no | 4.690 | [0.902, 1.247] | 1.78e-1 | 113.1 s |
+| **0.1** | **minShift** | 901 | **no** | **6.458** | [0.863, **1.154**] | **1.43e-1** | **61.2 s** |
+
+The `cfl=0.3` row reproduces Part 4's t=0.69 exactly, so the original
+measurement was sound — but it was measuring the timestep, not the gauge. At
+the published CFL `minShift` is better than the clamp on every axis recorded:
+
+- **it does not diverge**, over 900 steps;
+- it covers **t=6.458 against 4.690** in the same step budget, i.e. the adaptive
+  `dt` grows ~38% further because the solve is better conditioned;
+- density error **1.43e-1 against 1.78e-1** (19% better) and a tighter band
+  (`rho_max` 1.154 against 1.247);
+- and it costs **half the wall time** (61.2 s against 113.1 s) for the same
+  number of steps — the solve is terminating earlier.
+
+**So `ShiftPressureGauge.minShift`'s scoping to "periodic, complete-support
+cases" is too narrow, and was too narrow for a reason that has now been
+measured false twice over** — the support premise, and the divergence evidence.
+The remaining valid objection is the Dirichlet-rows argument, and the data says
+it does not bite in practice here.
+
+Not landed: widening `minShift`'s applicability is a default change that is
+entangled with the `cflFactor` default change (it is only better *at* the
+published CFL — at 0.3 it is catastrophically worse). The two should land
+together or not at all, and that is the owner's call. `forceShiftPressureGauge`
+ships default-off so the pairing can be re-measured on demand.
+
+#### What this retracts from the previous section
+
+Part 8's MINRES scoping said the 2.15x accuracy win "is a *periodic,
+complete-support* result, and it does not transfer to a wall". **The premise of
+that sentence is wrong** — the bounded case has complete support. The
+observation stands (MINRES gave 3% there, against 115% on the periodic case);
+the explanation does not. The better-supported explanation is Part 5's, which
+never depended on support: near a wall the error is set by the boundary
+treatment and by particles crossing it, not by how well the PPE is solved —
+Part 5 measured quadrupling the divergence-free iteration cap buying only ~10%.
+Solver quality cannot fix an error that is not a solver error.
+
+## Part 9 — the terms the papers do not compute for boundary particles (2026-08-28)
+
+Raised by the project owner: the published solvers do not evaluate every
+operator term for boundary particles, "particularly on the diagonal elements",
+with SPlisHSPlasH (`~/dev/SPlisHSPlasH`) as the reference implementation. Both
+halves check out. **Two terms are involved, this codebase computes both, and
+removing them is worth 5.9x on the bounded case's density error — but only in
+one of the step's two solves, and only at the published CFL.** New:
+`BoundaryOperatorTerms` (config, default `full` = unchanged) and
+`scripts/probe_boundaryOperatorTerms.py`.
+
+### What SPlisHSPlasH actually computes
+
+Read from source, with Akinci2012 boundaries (the `Bender2019`/`Koschier2017`
+map variants do the same thing with `Vj`/`gradRho` in place of the neighbour
+sum):
+
+| term | SPlisHSPlasH | boundary neighbour `j` |
+|---|---|---|
+| `computeDFSPHFactor`, first sum `grad_p_i` | `TimeStepDFSPH.cpp:774-812` | **in** |
+| `computeDFSPHFactor`, second sum `sum_grad_p_k` | same | **out** |
+| `computePressureAccel` | `TimeStepDFSPH.cpp:954-1010` | in, but with `p_i/rho_i^2` only |
+| `compute_aij_pj` (the matvec) | `TimeStepDFSPH.cpp:1042-1099` | in, but with `a_i` only |
+| IISPH `dii` | `TimeStepIISPH.cpp:170-206` | **in** |
+| IISPH `dij_pj` | `TimeStepIISPH.cpp:360-380` | **out** (no pressure to carry) |
+| IISPH `pressureSolveIteration` sum | `TimeStepIISPH.cpp:401-430` | in, but with `dij_pj_i` only |
+
+(The `TimeStepDFSPH` citations are the `USE_AVX` variants; the scalar copies at
+`:1106-1423` are term-for-term identical, checked.)
+
+The rule behind every row is one sentence, and [BK] 3.2 states it: "since
+`F^p_{j<-i} = 0` if particle j is not dynamic, the equation for `kappa^v_i`
+must be adapted accordingly for static boundary particles." A particle that
+never moves takes no reaction force, so every term describing *the neighbour's*
+response to `p_i` is absent; every term describing `i`'s own response to the
+neighbour stays.
+
+`compute_aij_pj` is worth quoting because it is this codebase's operator, line
+for line — "`\sum_j a_ij * p_j = h^2 \sum_j V_j (a_i - a_j) * gradW_ij`", which
+is exactly `dt**2 * computePressureShiftIISPH(computePressureAccelIISPH(p))`.
+Its boundary loop is `V_j * a_i . gradW`: same sum, `a_j` deleted.
+
+One inconsistency worth recording, since it is a trap for anyone reading
+SPlisHSPlasH as ground truth: **its IISPH keeps `-d_ji` in `aii`'s boundary
+loop** (`TimeStepIISPH.cpp:287-292`) — the neighbour-reaction term its own
+matvec drops. Its DFSPH does not have that mismatch. [I] 4 puts boundary
+particles in `d_ii` only, so the paper agrees with the DFSPH file.
+
+### What this codebase computed, and the two terms that differ
+
+`wp_alpha.py` accumulates both sums over one `AllToAll` neighbour set, and
+`computePressureShiftIISPH` takes the full `(a_j - a_i)` difference for every
+neighbour. So relative to the published formulation there are exactly two
+extra terms, and they are one physical statement applied to the diagonal and
+to the off-diagonal:
+
+- `alpha`'s second sum `sum_j V_j^2/m_j |gradW_ij|^2` — `dp_i/dx_j`;
+- the divergence's `a_j` term — the neighbour's own pressure displacement.
+
+`schemes/dfsph.py:256-259` zeroes `dxdt`/`dvdt` for every `kind != 0` row, so
+boundary *and* ghost particles are static here by construction and both terms
+are unearned. `BoundaryOperatorTerms.staticBoundary` drops both together;
+`diagonalOnly`/`operatorOnly` drop one each, as diagnostics.
+
+### Measurement 1 — how much of the diagonal the disputed term is
+
+`probe_boundaryOperatorTerms.py --mode diag`, bounded case, nx=128, 120 steps,
+`cflFactor=0.1`. Diagonals extracted exactly (one unit-vector matvec per row
+per operator), binned by distance to the wall in particle spacings:
+
+| depth | n | `alpha` full | `alpha` static | static/full | `diag_full/a_full` | `diag_stat/a_stat` | `diag_stat/a_full` | `diag_full/a_stat` |
+|---|---|---|---|---|---|---|---|---|
+| (<0, inside) | 84 | -7.678e-3 | -3.449e-3 | **0.449** | 0.984 | 0.801 | 0.372 | 224.0 |
+| [0,1) | 436 | -8.244e-3 | -4.978e-3 | **0.604** | 1.009 | 1.003 | 0.615 | 1.665 |
+| [1,2) | 621 | -8.253e-3 | -7.662e-3 | 0.928 | 1.000 | 0.994 | 0.899 | 1.112 |
+| [2,3) | 455 | -8.523e-3 | -8.488e-3 | 0.996 | 1.002 | 1.002 | 0.994 | 1.009 |
+| [3,4) and beyond | — | — | — | **1.000** | 1.003 | 1.003 | 1.003 | 1.003 |
+
+Two things. **The disputed term is 40% of the diagonal in the wall-adjacent
+bin** (55% for particles that have crossed the wall), and exactly zero beyond
+3 spacings — so this is a wall effect and nothing else; on a periodic case the
+setting is a no-op by construction, not by tuning. And **both self-consistent
+pairings are the true diagonal to within 1%** (columns 4 and 5), which is what
+makes `staticBoundary` a different *equation* rather than a rescaled solver.
+The two mismatched pairings are not: at the wall `diagonalOnly` runs the Jacobi
+step at `omega/0.61` (1.6x too large) and `operatorOnly` at `omega/1.67`.
+
+### Measurement 2 — end to end
+
+Same case, nx=128, 900 steps, stock settings otherwise (so
+`shiftPressureGauge` falls back to the clamp, as shipped).
+
+At the published CFL (`cflFactor=0.1`, Part 8 item 3):
+
+| mode | steps | diverged | `rho` range | `｜rho-1｜` 2nd half | t_final | wall s |
+|---|---|---|---|---|---|---|
+| `full` (shipped) | 901 | no | [0.902, 1.247] | 1.78e-1 | 4.690 | 113.1 |
+| **`staticBoundary`** | 901 | **no** | **[0.950, 1.007]** | **3.00e-2** | **6.347** | 118.6 |
+| `diagonalOnly` | 48 | **yes** | [0.905, 1.140] | 9.29e-2 | 0.287 | 4.0 |
+| `operatorOnly` | 901 | no | [0.946, 1.009] | 2.94e-2 | 6.372 | 117.6 |
+
+**`staticBoundary` is a 5.9x reduction in density error at the same step
+budget and the same cost**, with `rho_max` down from 1.247 to 1.007 — i.e. the
+near-wall pile-up that Part 5 root-caused largely stops happening — and 35%
+more simulated time per step budget because the adaptive `dt` grows.
+`diagonalOnly` NaNs at step 47, exactly as measurement 1 predicts (a 1.6x
+oversized relaxation at the wall, on top of a 0.5 relaxation factor that is
+already at the edge of the measured window). `operatorOnly` matches
+`staticBoundary` on accuracy while running its wall rows at ~0.6x the intended
+relaxation, i.e. it buys the same equation with extra damping it did not ask
+for.
+
+At the shipped CFL (`cflFactor=0.3`, 3x [BK]'s published limit) everything
+dies, and `staticBoundary` dies *sooner*:
+
+| mode | steps | t_final | `rho` range | `｜rho-1｜` 2nd half |
+|---|---|---|---|---|
+| `full` | 258 | 5.535 | [0.139, 2.452] | 5.38e-1 |
+| `staticBoundary` | 80 | 1.412 | [0.840, 1.271] | 8.69e-2 |
+| `diagonalOnly` | 14 | 0.224 | [0.670, 1.143] | 2.75e-1 |
+| `operatorOnly` | 454 | 5.894 | [0.143, 2.477] | 3.26e-1 |
+
+Same shape as the `minShift` result in the previous section: the smaller
+`|alpha|` at the wall means bigger Jacobi steps, and at 1.2 particle spacings
+of displacement per timestep that is not survivable. (`operatorOnly` living
+longest here is the same fact from the other side — its oversized diagonal is
+extra damping.) **So this is a published-CFL result, entangled with the
+`cflFactor` default exactly the way `minShift` is: the three would land
+together or not at all.**
+
+### Measurement 3 — it belongs to only one of the two solves
+
+The step runs two solves, and the config setting reaches both. Scoping it to
+one at a time (`--solvers`, which forces the other back to `full` around its
+call), `cflFactor=0.1`, same 900 steps:
+
+| `staticBoundary` applied to | steps | diverged | `rho` range | `｜rho-1｜` 2nd half | t_final |
+|---|---|---|---|---|---|
+| neither (`full` baseline) | 901 | no | [0.902, 1.247] | 1.78e-1 | 4.690 |
+| `solveDivergenceFree` only | 283 | **yes** | [0.731, 2.321] | 1.46e-1 | 1.645 |
+| **`solveIncompressible` only** | 901 | no | [0.948, 1.011] | **2.88e-2** | **6.586** |
+| both | 901 | no | [0.950, 1.007] | 3.00e-2 | 6.347 |
+
+**The win belongs to the constant-density/shifting solve, and applying the
+change to the divergence-free solve *alone* is actively harmful** — on its own
+it turns a finite run into a divergence at t=1.65.
+
+> **The mechanism first proposed here was wrong and is retracted** — it
+> attributed the divergence-free harm to mDBC boundary particles carrying an
+> extrapolated *velocity* (true: mean `|v|` 0.063 against the fluid's 0.327 at
+> that solve's call site, and exactly 0 at the other's) and so not being
+> "static" in the quantity that solve projects. Zeroing them does not fix it.
+> Three candidate mechanisms were then tested and all three fail; see the
+> addendum below for what survives.
+
+**So the correct scoping is per-solve, and a future default should live on
+`RelaxedJacobiSolverConfig` (which already exists per solver) rather than on
+`IncompressibleSolverConfig`.** The single global knob shipped here is an
+experiment hook, and it is safe as one — the `both` row survives, is 5.9x
+better than the baseline, *and* converges better than it on both solves (final
+residuals 1.57e-2/1.44e-3 against 7.52e-2/2.51e-3, see the addendum). The
+harm is a property of the mismatched half-state, not of the divergence-free
+solve as such.
+
+
+### Part 9 addendum — the boundary velocity, and whether the slip conditions work (2026-08-28)
+
+The project owner's follow-up: how much of the divergence-free harm above is
+the *boundary velocity*? In DFSPH a boundary particle's velocity is the rigid
+body's — a constant zero for a static wall — not an extrapolated fluid
+velocity, so the question is decidable by setting it to zero and re-running.
+And separately: do the free-slip (mirror into the fluid) and no-slip (flip the
+fluid velocity) conditions work, and do they change convergence? New tooling:
+`scripts/probe_boundaryVelocityModes.py`, plus `--mode spectrum` and
+`--mode dfTrace` on `scripts/probe_boundaryOperatorTerms.py`.
+
+**Everything below is measured at `cflFactor=0.1`, nx=128, 900 steps, on
+`randomFlowIncompressible --bounded`, which ships `BCType.freeSlip`.**
+
+#### The boundary velocity is not the mechanism — the previous section's explanation is retracted
+
+| `BCType` | terms | `rho` range | `｜rho-1｜` 2nd half | t_final | DF resid | PS resid |
+|---|---|---|---|---|---|---|
+| `freeSlip` (shipped) | `full` | [0.902, 1.247] | 1.78e-1 | 4.690 | 7.52e-2 | 2.51e-3 |
+| `freeSlip` | `staticBoundary` | [0.950, 1.007] | 3.00e-2 | 6.347 | 1.57e-2 | 1.44e-3 |
+| `zeros` (the DFSPH convention) | `full` | [**0.563**, 1.289] | 2.48e-1 | 5.028 | 8.93e-2 | 3.05e-3 |
+| `zeros` | `staticBoundary` | [0.957, 1.006] | **2.58e-2** | 6.386 | 1.53e-2 | 1.47e-3 |
+| `noSlip` | `full` | [0.863, 1.237] | 1.73e-1 | 4.348 | 8.57e-2 | 2.37e-3 |
+| `noSlip` | `staticBoundary` | [0.952, 1.007] | 3.24e-2 | 6.286 | 1.81e-2 | 1.48e-3 |
+
+Two things fall out immediately. **The boundary-velocity condition is a small
+effect and the operator terms are a large one**: across all three conditions
+`staticBoundary` buys 5.4-6.4x, while switching condition moves `｜rho-1｜` by
+at most 40% at fixed terms. And **`zeros` is the best of the three under
+`staticBoundary`** (2.58e-2), which is the consistent answer — with a genuinely
+motionless wall the static-boundary operator is exactly right — but it beats
+`freeSlip` by only 14%.
+
+The decisive run is the scoped one. Under `zeros`, `staticBoundary` applied to
+the divergence-free solve *alone* still diverges — at step 482/t=2.91 rather
+than 283/t=1.64, i.e. **delayed by 70% and not prevented**. So the retracted
+explanation had the right ingredient list and the wrong conclusion: the
+extrapolated velocity does make it worse, and removing it does not make it go
+away.
+
+#### Two more mechanisms tested, both eliminated
+
+**Not the Jacobi stability window.** Both solvers iterate
+`p <- p + omega * D^-1 r`, which converges iff `omega < 2/rho(D^-1 A)`, and
+`rho` is scale-free (`A` and `D` both carry the `dt` factor) so one number
+covers both. Power iteration on the fluid subproblem, same captured state:
+
+| operator | `rho(D^-1 A)` | window `2/rho` | `omega`/window | dominant mode's energy within 2 spacings of the wall |
+|---|---|---|---|---|
+| `full` | 6.3777 | 0.3136 | 0.957 | 0.2% (7.0% of rows are there) |
+| `staticBoundary` | 6.3782 | 0.3136 | 0.957 | 0.2% |
+
+Identical to four digits, and the dominant mode is a *bulk* high-frequency mode
+either way, not a wall mode. **Incidental finding worth its own line: the
+shipped `relaxationFactor = 0.3` sits at 96% of the stability window on this
+state.** `JacobiRelaxationMode`'s docstring quotes "~15% margin", measured on
+the TGV operator family; on a wall-bounded state the margin is 4%.
+
+**Not the iteration budget either.** If the new operator merely converged more
+slowly, more sweeps would fix it. Raising the divergence-free cap from its
+default 32 (`staticBoundary`, divergence-free only):
+
+| DF `maxIterations` | steps | t_final | `rho` range |
+|---|---|---|---|
+| 32 (default) | 283 | 1.645 | [0.731, 2.321] |
+| 96 | 597 | 3.370 | [0.272, 1.314] |
+| 192 | 513 | 3.375 | [0.141, 3.145] |
+
+Tripling delays it, and 6x is *worse* than 3x. Not an under-iteration.
+
+#### What is actually measured: a weaker contraction whose leftover accumulates
+
+`--mode dfTrace` records every divergence-free solve's first and last residual
+over 300 steps (constant-density solve pinned to `full` throughout):
+
+| | residual last/first, steady state | solves whose residual grew | max`｜a_p｜` at step 250 | outcome |
+|---|---|---|---|---|
+| `full` | 0.39 – 0.53 | **0/300** | 17.1 | finite |
+| `staticBoundary` (DF only) | 0.77 – 0.82 | 4/283 (all late) | 19.8 -> **1.04e4** at step 276 | NaN at 282 |
+
+Each solve still converges internally — the iteration is not unstable, matching
+the spectrum result — but it removes only ~20% of the incoming divergence
+instead of ~50%, the incoming residual creeps from 2.4e-2 to 3.8e-2 over 250
+steps, and the applied acceleration ramps and then detonates. **That is the
+honest end of this thread: the observable is a halved contraction rate in the
+mismatched half-state, and no mechanism proposed so far predicts it.** Note the
+sign of the effect flips when both solves are changed together — the `both` row
+above has the *best* divergence-free residual of any configuration (1.57e-2
+against `full`'s 7.52e-2, a 4.8x improvement), so whatever this is, it is a
+property of running the two solves on inconsistent operators rather than of the
+static-boundary operator itself. Which is another argument for the per-solver
+config split, and against ever setting this globally to a mixed state.
+
+#### The slip conditions do not implement their own formulas
+
+`--mode verify` decomposes each `BCType`'s output against the wall normal,
+reported as least-squares slopes over the Shepard-interpolated fluid velocity
+at the ghost point. The published mDBC forms are exact integers, so the table
+grades itself:
+
+| `BCType` | normal | tangential | published | `｜u_b｜` mean | rows set |
+|---|---|---|---|---|---|
+| `zeros` | +0.0000 | +0.0000 | 0 / 0 | 0 | 0/2660 |
+| `constant` | (n/a) | (n/a) | 0 / 0 | 0 | 0/2660 |
+| `noSlip` | **-0.0000** | -1.0000 | **-1** / -1 | 9.43e-2 | 2660/2660 |
+| `freeSlip` | **+0.0000** | +1.0000 | **-1** / +1 | 9.43e-2 | 2660/2660 |
+| `extended` | -0.6490 | +0.5605 | (extrapolated) | 1.13e-1 | 2660/2660 |
+
+Both slip conditions get the tangential component exactly right and **both drop
+the normal component instead of reflecting it**. `freeSlip` computes
+`u_f - 1*(u_f.n) n` while the comment directly above it says
+`u_g = u_f - 2 * (u_f . n_b) * n_b` (`modules/mdbc/velocity.py:118`); `noSlip`
+computes `2 u_wall - u_f` and then applies the same projection, undocumented.
+The physical consequence is specific: a boundary particle never opposes an
+approaching fluid particle's normal velocity, so the wall contributes only half
+the compression signal to `computeMomentumIncompressible`'s divergence — which
+is the source term both solvers are driven by, and it is the same wall-normal
+response that `computeMdbcNoPenShift` exists to supply by other means.
+
+**Fixing it is not an improvement, measured** (`freeSlipReflect` runs the
+published `-2` form, patched in; `src/` unchanged):
+
+| `BCType` | `mdbcNoPenetrationShift` | `｜rho-1｜` | t_final | min `rho` |
+|---|---|---|---|---|
+| `freeSlip` | on (default) | 1.78e-1 | 4.690 | 0.902 |
+| `freeSlipReflect` | on | 1.70e-1 | 4.327 | 0.839 |
+| `freeSlip` | off | 1.93e-1 | 5.088 | 0.666 |
+| `freeSlipReflect` | off | 2.30e-1 | 3.868 | 0.468 |
+
+So the reflecting form is a wash with the no-penetration shift on and *worse*
+with it off — which also disposes of the tidy hypothesis that
+`mdbcNoPenetrationShift` is a crutch standing in for the missing reflection. It
+is not: removing the crutch does not make the reflection pay. And paired with
+`staticBoundary` the reflecting form is worse still (`｜rho-1｜` 7.98e-2 and
+`t_final` 1.43 against 3.00e-2 and 6.35 — it survives 900 steps but the
+adaptive `dt` collapses). **Report the deviation, do not "fix" it blind.**
+
+#### `noSlip`'s moving-wall term is dead code
+
+`noSlip` computes `2 * currentState.velocities - u_f` and then reads the result
+at the *ghost* rows, so the `u_wall` it uses is the ghost row's stored velocity.
+Nothing writes a body velocity there: `rigidBody/update.py:51-56` refreshes
+ghost velocities only for `BCType.constant` bodies. Measured on
+`lidDrivenCavity` (nx=64, 50 steps), the one case that uses `noSlip` on a
+moving wall:
+
+```
+pre-BC |v|     fluid: mean=6.27e-04 max=1.47e-02
+pre-BC |v|  boundary: mean=2.68e-01 max=1.00e+00     <- the lid is here
+pre-BC |v|     ghost: mean=0.00e+00 max=0.00e+00     <- and not here
+```
+
+The lid velocity reaches the boundary particles and never the ghosts, so the
+`2 u_wall` term contributes exactly zero and `noSlip` degenerates to
+`u_b = -u_f_tangential` — a *stationary* no-slip wall — no matter how fast the
+wall moves. The case is not visibly broken because `enforceDirichlet` runs
+*after* `computeBoundaryVelocities` (`schemes/deltaSPH.py:110-117`,
+`schemes/dfsph.py:85-96`) and re-imposes the lid velocity on the boundary rows
+it just overwrote. So today this is latent: it would bite the first moving
+no-slip wall that is not backed by a Dirichlet condition. Moving *rigid bodies*
+are unaffected — they use `BCType.constant`, which is the branch that does
+refresh ghost velocities.
+
+#### Convergence behaviour, since it was asked directly
+
+Iteration counts do not discriminate: **every configuration in every table
+above runs its full budget every step** (32 divergence-free, 64
+constant-density) and never reaches its tolerance, so the count is pegged and
+the *residual* is the only usable signal. On that measure the boundary-velocity
+condition is again a small effect (DF residual 7.5e-2 / 8.9e-2 / 8.6e-2 for
+free-slip / zeros / no-slip at fixed `full` terms) and the operator terms are a
+large one (7.5e-2 -> 1.6e-2). This also re-confirms Part 8's stopping-criterion
+finding from a third direction: a solver that never terminates cannot report
+that a change helped it, which is why every number here is a residual.
+
+### Status
+
+Not landed as a default; nothing in the shipped behaviour moves
+(`BoundaryOperatorTerms.full`). Verified: `scripts/gradcheck_incompressible.py`
+passes, including a new second case covering the `includeBoundaryReaction=False`
+branch with mixed `kinds` in one launch (a conditional accumulation inside the
+neighbour loop is exactly the shape that file's docstring is about), and the
+full suite passes (241 passed, 1 skipped). Periodic cases are untouched by construction — with no
+`kind != 0` particles both code paths are identical, which measurement 1's
+"1.000 beyond 3 spacings" column also shows empirically.
+
+**Unrelated flake seen while verifying, worth its own investigation:** one full
+suite run in three failed `test_implicitShiftingComparison.py`'s two
+`implicitShiftAutomatic` assertions. Its relative density std falls smoothly
+for six steps (0.0257 -> 0.0145) and then jumps to 0.217 on step 7 and stays
+there. The file passes in isolation and the suite passes on a re-run, and
+nothing in Part 9 touches the shifting path, so this is a pre-existing
+intermittent blow-up in the autodiff-built Newton shift, not a regression --
+but "passes 2 runs in 3" is not passing.
+
+Open, in the order they matter:
+
+1. **Move the knob to `RelaxedJacobiSolverConfig`** and default
+   `pressureSolver` to `staticBoundary` while `divergenceFreeSolver` stays
+   `full`. That is the configuration measurement 3 endorses, and it cannot be
+   expressed today. Note the addendum's caveat: `both` is *also* better than
+   the baseline on every axis including both solvers' residuals, so the choice
+   between "PS only" and "both" is a 4% accuracy question, not a stability one.
+2. **Re-measure against `minShift` and the CFL together.** All three of
+   `cflFactor=0.1`, `ShiftPressureGauge.minShift` (via
+   `forceShiftPressureGauge`) and `staticBoundary` are individually better at
+   the published CFL and individually worse at 0.3. Nobody has run the 2x2x2.
+3. **The divergence-free half-state's contraction collapse is unexplained.**
+   Three mechanisms tested and eliminated (addendum). The remaining lead is
+   that it only appears when the two solves run *inconsistent* operators, which
+   suggests looking at what the constant-density solve leaves behind for the
+   next step's divergence-free solve rather than at either solve alone.
+4. **`relaxationFactor = 0.3` has a 4% stability margin on a bounded state**,
+   not the ~15% `JacobiRelaxationMode`'s docstring quotes from the TGV family.
+   Independent of everything else in Part 9 and probably the cheapest
+   robustness win available; `--mode spectrum` measures it on demand.
+5. **The two mDBC slip defects** (normal component projected rather than
+   reflected, contradicting `freeSlip`'s own comment; `noSlip`'s `2 u_wall`
+   term reading a ghost-row velocity nothing writes). Neither is worth fixing
+   for stability — the reflecting form measures *worse* — but the comment and
+   the code should be made to agree, and the moving-wall path needs either a
+   fix or a docstring saying it only works behind a Dirichlet.
+6. **Ghost particles (`kind == 2`) are lumped in with boundaries** by the
+   `kj == 0` test. That is right for this scheme (`dfsph_step` freezes them
+   too), but it is an assumption no measurement here separates.
+
+## Part 10 — the initial sampling, and integrating the density instead of re-summing it (2026-08-28)
+
+Two requests from the project owner, both about where the density field comes
+from rather than what the solvers do with it. New tooling:
+`scripts/probe_initialSampling.py`, `scripts/probe_densityEvolution.py`.
+
+### The sampling is exact, the mass is not, and correcting it makes the bounded case worse
+
+`sample/regular.py:70` gives every particle the nominal mass `rho0 * dx^d`.
+That is the continuum mass of its cell, not the mass that makes the *discrete*
+summation `sum_j m_j W_ij` land on `rho0`. `kolmogorovIncompressible.py:71` and
+`tgv.py:53` already correct for it; nothing built through `buildRegionSystem`
+does, which is every `randomFlow` variant.
+
+Measured on `randomFlowIncompressible --bounded`, nx=128, as sampled:
+
+| | |
+|---|---|
+| `m / dx^2` | 1.000000 (exactly nominal) |
+| fluid summation density | **1.001206**, std **0.000000**, min = max |
+| by wall depth, `[0,1)` through `[10,inf)` | 1.001206 in **every** bin |
+| normalisation factor, mean / bulk / median rules | 0.998796 (identical to 6 digits) |
+
+So the sampling itself is perfect — a uniform lattice with a uniform density —
+and the wall band does not perturb it at all, which is the third independent
+confirmation that `BOUNDED_BAND = 5` gives complete support. The entire error
+is a single global **+0.12%**, and any of the three candidate rules removes it
+exactly, in one shot, because the summation is linear in mass.
+
+It shows up exactly where it should and then stops mattering. The first twelve
+steps' `max(|rho_max - 1|, |rho_min - 1|)`:
+
+| rule | step 0 | 1 | 2 | 3 | 6 | 9 | 11 |
+|---|---|---|---|---|---|---|---|
+| `none` (shipped) | 0 | **1.21e-3** | 8.08e-3 | 9.42e-3 | 8.80e-3 | 1.37e-2 | 2.29e-2 |
+| `meanAll` | 0 | **7.51e-6** | 5.10e-3 | 1.00e-2 | 2.48e-2 | 3.93e-2 | 4.90e-2 |
+
+**There is no startup shock to fix.** Step 0 is exactly uniform, step 1 shows
+the 1.2e-3 sampling bias precisely as predicted, and normalisation removes it
+to 7.5e-6 — and then the normalised run's error grows about twice as fast from
+step 2 onward. Over 900 steps:
+
+| case | rule | peak `｜rho-1｜` in first 50 | first-50 mean | 2nd-half mean |
+|---|---|---|---|---|
+| bounded | `none` | 1.09e-1 | 6.37e-2 | **1.78e-1** |
+| bounded | `meanAll` | 1.46e-1 | 9.53e-2 | 2.40e-1 (**35% worse**) |
+| periodic | `none` | 5.87e-3 | 3.95e-3 | 4.13e-3 |
+| periodic | `meanAll` | 6.69e-3 | 2.87e-3 | **2.89e-3 (30% better)** |
+
+**Normalisation helps the periodic case and hurts the bounded one**, and that
+sign flip is the same knob Part 8 item 1 swept, now measured in the direction
+it did not cover. `none` leaves the lattice 0.12% *above* `rho0`, i.e. the
+setpoint sits *below* the structural floor, which biases `sourceTerm =
+rho0 - rhoStar` negative — and Part 8 established that the source's negative
+mean is the shifting solve's de-clumping drive. Removing it at a wall, where
+that drive is doing the most work, costs 35%. Removing it in a periodic domain,
+where the drive is not needed to hold particles off a boundary, is a 30% win.
+Not landed either way: `none` is shipped, the periodic cases already normalise
+in their own `buildSystem`, and the bounded evidence argues against changing
+`buildRegionSystem`.
+
+### `integrateRho` is now real, and the WCSPH convention does not survive contact with this scheme
+
+Part 3 audited `integrateRho` and found the `True` branch inert: `finalize`
+re-summed unconditionally, twice per step in total. `DensityEvolution`
+(new, default `summation` = byte-identical history) makes the choice real, with
+the two re-sums separately controllable because they answer different questions:
+
+- `summation` — re-sum at the top of `dfsph_step` and again in `finalize`.
+- `continuity` — integrate `drho/dt`, never re-sum. The WCSPH standard.
+- `hybrid` — carry the integrated density through the step (so `drhodt`, the
+  mDBC extrapolation and the divergence-free solve all run on it) but give the
+  *constant-density/shifting* solve a fresh summation that is then discarded.
+
+`integrateRho=True` now maps to `continuity` via `resolveDensityEvolution`,
+which is what its name always claimed.
+
+#### One real bug found on that path, worth 1800x on the solver residual
+
+`dfsph_step` computes `drhodt = computeMomentum(...)` from
+`currentState.velocities` — the velocity *before* the divergence-free
+projection — and that is what the integrator advances density with. Under
+`summation` it does not matter (the result is discarded). Under `continuity` it
+is fatal: the particles are advected with the projected velocity, whose
+divergence the solve just drove to ~0, so **the carried density integrates
+exactly the error the solver was there to remove, every step.** Re-evaluating
+`drhodt` on the projected velocity (same operator the solvers form `rhoStar`
+with) on the bounded case:
+
+| | steps survived | DF final residual |
+|---|---|---|
+| before | 25 | **2.61e+2** |
+| after | 63 | **1.46e-1** |
+
+The divergence-free solve goes from meaningless to healthy — `summation`'s own
+residual on the same case is 7.5e-2 — and the run lasts 2.5x longer. Also
+added, and much less useful: the shift's own first-order density resample
+(`rho += grad rho . dx`, the density half of the `proj_vel` correction that has
+always been there). Worth 24 -> 25 steps on its own. Kept because it is
+correct and free, not because it helped.
+
+#### The drift is intrinsic, and it is not the shift
+
+Every number below is reported twice — against the **carried** density (what
+the solvers and the case diagnostics see) and against a fresh **summation** on
+the same positions. nx=128, 900 steps, `cflFactor=0.1`:
+
+| case | mode | steps | `｜carried-1｜` | `｜true-1｜` | drift mean | DF resid | t_final | wall s |
+|---|---|---|---|---|---|---|---|---|
+| bounded | `summation` | 901 | 7.04e-3 | 7.04e-3 | 0 | 7.52e-2 | 4.690 | 114.6 |
+| bounded | `continuity` | **63** | 7.06e-3 | 4.30e-2 | 4.74e-2 | 1.46e-1 | 0.370 | 3.9 |
+| bounded | `hybrid` | **286** | 2.27e-2 | 2.52e-3 | 2.14e-2 | 1.67e-1 | 1.713 | 30.2 |
+| periodic | `summation` | 901 | 1.93e-3 | 1.93e-3 | 0 | 8.79e-3 | 5.873 | 73.2 |
+| periodic | `continuity` | **470** | 9.05e-3 | 3.66e-2 | 3.93e-2 | 7.25e-1 | 2.851 | 38.2 |
+| periodic | **`hybrid`** | **901** | 3.52e-2 | **1.92e-3** | 3.33e-2 | **8.49e-3** | 5.872 | 72.6 |
+
+Look at the `continuity` rows' first two columns: **the carried density reports
+7.1e-3 while the truth is 4.3e-2.** It is not noisy, it is *smooth* — and
+wrong. `drho/dt = -rho div v` describes advection of a density field; the real
+density error in this scheme is dominated by particle *rearrangement* at
+essentially zero divergence, which that equation cannot represent at all. The
+carried field converges to a plausible-looking lie.
+
+The obvious suspect is the position shift, which moves particles every step
+with no `drhodt` to match. **It is not the cause.** Under
+`ShiftApplication.inStepVelocity`, which drops the position shift entirely,
+`continuity` on the bounded case still dies (step 290) with the same drift
+(3.46e-2). The rearrangement the continuity equation cannot see is the flow's
+own, not the shift's.
+
+#### `hybrid` is free where support is complete, and fails at an mDBC wall
+
+The periodic `hybrid` row is the result worth keeping: **`｜true-1｜` 1.917e-3
+against `summation`'s 1.926e-3, the same `t_final` to four digits, and a
+slightly better divergence-free residual** — while its carried density has
+drifted 3.3e-2 from the truth. That is the whole design point stated as a
+measurement: *the divergence-free solve does not care*, because all it needs is
+`div v`, which the continuity equation tracks exactly; only the shifting solve
+needs a density that matches the particle positions, and `hybrid` hands it one.
+
+On `tgv` (nx=64, 200 steps) the same holds with a cost saving attached:
+
+| mode | `｜true-1｜` | DF resid | KE last/first | wall s |
+|---|---|---|---|---|
+| `summation` | 1.608e-4 | 1.338e-3 | 0.9956 | 2.4 |
+| `continuity` | 1.310e-3 (8x worse) | 1.328e-3 | 0.9956 | 1.8 |
+| **`hybrid`** | **1.588e-4** | 1.336e-3 | 0.9956 | **1.9 (-21%)** |
+
+Identical kinetic-energy decay in all three, so the mode is energy-neutral on
+the case `tests/test_physics.py` grades. The 21% is the second summation being
+skipped; at nx=128 on `randomFlow` the same saving is ~1%, because there the
+two pressure solves (32 and 64 iterations, two SPH passes each) dominate and a
+density pass is noise.
+
+**But `hybrid` dies at 286 steps on the bounded case.** Leading hypothesis,
+untested: `computeMdbcDensity` runs at the top of the step, on the *carried*
+density, so under `hybrid` the boundary rows are extrapolated from a field that
+has drifted — and the wall force is built from those boundary densities. The
+periodic case has no mDBC, which is exactly the difference. The cheap test is
+to re-sum for the extrapolation only and see whether the bounded case then
+behaves like the periodic one.
+
+### Status
+
+Nothing shipped moves: `DensityEvolution.summation` is the default and the
+non-default branches are guarded, `integrateRho` keeps its serialised field,
+and the full suite passes. Also fixed while here: `densityEvolution`,
+`boundaryOperatorTerms` and `forceShiftPressureGauge` were not serialised by
+`incompressibleSPHConfigToDict`, so they silently reset to defaults on a
+TOML/HDF5 round-trip; all three now round-trip.
+
+Open, in the order they matter:
+
+1. **Test the mDBC hypothesis for `hybrid`.** If re-summing for the boundary
+   extrapolation alone fixes the bounded case, `hybrid` becomes a general
+   default candidate rather than a periodic-only one.
+2. **`hybrid` on the periodic cases is a free option today** — same accuracy,
+   same energy, one fewer neighbour pass. It wants a `tgv`-style regression
+   test before it could ever be a default, since its failure mode (a carried
+   density that looks *better* than the truth) is invisible to any diagnostic
+   that reports the carried field.
+3. **Adopt the mass normalisation for periodic `buildRegionSystem` cases only**
+   (30% better), and leave the bounded ones alone (35% worse). Or, better,
+   understand the sign flip first — it is the same setpoint question Part 8
+   item 1 opened and neither session has closed.
+4. **`DensityEvolution` + `BoundaryPressureMode.plain` is a trap**: `plain`
+   skips the mDBC extrapolation, and the non-summation modes skip the re-sum,
+   so `kind != 0` rows would never be updated at all. Documented in the enum,
+   not guarded in code.
+
+## Part 11 — Bender, Westhofen & Jeske 2023, "Consistent SPH Rigid-Fluid Coupling" (2026-08-28)
+
+The paper [BWJ23] (VMV 2023) derives DFSPH from a density *constraint* instead
+of from the PPE, and the derivation settles the boundary question Part 9 was
+circling. New: `BoundaryPressureMode.consistent`,
+`modules/incompressible/consistent.py`, `scripts/probe_consistentCoupling.py`.
+
+### Two thirds of it was already here
+
+Their constraint `C_i = rho0 - sum_j m_j W_ij - sum_k m~_k W_ik` is defined for
+**fluid particles only**, and a static boundary particle's position is constant,
+so `dC_i/dx_k = 0`. Term by term against this codebase:
+
+| paper | what it says | this codebase |
+|---|---|---|
+| Eq. 32, diagonal | boundary in `‖sum_j m_j gradW_ij + sum_k m~_k gradW_ik‖²`, **not** in `sum_j ‖m_j gradW_ij‖²` | **`BoundaryOperatorTerms.staticBoundary`'s alpha half** (Part 9) |
+| Eq. 34, Laplacian | boundary term is `sum_k m~_k a^p_i . gradW_ik` — no `a^p_k` | **`staticBoundary`'s operator half** (Part 9) |
+| Eq. 33, pressure accel | `-sum_k m~_k (p_i/rho_i²) gradW_ik` — **no boundary pressure at all** | an *identity* for this codebase's symmetric gradient whenever `p_b = 0`, i.e. under `plain`/`mdbcDensity` |
+| Eq. 14, density | `rho_i = sum_j m_j W_ij + sum_k m~_k W_ik` | `computeDensities` — same, with nominal `m~_k = rho0 dx^d` |
+| Sec. 3.3, boundary state | "static fluid particles" at `rho_k = rho0`, `m~_k = rho0 / sum_l W_kl` | **differs**: mDBC-extrapolated `rho_k` (1.3+ in a compressed band), nominal mass |
+| Eq. 35, dynamic boundaries | `f_{k<-i} = m_i m~_k (p_i/rho_i²) gradW_ik` onto the body | **absent**: `integrateRigidBody(rigidBody, 0, 0, dt)` — this scheme is one-way coupled by construction |
+
+So Part 9 arrived at the paper's operator from SPlisHSPlasH's source without
+the derivation, and the paper is the derivation. **That closes Part 9's "the
+`staticBoundary` win is unexplained at the theory level" gap**: it is not a
+tweak, it is what the constraint formulation produces when you stop pretending
+a wall can move.
+
+What is genuinely new is the *state* boundary rows enter the solve with, and
+it does reach the solve: every SPH sum in it weights a neighbour by its
+apparent volume `m_j / rho_j`. `BoundaryPressureMode.consistent` is the paper
+end to end — `staticBoundary` terms forced on, `p_b` pinned at exactly 0,
+`rho_k = rho0` for the duration of the solve (restored afterwards, so the mDBC
+extrapolation still serves everything outside it).
+
+### It is the best configuration measured, and `mdbcMlsPressure` is the worst
+
+`randomFlowIncompressible --bounded`, nx=128, 900 steps, `cflFactor=0.1`:
+
+| configuration | `rho` range | `｜rho-1｜` 2nd half | t_final | DF resid | PS resid | wall s |
+|---|---|---|---|---|---|---|
+| `mdbcDensity` + `full` (shipped) | [0.902, 1.247] | 1.78e-1 | 4.690 | 7.52e-2 | 2.51e-3 | 122.7 |
+| `mdbcDensity` + `staticBoundary` | [0.950, 1.007] | 3.00e-2 | 6.347 | 1.57e-2 | 1.44e-3 | 118.7 |
+| **`consistent`** | [0.955, 1.008] | **2.86e-2** | **6.463** | 1.55e-2 | 1.44e-3 | 119.1 |
+| `consistent` + `akinciBoundaryVolume` | [0.951, 1.019] | **2.38e-2** | 6.330 | **1.24e-2** | 1.85e-3 | 120.9 |
+| `mdbcMlsPressure` + `full` | [0.878, **1.334**] | **1.86e-1** | 5.336 | 9.98e-2 | 2.41e-3 | 115.6 |
+
+**`consistent` is 6.2x better than the shipped configuration** on near-wall
+density error, and the `rho_k = rho0` convention is worth a further 5% on top
+of the operator terms alone (2.86e-2 against 3.00e-2) plus 2% more simulated
+time. Modest — the operator terms are the big win — but free and in the same
+direction.
+
+**The other end of the table is the sharper result.** `mdbcMlsPressure` — Band
+et al.'s MLS pressure extrapolation, which is precisely the method [BWJ23] is
+written against — is the **worst** row measured, worse than the shipped
+baseline (1.86e-1 vs 1.78e-1), with the worst divergence-free residual
+(9.98e-2) and a `rho_max` of 1.33. **This corrects Part 2**, which called
+`mdbcMlsPressure` "the most stable *and* most accurate of the three modes";
+that was measured at `cflFactor=0.3` out to t≈1.5. Over 900 steps at the
+published CFL it is 6.5x worse than the paper's method, which needs no boundary
+pressure at all. The paper's argument was that extrapolation is unnecessary
+overhead; here it is not merely unnecessary, it is actively harmful.
+
+### The Akinci volume correction: helps in the operator, fatal in the density
+
+The paper specifies `m~_k = rho0 / sum_l W_kl` (`l` over boundary neighbours
+only). Measured on this five-layer band: `m~/m_nominal` mean **1.102**, min
+0.999, max **1.456** — the interface layer gains ~46%, the interior layers
+nothing, exactly as the correction is designed to behave at a sampling's outer
+face.
+
+Where it is applied decides everything:
+
+| where `m~_k` is applied | result |
+|---|---|
+| inside the pressure solve only (`akinciBoundaryVolume`) | **best row in the table**, 2.38e-2 |
+| as the particles' actual mass, so Eq. 14's density sum sees it too | **diverges at step 9** (`consistent`), and 1.82e-1 with `mdbcDensity` |
+
+**So the faithful reading of the paper is the one that fails here, and the
+reason is the deviation this codebase already made.** Akinci's correction
+assumes a *one-layer* boundary, where the single layer must stand in for the
+whole solid half-space. `randomFlow.BOUNDED_BAND = 5` samples five layers, so
+the volume behind the interface is already represented by real particles;
+adding the correction to the density double-counts it, the fluid sees a
+~15% phantom compression at the wall on step 0, and the solver tears the
+configuration apart in nine steps. Confined to the operator, the same factor is
+not a density claim at all — it just weights the wall more heavily in `A` and
+`alpha`, i.e. a stiffer wall — and that is worth 17%.
+
+`akinciBoundaryVolume` therefore ships default-off and is **not** presented as
+"the paper's convention": it is the paper's factor applied only where this
+codebase's thick band lets it be applied.
+
+### Same CFL entanglement as everything else in Parts 8-9
+
+At the shipped `cflFactor=0.3` (3x [BK]'s published limit) all three die:
+
+| configuration | steps | t_final | `rho` range | `｜rho-1｜` 2nd half |
+|---|---|---|---|---|
+| `mdbcDensity` + `full` | 258 | 5.535 | [0.139, 2.452] | 5.38e-1 |
+| `consistent` | 90 | 1.557 | [0.842, 1.241] | 9.25e-2 |
+| `consistent` + `akinciBoundaryVolume` | 184 | 3.677 | [0.894, 1.139] | 3.50e-2 |
+
+Fewer steps, far tighter density — the same shape Part 9 measured for
+`staticBoundary` and Part 8 for `minShift`. **The list of changes that are
+better at the published CFL and worse at 3x it is now four long**
+(`cflFactor=0.1`, `ShiftPressureGauge.minShift`, `BoundaryOperatorTerms.
+staticBoundary`, `BoundaryPressureMode.consistent`), and they all point the
+same way: the timestep default is what is holding the rest back.
+
+### Status
+
+Nothing shipped moves: `BoundaryPressureMode.mdbcDensity` is still the default,
+`consistent` is a new opt-in value, `akinciBoundaryVolume` defaults False, and
+the full suite passes. `solveIncompressible`/`solveDivergenceFree` are now thin
+wrappers around `_solveIncompressibleImpl`/`_solveDivergenceFreeImpl` so the
+boundary-state substitution can be scoped to the solve; every other mode passes
+straight through.
+
+One latent bug found and fixed while building this: `akinciBoundaryMass`'s
+`BoundaryToBoundary` kernel sum is zero for fluid and ghost rows, and
+`rho0 / 0` is a mass large enough to end a simulation. It never reached a
+neighbour sum — `OperationDirection.AllToAll` and the default
+`TrueAllToToAll` both exclude `kind == 2`, and fluid rows keep their own mass —
+but it is now a fallback to the nominal mass rather than a landmine.
+
+Open:
+
+1. **The four-way default change.** `cflFactor=0.1` + `minShift` +
+   `staticBoundary` + `consistent` are each individually better at the
+   published CFL. Nobody has run them together, and that is now the single
+   highest-value experiment in this document.
+2. **`consistent` makes `BoundaryPressureMode` mostly moot.** If it lands,
+   `mdbcMlsPressure` has no measured case for existing (worst row here, and the
+   feedback loop Part 2 had to damp with `mdbcPressureRelaxation` is a direct
+   consequence of holding boundary pressure as state, which the paper's
+   formulation does not do). It should be deprecated rather than kept as a
+   tuning knob.
+3. **Eq. 35, two-way coupling, is absent** and unrelated to any of the above:
+   `integrateRigidBody(rigidBody, 0, 0, dt)` never applies a fluid pressure
+   force to a body. Every case here has static walls, so nothing is wrong
+   today, but a moving-body case would silently get one-way coupling.

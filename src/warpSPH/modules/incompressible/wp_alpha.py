@@ -6,8 +6,12 @@ density residual into a pressure update.
 `areaI/mi * |sum_j V_j gradW_ij|^2 + areaI * sum_j (V_j^2/mj) |gradW_ij|^2`
 (apparent-area-weighted, gather support mode), matching the IISPH `a_ii`
 term; callers divide the pressure residual by this value each Jacobi
-iteration. Contains an unused, commented-out Barecasco free-surface detector
-left over from an earlier version of this file.
+iteration. `includeBoundaryReaction=False` restricts the *second* sum to
+`kind == 0` neighbours, which is what the published formulations do (a static
+boundary particle takes no reaction force, so `dp_i/dx_j` does not exist for
+it) -- see `BoundaryOperatorTerms`; the first sum always runs over everything.
+Contains an unused, commented-out Barecasco free-surface detector left over
+from an earlier version of this file.
 """
 
 import warp as wp
@@ -84,6 +88,10 @@ def computeAlpha_Func_i_first(
     
     # Viscosity function parameters
     areaI: scalar_t, referenceApparentAreas: wp.array(dtype = scalar_t), # type: ignore
+    # Whether a static (kind != 0) neighbour contributes to the second sum,
+    # i.e. to its own reaction against `i`'s pressure -- see
+    # `BoundaryOperatorTerms`. 1 = historical AllToAll, 0 = fluid neighbours only.
+    boundaryReactionTerm: wp.int32, # type: ignore
     # The output value is returned directly from the function, and should
 
     # Dummy value to allow allocation
@@ -124,7 +132,11 @@ def computeAlpha_Func_i_first(
         term2 = volumeJ * volumeJ / mj * gradw_ij2
 
         sumA += term1
-        sumB += term2
+        # `j` static (`kind != 0`) means `F^p_{j<-i} = 0`: it never accelerates
+        # under `i`'s pressure, so its `dp_i/dx_j` term does not exist ([BK]
+        # 3.2). The first sum (`dp_i/dx_i`) keeps it either way.
+        if boundaryReactionTerm != 0 or kj == 0:
+            sumB += term2
             
     # alpha = areaI / mi * wp.dot(sumA, sumA) + areaI * sumB
     # alpha = areaI * sumB
@@ -149,7 +161,8 @@ def computeAlpha_Func_Adjacency_first(
 
     kernelProperties: kernelState, 
 
-    queryApparentAreas: wp.array(dtype = scalar_t), referenceApparentAreas: wp.array(dtype = scalar_t) # type: ignore
+    queryApparentAreas: wp.array(dtype = scalar_t), referenceApparentAreas: wp.array(dtype = scalar_t), # type: ignore
+    boundaryReactionTerm: wp.int32, # type: ignore
 ):
     xi, hi, mi, rhoi, ki = getParticle(queryState, i)
     if kernelProperties.operationMode != wp.static(OperationDirection.TrueAllToToAll.value):
@@ -194,7 +207,8 @@ def computeAlpha_Func_Adjacency_first(
             useCRK, Ai, Bi, gradA_i, gradB_i,
 
             # Viscosity function parameters
-            areaI, referenceApparentAreas
+            areaI, referenceApparentAreas,
+            boundaryReactionTerm
         )
         alpha = areaI / mi * wp.dot(sumA, sumA) + areaI * sumB
         out += alpha
@@ -213,6 +227,7 @@ def computeAlpha_Kernel(
     kernelProperties: kernelState,
     # Do not change the parameters above
     queryApparentAreas: wp.array(dtype = scalar_t), referenceApparentAreas: wp.array(dtype = scalar_t), # type: ignore
+    boundaryReactionTerm: wp.int32, # type: ignore
 
     # The last parameter is always the output array and should not be changed
     outputValues: wp.array(dtype = scalar_t) # type: ignore
@@ -231,6 +246,7 @@ def computeAlpha_Kernel(
         kernelProperties,  #queryKinds, referenceKinds,
         # The parameters above are default parameters and shold not be changed
         queryApparentAreas, referenceApparentAreas,
+        boundaryReactionTerm,
     )
 
     outputValues[i] = alpha
@@ -247,6 +263,7 @@ _ALPHA = OperatorSpec(
     extras=(
         ExtraSpec("queryApparentAreas", ExtraKind.TENSOR),
         ExtraSpec("referenceApparentAreas", ExtraKind.TENSOR),
+        ExtraSpec("boundaryReactionTerm", ExtraKind.SCALAR),
     ),
 )
 
@@ -257,6 +274,7 @@ def computeAlphaWarp(
     domain: DomainDescription,
 
     queryApparentAreas: torch.Tensor, referenceApparentAreas: Optional[torch.Tensor] = None,
+    includeBoundaryReaction: bool = True,
 
     queryVolumes: Optional[torch.Tensor] = None, referenceVolumes: Optional[torch.Tensor] = None,
     adjacency: Optional[Union[AdjacencyList, CompactHashMap]] = None, # if none a datastructure is created for EVERY operation!,
@@ -294,6 +312,7 @@ def computeAlphaWarp(
             return launchOperator(
                 _ALPHA, ctx,
                 queryApparentAreas=queryApparentAreas, referenceApparentAreas=referenceApparentAreas,
+                boundaryReactionTerm=wp.int32(1 if includeBoundaryReaction else 0),
             )
 
 
@@ -312,7 +331,7 @@ def computeAlphaWarp(
     # return warp_result
 
 
-def computeAlpha(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], apparentVolumes: torch.Tensor) -> torch.Tensor:
+def computeAlpha(currentState: Any, config: SimulationConfig, schemeConfig: Any, adjacency: Optional[Union[AdjacencyList, CompactHashMap]], apparentVolumes: torch.Tensor, includeBoundaryReaction: bool = True) -> torch.Tensor:
     with record_function("[warpSPH] - computeDensities"):
         dt = config.dt
         alpha = computeAlphaWarp(
@@ -326,6 +345,7 @@ def computeAlpha(currentState: Any, config: SimulationConfig, schemeConfig: Any,
             adjacency=adjacency,
 
             queryApparentAreas=apparentVolumes,
+            includeBoundaryReaction=includeBoundaryReaction,
         )
         # return alpha
         return - alpha
