@@ -44,10 +44,12 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--nx', type=int, default=128)
 parser.add_argument('--nsteps', type=int, default=600)
-parser.add_argument('--cflFactor', type=float, default=0.1,
-                    help="0.1 matches Bender & Koschier's `dt <= 0.4 d/|v_max|` "
-                         "given n_h=4; 0.3 is the historical default (1.2 "
-                         "particle spacings per step). See Part 8 item 3.")
+parser.add_argument('--cflFactor', type=float, default=0.4,
+                    help="Bender & Koschier's `dt <= 0.4 d/|v_max|`, in their "
+                         "units -- since Part 12 `cflFactor` multiplies the "
+                         "particle diameter. Numbers recorded before Part 12 "
+                         "say 0.1, the same timestep under the old "
+                         "support-radius convention. See Part 8 item 3.")
 parser.add_argument('--solvers', nargs='*',
                     default=['relaxedJacobi', 'relaxedJacobi-clamp', 'minres', 'cg', 'bicgStab'],
                     help="'relaxedJacobi' uses the shipped ShiftPressureGauge "

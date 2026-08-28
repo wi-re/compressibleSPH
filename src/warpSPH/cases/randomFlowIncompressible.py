@@ -111,6 +111,10 @@ randomFlowIncompressibleCase = registerCase(Case(
     defaults=dict(
         WEAKLY_COMPRESSIBLE_DEFAULTS,
         caseName='06-randomFlowIncompressible',
+        # `kolmogorovIncompressibleTimestep` applies `cflFactor` to the
+        # particle diameter, so this is Bender & Koschier's published 0.4
+        # rather than the h-based 0.3 the weakly-compressible cases share.
+        cflFactor=0.4,
         nx=128,
         L=2.0,
         tLimit=10.0,

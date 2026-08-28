@@ -109,6 +109,10 @@ def initialConditions(ctx: RunContext, system) -> None:
 def kolmogorovIncompressibleTimestep(ctx: RunContext, state) -> float:
     """Advective + viscous CFL, no acoustic term -- DFSPH has no sound speed.
 
+    The advective term is Bender & Koschier's published condition
+    `dt <= 0.4 d / |v_max|` written in their units (`d` = particle diameter =
+    `dx`), so `cflFactor` is directly comparable with the 0.4 they state.
+
     `modules.timestep.computeTimestep`'s generic dispatcher only recognises
     `WeaklyCompressibleSystem`; every other system falls through to the fully
     compressible formula, which reads fields (`soundspeeds`, an EOS pressure)
@@ -127,7 +131,19 @@ def kolmogorovIncompressibleTimestep(ctx: RunContext, state) -> float:
     vMax = particles.velocities.norm(dim=1).max().item()
     nu = ctx.param('nu')
     kernelScale = float(sphKernelScale(ctx.config.kernel.value, ctx.config.dim))
-    dt_adv = ctx.config.cflFactor * h / max(vMax, 1e-3)
+    # The advective condition is Bender & Koschier's, in their units: `dt <=
+    # 0.4 * d / |v_max|` with `d` the particle *diameter*, i.e. the sampling
+    # spacing `dx`. This used to be written against the support radius
+    # instead (`cflFactor * h`), which is a different condition in two ways:
+    # it is `n_h` times larger (4x here, so the historical `cflFactor=0.3`
+    # allowed 1.2 spacings of travel per step, 3x the published limit), and it
+    # silently rescales with the neighbour count, so the same `cflFactor`
+    # meant different physics at different `n_h`. Written in `dx` the number
+    # in the config *is* the published constant and is resolution- and
+    # `n_h`-independent. See `DFSPH_IMPROVEMENT_PLAN.md` Part 12.
+    dt_adv = ctx.config.cflFactor * ctx.config.dx / max(vMax, 1e-3)
+    # The viscous limit stays in `h`: it is a diffusion condition over the
+    # smoothing length, not an advection condition over the particle spacing.
     dt_visc = 0.125 * h ** 2 / kernelScale / nu if nu > 0 else float('inf')
     return float(min(max(min(dt_adv, dt_visc), ctx.config.minDt), ctx.config.maxDt))
 
@@ -183,7 +199,9 @@ kolmogorovIncompressibleCase = registerCase(Case(
         tLimit=10.0,
         dt=1e-3,
         adaptiveDt=True,
-        cflFactor=0.3,
+        # Bender & Koschier's published constant, now that `cflFactor`
+        # multiplies the particle diameter rather than the support radius.
+        cflFactor=0.4,
         minDt=1e-7,
         maxDt=1e-1,
     ),

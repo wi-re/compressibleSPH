@@ -46,10 +46,12 @@ parser.add_argument('--case', default='randomFlowIncompressible')
 parser.add_argument('--extra', nargs='*', default=['--bounded'],
                     help="extra argv forwarded to the case")
 parser.add_argument('--nx', type=int, default=128)
-parser.add_argument('--cflFactor', type=float, default=0.1,
-                    help="0.1 is [BK]'s published limit re-expressed for this "
-                         "codebase's h-based CFL (Part 8 item 3); the shipped "
-                         "default 0.3 is 3x it")
+parser.add_argument('--cflFactor', type=float, default=0.4,
+                    help="[BK]'s published constant, in their units -- since "
+                         "Part 12 `cflFactor` multiplies the particle diameter. "
+                         "Numbers recorded before Part 12 say `cflFactor=0.1`, "
+                         "which was the same timestep under the old "
+                         "support-radius convention")
 # --mode diag
 parser.add_argument('--warmup', type=int, default=120,
                     help="steps before probing, so the configuration is developed")

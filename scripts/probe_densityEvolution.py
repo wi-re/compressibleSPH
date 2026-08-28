@@ -28,7 +28,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--case', default='randomFlowIncompressible')
 parser.add_argument('--extra', nargs='*', default=['--bounded'])
 parser.add_argument('--nx', type=int, default=128)
-parser.add_argument('--cflFactor', type=float, default=0.1)
+parser.add_argument('--cflFactor', type=float, default=0.4,
+                    help="0.4 is Bender & Koschier's published constant, and since Part 12 `cflFactor` multiplies the particle diameter, so the number here is theirs. Numbers recorded in DFSPH_IMPROVEMENT_PLAN.md before Part 12 say `cflFactor=0.1`, which was the same timestep under the old support-radius convention")
 parser.add_argument('--nsteps', type=int, default=900)
 parser.add_argument('--every', type=int, default=10,
                     help="steps between true-density recomputations")
