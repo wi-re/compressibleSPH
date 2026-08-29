@@ -255,6 +255,9 @@ for i in range(args.maxSteps):
     fluid = s.kinds == 0
     rho = s.densities[fluid]
     v = s.velocities[fluid].norm(dim=-1)
+    # Kinetic energy, because `vMax` is one particle and the question these
+    # modes differ on is whether the *flow* is being damped (Part 18).
+    ke = float(0.5 * (s.masses[fluid] * v ** 2).sum())
     d = depths(s)[fluid]
     err = (rho - 1.0).abs()
     finite = bool(torch.isfinite(rho).all() and torch.isfinite(v).all())
@@ -266,7 +269,7 @@ for i in range(args.maxSteps):
             rhoMin=rho.min().item(), rhoMax=rho.max().item(),
             errMean=err.mean().item(),
             worstDepth=d[worst].item() / dx, worstErr=err[worst].item(),
-            vMax=v[fastest].item(), fastDepth=d[fastest].item() / dx,
+            vMax=v[fastest].item(), fastDepth=d[fastest].item() / dx, ke=ke,
             nOutside=int((d < 0).sum().item()),
             # `errMean` split at 2 particle spacings from the wall: is the
             # error wall-localized or bulk?
@@ -306,7 +309,7 @@ for snapIdx in ([0, -1] if len(snapshots) > 1 else [0]):
               f"{v_[m].mean().item():9.4f}")
 
 cols = ['step', 't', 'dt', 'rhoMin', 'rhoMax', 'errNear', 'errFar',
-        'vMax', 'nOutside', 'PS.shiftDx', 'PS.shiftDepth', 'PS.pMax',
+        'vMax', 'ke', 'nOutside', 'PS.shiftDx', 'PS.shiftDepth', 'PS.pMax',
         'DF.pMax', 'DF.aMax']
 cols = [c for c in cols if any(c in r for r in rows)]
 hdr = ''.join(f'{c:>11}' for c in cols)

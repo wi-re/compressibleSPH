@@ -92,7 +92,15 @@ or a real advection term, and which one is unmeasured. What *does* separate the
 modes on the shear wave is the other axis — the position shift carries 1.8x the
 volume error and 2.4x the wall time. See §4, Part 16.
 
-**And the `tgv` number itself is withdrawn (Part 17).** The 3.2x/3.4x does not
+**Confirmed on the bounded case, at 2.1x (Part 18).** At a pinned `dt` on the
+inviscid bounded case — where this scheme has no artificial viscosity, so all
+loss is numerical — the velocity modes retain 41% of the initial kinetic energy
+at t=6 against the position shift's 81%. That is what this section claims, and
+it is the measurement that justifies the default: they buy 2x lower density
+error for 2.1x the energy loss, with **identical** wall behaviour (zero
+particles past the wall for all three modes, over 1201 steps).
+
+**But the `tgv` number is still withdrawn (Part 17).** The 3.2x/3.4x does not
 reproduce: at `tgv`'s own default resolution the three modes' decay ratios are
 0.615 / 0.693 / 0.674, within 12% of each other, and the velocity modes' ratio
 moves by 2x between nx=128 and nx=256 while `positionShift` holds 0.58-0.62
@@ -455,8 +463,19 @@ Kept because each was acted on or nearly acted on.
    observation it accompanied — that their decay is non-monotone — reproduces
    everywhere and is the part worth keeping. The bounded half of the same
    comparison (§6's table) is superseded for a different reason: it was taken
-   at the legacy CFL. See Part 17.
-15. **"The knee is at about 0.2 and the published 0.4 is not near it"**
+   at the legacy CFL. See Part 17. **The underlying claim is nevertheless
+   right** — Part 18 measures the velocity modes losing 59% of an inviscid
+   flow's kinetic energy against the default's 19%. It was the number and the
+   mechanism that were wrong, not the conclusion.
+15. **"`positionAndVelocity` has a 5x larger worst-case density excursion"**
+   (Part 17) — **retracted, and it was my own protocol error.** The three modes
+   were compared at the case's *adaptive* `dt`, so they ran at three different
+   timesteps: the velocity modes damp the flow, the CFL condition hands a
+   slower flow a larger `dt`, and the excursion followed from the timestep. At
+   pinned `dt` `positionAndVelocity` has the *lowest* max `rho` of the three.
+   `probe_boundedIncompressibleBlowup.py`'s docstring requires a fixed `dt` for
+   exactly this comparison and the requirement was not followed. See Part 18.
+16. **"The knee is at about 0.2 and the published 0.4 is not near it"**
    (Part 12) — **retracted.** True at the shipped boundary configuration, and
    an artifact of it: the 2.83x that a halved timestep bought was the near-wall
    band, and once the band is gone halving buys 1.17x. The sweep's own numbers
@@ -925,6 +944,12 @@ about the average. `positionShift` is monotone everywhere.
 | `positionAndVelocity` | **3.0074e-3** | **1.0033** | [0.9865, 1.0367] | **7.566** | 124.6 |
 | `inStepVelocity` | 1.2753e-2 | 1.012 | [0.9866, 1.0202] | 7.449 | 202.8 |
 
+> **Superseded in part by Part 18.** Every row here is at the case's *adaptive*
+> `dt`, so the three modes ran at three different timesteps — the velocity modes
+> damp the flow, and the CFL condition then hands them a larger `dt`. The
+> excursion column below is a consequence of that, not of the modes. Part 18
+> redoes this at a pinned `dt`.
+
 "Sustained" is `max rho` sampled at deciles of the run; it is quoted because the
 two summaries disagree for `positionAndVelocity`, and the disagreement is the
 information. Its worst-ever `rho` is 1.0367 against the default's 1.0071 — 5x
@@ -965,6 +990,60 @@ been pointed at these three modes at the current defaults.
 **What has changed is the argument, not the setting.** §1.2's mechanism claim
 and §6's 3.2x are both withdrawn; the case for `positionShift` now rests on
 energy monotonicity and tail behaviour, which is narrower and honest.
+
+### The tail, measured — and `ShiftApplication` settles (Part 18, `probe_boundedIncompressibleBlowup.py`)
+
+**The default is right, and for the first time the reason survives scrutiny.**
+Part 17 left it resting on two worst-case properties, one of which turns out to
+be an artifact of Part 17's own protocol. Both are now measured, at a **pinned
+`dt`** — which the probe's own docstring has always required for an A/B whose
+variants change the velocity field, and which Part 17's bounded table did not
+use.
+
+nx=128, `dt = 5e-3` fixed, to t=6.0 (1201 steps), published CFL configuration,
+Part 14 defaults. `randomFlowIncompressible` has `nu = 0` and this scheme has no
+artificial viscosity term, so **every joule lost below is numerical**.
+
+| mode | `KE(6)/KE(0)` | mean `\|rho-1\|` near wall | in bulk | max `rho` | **particles past the wall** |
+|---|---|---|---|---|---|
+| `positionShift` *(default)* | **0.807** | 1.186e-3 | 8.95e-4 | 1.004 | **0** |
+| `positionAndVelocity` | 0.409 | **5.89e-4** | **5.33e-4** | **1.003** | **0** |
+| `inStepVelocity` | 0.412 | 7.17e-4 | 6.02e-4 | 1.009 | **0** |
+
+**1. Nobody penetrates.** `nOutside` is 0 at every one of 1201 steps for all
+three modes. §6's legacy table — 4506 / 239 / 63 particles inside the wall — was
+the whole case for the velocity modes, and it was taken at the legacy CFL where
+`positionShift` was in the act of dying. At the published CFL with the Part 14
+defaults **there is no penetration for any mode to prevent**, so the argument
+that motivated them is not weakened but void.
+
+**2. The velocity modes cost half the flow's energy.** They retain 41% of the
+initial kinetic energy at t=6 against the default's 81% — **2.1x the loss**, on
+an inviscid case where the exact answer is that energy is conserved. This is
+§1.2's claim, confirmed on the case that can show it, and it is large: not a
+3.3x factor on a fitted decay rate but 59% of the flow simply gone.
+
+**3. What they buy is 2x lower density error** — 5.9e-4 against 1.2e-3 near the
+wall, 5.3e-4 against 9.0e-4 in the bulk. Real, and small in absolute terms:
+both are a tenth of a percent.
+
+**So the trade is stated exactly: half the flow's kinetic energy for half the
+density error, with the wall behaviour identical.** That is not a trade worth
+taking. A scheme that dissipates 59% of an inviscid flow in six time units is
+not better than one that dissipates 19% and carries 0.1% density error instead
+of 0.06%. `positionShift` stays, and now on a measurement rather than on §6's
+withdrawn 3.2x.
+
+**Correction to Part 17.** Its bounded table reported `positionAndVelocity`
+reaching `rho = 1.0367` against the default's 1.0071 — a "5x larger worst-ever
+excursion", which was half the stated reason for keeping the default. **That was
+the adaptive timestep, not the mode.** At pinned `dt` its max `rho` over the
+whole run is 1.003, the *lowest* of the three. The mechanism is visible in the
+`vMax` column: the velocity correction damps the flow, the CFL condition hands a
+slower flow a *larger* `dt`, and the excursion came from that larger timestep.
+Part 17 compared three modes at three different timesteps and read the
+difference as a property of the modes. The probe's docstring warned about
+exactly this; the warning was not heeded.
 
 ### Open items, ranked
 
@@ -1262,7 +1341,7 @@ All are round-tripped through `incompressibleConfigToDict` /
 | `akinciBoundaryVolume` | `False` | `consistent` only. Measured `m~/m_nominal` mean 1.102, max 1.456 on the five-layer band. Best row in the table *inside the operator*; fatal as actual mass (§2). |
 | `shiftPressureGauge` | **`minShift`** | The Part 4 fix. `nonNegativeClamp` is the historical clamp and stays selectable. Scoped to solves with **no free surface** — Part 14 dropped the pinned-row half of that scoping, which is what makes it reach the bounded case at all. |
 | `forceShiftPressureGauge` | `False` | Bypasses what is left of that scoping, i.e. the free-surface half — the half nobody has measured. Its original target, the pinned-row half, is gone: half that guard's justification measured false (§1.5) and the other half's evidence was taken at 3x the CFL (§3.6). |
-| `shiftApplication` | `positionShift` | The paper-faithful default, and the one open question left about the scheme. Its quantitative justification (3.2x `tgv` dissipation for the velocity modes) was **withdrawn** in Part 17 — it does not reproduce and the statistic is resolution-dependent. What holds it in place now is narrower: energy monotonicity on `tgv`, and a 5x smaller worst-case density excursion on the bounded case. `positionAndVelocity` is better on every *sustained* metric at equal cost; `inStepVelocity` is out (2.8x the bounded band, 63% more wall time). |
+| `shiftApplication` | `positionShift` | The paper-faithful default, and **settled in Part 18**: at a pinned `dt` the velocity modes buy 2x lower density error for **2.1x the kinetic-energy loss** on an inviscid case (41% retained against 81%), and the wall behaviour that used to justify them is identical — zero particles past the wall for all three modes. Its old justification (3.2x `tgv` dissipation) was withdrawn in Part 17 as unreproducible and resolution-dependent. |
 | `densityEvolution` | `summation` | `continuity` (WCSPH standard) fails everywhere but `tgv`; `hybrid` matches `summation` exactly where support is complete, for ~21% less wall time on `tgv`, and dies at 286 steps at an mDBC wall (§4 item 7). |
 | `mdbcPressureRelaxation` | `0.3` | Load-bearing for `mdbcMlsPressure` — at 1.0 it NaNs in 7-8 steps. Never swept; chosen to match the solver's own `relaxationFactor`. |
 | `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). |
@@ -1369,6 +1448,11 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   `nSteps` is absent, so a step cap silently converts a time-matched sweep into
   a step-matched one, which is the comparison the mode exists to avoid.
 - `probe_boundedIncompressibleBlowup.py` — step-by-step wall penetration,
+  now with kinetic energy (`ke`) alongside `vMax`, since `vMax` is one particle
+  and the `ShiftApplication` question is whether the *flow* is damped.
+  **`--fixedDt` is mandatory for any A/B that changes the velocity field** —
+  the CFL hands a damped flow a larger `dt`, and Part 17 read that as a
+  property of the modes.
   per-step worst particle, wall-depth density profile. Knobs for everything
   that turned out not to matter, so they stay cheap to re-check: `--mode`,
   `--noPenShift`, `--shiftCap`, `--cflFactor`, `--case randomFlow` for the
@@ -1439,6 +1523,7 @@ One line each, for locating the full write-up in git history.
 | 11 | 08-28 | [BWJ23] — the derivation behind Part 9. `BoundaryPressureMode.consistent`, the best configuration measured. |
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
+| 18 | 08-29 | The tail measured, and `ShiftApplication` settles (§4). At a pinned `dt`: **zero** wall penetration for all three modes, so §6's whole case for the velocity modes is void; and the velocity modes cost **2.1x** the kinetic energy of an inviscid flow for 2x lower density error. The default stays, on a measurement. Part 17's excursion claim was my own adaptive-`dt` artifact and is retracted. |
 | 17 | 08-29 | `ShiftApplication` re-measured at the current defaults (§4). The 3.2x that justified the shipped default does not reproduce — at `tgv`'s own nx=256 the three modes agree to 12%, and the ratio moves 2x with resolution, so it cannot be the resolution-independent residual §1.2 blames. `positionAndVelocity` is better on every sustained metric at equal cost; the default stays on tail behaviour and energy monotonicity. |
 | 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
 | 15 | 08-29 | The stopping criterion (§1.7). It was the wrong suspect: the periodic cases terminate in 3 iterations, the floor changes nothing, and the constant-density solve does not converge in any norm — it integrates, so `maxIterations` is a gain. The criterion is now one configurable setting across all three loops; no default changed. |
@@ -1683,36 +1768,56 @@ Full tables in §4. The short version:
   on the number that used to justify it. Flipping it on a 1.5x mean improvement
   that carries a 5x worse tail is not the trade this project has been making.
 
+### Part 18, the tail — `ShiftApplication` settles
+
+Full tables in §4. At a pinned `dt` (which Part 17 failed to use, and which the
+probe's docstring has always required for this comparison):
+
+- **Zero wall penetration for all three modes**, at every one of 1201 steps.
+  §6's legacy table — 4506 / 239 / 63 particles inside the wall — was the whole
+  case for the velocity modes and was taken at the legacy CFL. At the published
+  CFL with the Part 14 defaults there is nothing for them to prevent.
+- **The velocity modes cost 2.1x the kinetic energy**: 41% retained at t=6
+  against the default's 81%, on an inviscid case with no artificial viscosity,
+  so all of it is numerical.
+- **What they buy is 2x lower density error**, 5.9e-4 against 1.2e-3 near the
+  wall — real, and a tenth of a percent either way.
+- **So `positionShift` stays**, and the reason is now a measurement rather than
+  §6's withdrawn 3.2x: half the flow's energy is not worth half the density
+  error.
+- **Part 17's "5x worse excursion" is retracted as my own protocol error** —
+  three modes compared at three different timesteps, because the velocity modes
+  damp the flow and the CFL then hands them a larger `dt`.
+
 ### What is left, in order
 
 1. ~~**Land the defaults.**~~ ~~**The `cflFactor` question.**~~ ~~**Fix the
-   stopping criterion.**~~ ~~**Port the shear-wave case.**~~ ~~**Re-measure
-   `ShiftApplication`.**~~ **Done — Parts 14 through 17.**
-2. **Decide `ShiftApplication` on the tail, which is the one thing nobody has
-   measured.** Part 17 leaves the default resting on two worst-case properties,
-   and only one of them is checkable today: whether `positionAndVelocity`'s
-   transient density excursions on the bounded case are the start of the wall
-   accumulation that killed the legacy-CFL runs, or noise on an otherwise
-   better run. `probe_boundedIncompressibleBlowup.py` reports penetration count
-   and worst depth per step and has never been pointed at the three modes at
-   the current defaults. That is a single afternoon and it closes the last open
-   question about the scheme itself.
-3. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
-   remainder). Blocked on the paper, not on a run — see `literature/MANIFEST.md`.
-4. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15). It
+   stopping criterion.**~~ ~~**Port the shear-wave case.**~~ ~~**Settle
+   `ShiftApplication`.**~~ **Done — Parts 14 through 18.** Every question this
+   document opened about the *scheme* is now either answered or explained.
+2. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
+   remainder). Blocked on the paper, not on a run — `literature/MANIFEST.md`
+   has the arrangement and the sync procedure.
+3. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15). It
    converges, so this is the ordinary [BK] optimisation and is unblocked. Do
-   **not** warm-start the constant-density solve.
-5. **Re-measure the divergence-free half-state's contraction** under `minShift`
+   **not** warm-start the constant-density solve: it integrates, and a warm
+   start would carry the ramp across steps.
+4. **Re-measure the divergence-free half-state's contraction** under `minShift`
    (§4 item 3) — no longer blocking anything, still the one mechanism here that
    was observed and never explained.
-6. **Then** the rename and the scheme split, carrying Part 15's warning: DFSPH
-   proper puts the constant-density solve into the momentum equation, where an
-   amplitude set by an iteration count becomes a force set by an iteration
-   count.
+5. **The rename** (§4 item 10, `dfsph.py` → `vdps.py`), which is zero-risk and
+   has been waiting on everything else.
+6. **The scheme split** (§4 item 11) — the only remaining item that is new
+   construction rather than repair, and the one Part 15's finding bears on
+   hardest: DFSPH proper puts the constant-density solve into the momentum
+   equation, where an amplitude set by an iteration count becomes a force set
+   by an iteration count.
 
 ### What is next, concretely
 
-Do 2. It is the last thing standing between this document and a settled scheme,
-it is cheap, and Part 17 has narrowed it to a single question with an existing
-tool pointed at it. Everything after that is either blocked on a paper or is
-new construction rather than repair.
+Do 3. It is the last item that is both unblocked and worth real time: [BK]
+reports ~3x fewer iterations from a warm start, this codebase does none, and
+Part 15 established exactly which of the two solves can safely take one. After
+that the list is a paper (2), a curiosity (4), a rename (5), and a new scheme
+(6) — and 6 should not start until somebody decides whether a formulation that
+puts a non-converging solve into momentum is worth building at all.
