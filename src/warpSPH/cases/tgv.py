@@ -9,13 +9,13 @@ zero-byte `dfsph.py` / `dfsph_step.py` -- the real step function comes from
 
 from __future__ import annotations
 
-import sys
 from typing import Any, Dict
 
 import numpy as np
 import torch
 
-from ..modules import computeDensities, shuffleParticles
+from ..caseUtils.incompressible import relaxLattice
+from ..modules import computeDensities
 from ..runner import Case, RunContext, caseMain, registerCase
 from ..sample.weaklyCompressible import setupBasicWeaklyCompressibleInitialState
 from .plotting import Field, particlePlot
@@ -59,7 +59,11 @@ def buildSystem(ctx: RunContext):
 
 
 def initialConditions(ctx: RunContext, system) -> None:
-    _relax(ctx, system)
+    # A perfectly regular lattice is an unstable equilibrium for SPH; relaxing
+    # it first is what keeps the early trajectory free of lattice noise. Shared
+    # with `shearWave` -- see `caseUtils/incompressible.py`.
+    relaxLattice(ctx, system, ctx.param('relaxSteps'), ctx.param('relaxDt'),
+                 ctx.param('jitter'))
 
     k = ctx.param('k')
     uMag = ctx.param('uMag')
@@ -73,56 +77,6 @@ def initialConditions(ctx: RunContext, system) -> None:
         uMag * torch.cos(kTgv * positions[:, 0] + phase) * torch.sin(kTgv * positions[:, 1] + phase))
     system.state.velocities[:, 1] = (
         -uMag * torch.sin(kTgv * positions[:, 0] + phase) * torch.cos(kTgv * positions[:, 1] + phase))
-
-
-def _relax(ctx: RunContext, system) -> None:
-    """Jitter then pressure-relax the lattice, so the IC is not perfectly regular.
-
-    A perfectly regular lattice is an unstable equilibrium for SPH; relaxing it
-    first is what keeps the early trajectory free of lattice noise.
-    """
-    steps = ctx.param('relaxSteps')
-    if not steps:
-        return
-
-    from warpSPHCore import SupportScheme, buildVerletList
-    from ..modules import solveIncompressible
-
-    state = system.initializeNewState()
-    state.state.positions = shuffleParticles(state.state, ctx.config, ctx.schemeConfig, 0,
-                                             jitterAmount=ctx.param('jitter'))
-    state.state.velocities = torch.zeros_like(state.state.velocities)
-
-    adjacency = None
-    dt = ctx.param('relaxDt')
-    # `progress` is tri-state (None = auto), so resolve it the same way the
-    # runner's own loop does rather than treating None as false.
-    showProgress = ctx.spec.progress
-    if showProgress is None:
-        showProgress = sys.stderr.isatty()
-    for _ in _maybeProgress(range(steps), showProgress and not ctx.spec.quiet, 'relaxing'):
-        adjacency = buildVerletList(state.state, ctx.config.domain, verletScale=1.4,
-                                    supportMode=SupportScheme.SuperSymmetric,
-                                    priorNeighborhood=adjacency, verbose=False)
-        state.state.densities = computeDensities(state.state, ctx.config, ctx.schemeConfig, adjacency)
-        state.state.pressures[:] = 0.0
-        accel, _, _, _ = solveIncompressible(
-            particles=state.state, config=ctx.config, schemeConfig=ctx.schemeConfig,
-            adjacency=adjacency,
-            dvdt=torch.zeros_like(state.state.velocities), dt=dt, verbose=False)
-        state.state.positions = state.state.positions + dt * dt * accel
-
-    system.state.positions = state.state.positions.clone()
-
-
-def _maybeProgress(iterable, enabled, description):
-    if not enabled:
-        return iterable
-    try:
-        from tqdm.autonotebook import tqdm
-    except ImportError:
-        return iterable
-    return tqdm(iterable, desc=description, leave=False)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:

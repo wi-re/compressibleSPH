@@ -36,6 +36,12 @@ def tgvResult():
 
 
 @pytest.fixture(scope='module')
+def shearWaveResult():
+    from warpSPH.cases.shearWave import shearWaveCase
+    return _run(shearWaveCase, nx=32)
+
+
+@pytest.fixture(scope='module')
 def dambreakResult():
     from warpSPH.cases.dambreak import dambreakCase
     return _run(dambreakCase, nx=48)
@@ -333,6 +339,44 @@ def test_tgvKineticEnergyIsMonotoneDecreasing(tgvResult):
 
 def test_tgvDoesNotDiverge(tgvResult):
     assert not tgvResult.diverged
+
+
+# --- Shear wave: an exact solution with a constant pressure -----------------
+
+def test_shearWaveHoldsItsAmplitude(shearWaveResult):
+    """At `nu = 0` the analytic answer is that nothing happens.
+
+    `u_x = u0 sin(k_w y)`, `u_y = 0` makes both nonlinear terms vanish
+    identically -- `(u . grad) u = u_x d_x u_x e_x = 0` since `u_x` depends only
+    on `y` -- so the exact solution is stationary and its pressure is constant.
+    Any loss of amplitude is therefore numerical dissipation and nothing else,
+    which is the property the case exists to measure (`cases/shearWave.py`).
+
+    The band is loose because this is 20 steps at nx=32: the point is to catch
+    the amplitude *collapsing* or *growing*, i.e. the pressure solve feeding
+    energy into or out of a flow it should not touch at all. Production
+    resolutions hold it far tighter -- see `DFSPH_IMPROVEMENT_PLAN.md` Part 16.
+    """
+    amplitude = shearWaveResult.series('amplitudeRatio')
+    assert amplitude[0] == pytest.approx(1.0, abs=1e-3)
+    assert np.all(np.abs(np.array(amplitude) - 1.0) < 0.05)
+
+
+def test_shearWaveKeepsTheExactSolutionsZeroTransverseVelocity(shearWaveResult):
+    """`u_y = 0` exactly, for all time. What appears there is solver artifact."""
+    transverse = shearWaveResult.series('transverseVelocity')
+    assert transverse[0] == pytest.approx(0.0, abs=1e-12)
+    assert max(transverse) < 0.1
+
+
+def test_shearWaveStaysIncompressible(shearWaveResult):
+    maxDensity = max(row['maxDensity'] for row in shearWaveResult.trajectory)
+    minDensity = min(row['minDensity'] for row in shearWaveResult.trajectory)
+    assert 0.99 < minDensity <= maxDensity < 1.01
+
+
+def test_shearWaveDoesNotDiverge(shearWaveResult):
+    assert not shearWaveResult.diverged
 
 
 # --- Dam break: weakly compressible, gravity driven -------------------------

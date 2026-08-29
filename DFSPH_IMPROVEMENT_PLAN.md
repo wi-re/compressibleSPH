@@ -79,6 +79,19 @@ state the same conclusion from the other direction: their abstract says "the DI
 source term suffers from significant artificial viscosity", and their Fig. 3
 measures it.
 
+**Narrowed by Part 16.** The `tgv` measurement is real and reproduces, but the
+mechanism above does not explain it on its own. On the `shearWave` case — an
+exact solution whose pressure is *constant*, so there is no pressure error and
+no advection to conflate with dissipation — **all three `ShiftApplication`
+modes dissipate identically**, to 0.1% at `nu = 0.01`, and at `nu = 0` the
+position shift is the **most** dissipative of the three. So "applied to
+velocity the residual is a permanent unphysical forcing" cannot be asserted as
+a general property of the modes: on a flow with no pressure gradient it costs
+nothing measurable. Whatever drives `tgv`'s 3.3x requires a real pressure field
+or a real advection term, and which one is unmeasured. What *does* separate the
+modes on the shear wave is the other axis — the position shift carries 1.8x the
+volume error and 2.4x the wall time. See §4, Part 16.
+
 ### 1.3 This scheme is VD+PS, not a mis-named DFSPH
 
 `dfsph_step` + `IncompressibleSystem.finalize` implement Cornelis et al.'s
@@ -736,6 +749,109 @@ constant-density solve is an integrator, so warm-starting it would carry a
 constant-density solve into the *momentum* equation, where an amplitude set by
 an iteration count becomes a force set by an iteration count.
 
+### The shear-wave case — ported, and what it says (Part 16, `cases/shearWave.py`)
+
+**Ported.** `shearWave` is registered, in the sweep, and carries four
+assertions in `tests/test_physics.py`. It is the first incompressible case here
+that grades this codebase against something other than itself.
+
+**Why this case and not another.** A transverse sinusoidal shear wave,
+`u_x = u0 sin(k_w y)`, `u_y = 0`, on a periodic box. Both nonlinear terms
+vanish identically — `(u . grad) u = u_x d_x u_x e_x = 0` because `u_x` depends
+only on `y`, and `div u = d_x u_x = 0` for the same reason — so
+
+    u_x(y, t) = u0 sin(k_w y) exp(-nu k_w^2 t),   p = const
+
+is exact for all time at any amplitude, **with zero pressure gradient**. `tgv`
+is also an exact solution, but one in which a real pressure field balances a
+real advection term, so a pressure error and a dissipation error are measured
+together there. Here the exact pressure is constant, so every pressure the
+solver produces is an artifact and every departure of the amplitude is
+dissipation. At `nu = 0` the exact answer is that nothing happens.
+
+**Four results.**
+
+**1. The scheme is not very dissipative on this flow, and it converges to a
+floor.** At `nu = 0`, `t = 1.0`, shipped defaults:
+
+| nx | amplitude | deficit | max `rho` | disorder | max `\|v_y\|` |
+|---|---|---|---|---|---|
+| 32 | 0.992480 | 7.52e-3 | 1.00359 | 4.54e-2 | 1.33e-1 |
+| 64 | 0.997221 | 2.78e-3 | 1.00324 | 2.45e-2 | 1.13e-1 |
+| 128 | 0.998602 | 1.40e-3 | 1.00375 | 1.48e-2 | 7.23e-2 |
+| 256 | 0.998942 | 1.06e-3 | 1.00361 | 9.64e-3 | 4.35e-2 |
+
+The amplitude deficit falls 2.7x, 2.0x, then only 1.32x — converging onto a
+floor near 1e-3 rather than to zero.
+
+**2. The volume error does not converge at all.** `max rho` is 1.0036 ± 0.0003
+across an **8x resolution range** — flat, while everything else improves.
+That is §1.1 reproduced from a completely different direction: the summation
+density's excess over `rho0` is set by how disordered the sampling is, not by
+how fine it is, so refinement cannot remove it. §1.1 argued this spectrally and
+demonstrated it with no dynamics at all (`probe_densityBiasVsDisorder.py`);
+this is the same statement measured in a running simulation with an exactly
+known answer.
+
+**3. The physical viscosity is applied at about half its prescribed value —
+independently confirming `tgv`'s 0.55x.** Graded against a *moving* target
+(nx=128, t=2.0, amplitude reported relative to `exp(-nu k_w^2 t)`, so 1.0 is
+exact at every `nu`):
+
+| `nu` | analytic decay | measured/analytic | implied decay-rate ratio | disorder |
+|---|---|---|---|---|
+| 0 | 1.000000 | 0.995140 | — (pure artifact) | 2.07e-2 |
+| 0.001 | 0.924012 | 1.040851 | **0.493** | 1.19e-3 |
+| 0.01 | 0.453600 | 1.501154 | **0.486** | 7.79e-3 |
+
+`tests/test_physics.py` asserts `tgv`'s kinetic energy decays at ~0.55x the
+analytic rate and explains it as the Monaghan viscosity switch — viscosity is
+deactivated for separating pairs, so roughly half the pairs dissipate at any
+instant. **That explanation now has a second, independent measurement behind
+it**: 0.49 on a flow whose exact pressure is constant, where it *cannot* be
+pressure error, at two viscosities an order of magnitude apart. It is the first
+number in this document that two unrelated cases agree on for a stated reason.
+
+**4. The `ShiftApplication` question — the reason the case was ported — comes
+back the other way.** §1.2 predicts the two velocity modes should dissipate
+more, since they feed a permanent residual into momentum while the position
+shift is momentum-neutral; on `tgv` that shows as 3.3x the analytic decay rate
+against the shift's 0.55x. On this flow it does not happen. nx=128, t=2.0:
+
+| mode | `nu = 0` amplitude | `nu = 0` max `rho` | `nu = 0.01` amplitude | `nu = 0.01` max `rho` | wall s (`nu = 0`) |
+|---|---|---|---|---|---|
+| `positionShift` *(default)* | 0.995100 | **1.00365** | 1.501436 | **1.00321** | 36.7 |
+| `positionAndVelocity` | **0.998732** | 1.00268 | 1.499894 | 1.00177 | 15.4 |
+| `inStepVelocity` | 0.997899 | 1.00312 | 1.501020 | 1.00202 | 19.2 |
+
+**At `nu = 0.01` the three agree on dissipation to 0.1%** (1.5014 / 1.4999 /
+1.5010 — all the same 0.49x half-viscosity), and at `nu = 0` the *default* is
+the most dissipative of the three, by 4x in deficit. So the dissipation penalty
+§1.2 attributes to the velocity modes is **not intrinsic to them**: on a flow
+with no pressure gradient and no advection it disappears entirely. Whatever
+produces `tgv`'s 3.3x needs one of those two things, and this case does not say
+which.
+
+What *does* separate the modes here, consistently at both viscosities, is the
+other axis: **the position shift carries the largest volume error** (1.8x the
+density excess of `positionAndVelocity` at both `nu`) and costs the most wall
+time (2.4x at `nu = 0`). That is the opposite ranking to the one §1.2's
+argument implies, on the axis this case can actually see.
+
+**This is one case and it does not settle the default.** The velocity modes are
+still the ones with a documented `tgv` dissipation problem and a documented
+wall advantage (§6), and this flow has no wall and no pressure. What it does is
+remove the *general* argument — "applied to velocity the residual is a
+permanent unphysical forcing, applied to position it is momentum-neutral" —
+from the list of things that can be asserted without qualification. §1.2 has
+been narrowed accordingly.
+
+**Still open: the comparison against [C]'s own curves.** The paper's Fig. 3 and
+Fig. 4 are not in this repository, and neither the case nor this section
+hard-codes numbers read off them. Everything above is this codebase measured
+against an analytic solution, which is a real reference but not the published
+one. Grading against [C] needs the paper in hand.
+
 ### Open items, ranked
 
 1. ~~**Run the 2x2x2x2.**~~ ~~**Land `minShift`-on-bounded + `staticBoundary`
@@ -788,12 +904,15 @@ an iteration count becomes a force set by an iteration count.
    so under `hybrid` the boundary rows are extrapolated from a drifted field.
    The periodic case has no mDBC, which is exactly the difference. Cheap test:
    re-sum for the extrapolation only.
-8. **Port [C]'s shear-wave decay case** (§5 Q5). Still the missing reference
-   case: 2D, fully periodic, no gravity or explicit viscosity, so any decay is
-   solver artifact — and it grades artificial viscosity (Fig. 3, sinus
-   amplitude) separately from disorder/volume error (Fig. 4, max density) on
-   exactly the axis the `ShiftApplication` modes differ on, with published
-   curves to compare against.
+8. ~~**Port [C]'s shear-wave decay case**~~ **Done — Part 16.** `shearWave` is
+   registered, swept and tested. It confirmed the half-viscosity explanation
+   behind `tgv`'s 0.55x independently (0.49x, at two viscosities, on a flow
+   with no pressure error to confuse it), reproduced §1.1's structural density
+   bias as a **resolution-independent** volume error, and narrowed §1.2 — the
+   three `ShiftApplication` modes dissipate identically here. What is left of
+   this item is the comparison against [C]'s Fig. 3/Fig. 4 themselves, which
+   needs the paper: nothing in this repository has its curves, and nothing here
+   hard-codes numbers read off them.
 9. **Warm start — on the divergence-free solve only.** [BK] does a full one
    (worth ~3x in iteration count), [I] and [C] do `0.5 p(t-dt)`, [B] does none;
    this codebase does none (`incompressible.py:167`). Part 15 splits the item:
@@ -1115,6 +1234,11 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   [BK] Alg. 3" actually means. Point it at
   `--case kolmogorovIncompressible --extra` for the periodic contrast, which is
   where the non-termination claim breaks.
+- `probe_shearWave.py` *(new, Part 16)* — the shear-wave case's three
+  questions: `--mode shift` crosses the `ShiftApplication` modes (add `--nu` to
+  do it against a real analytic decay instead of a stationary one),
+  `--mode resolution` checks what converges and what does not, `--mode viscous`
+  grades the applied viscosity against the prescribed one.
 - `probe_consistentCoupling.py` — [BWJ23]'s `consistent` mode end to end.
 - `probe_cflCondition.py` *(new, Part 12)* — `--mode verify` checks that
   `dt |v_max| / dx == cflFactor` exactly whenever the advective term binds
@@ -1195,6 +1319,7 @@ One line each, for locating the full write-up in git history.
 | 11 | 08-28 | [BWJ23] — the derivation behind Part 9. `BoundaryPressureMode.consistent`, the best configuration measured. |
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
+| 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
 | 15 | 08-29 | The stopping criterion (§1.7). It was the wrong suspect: the periodic cases terminate in 3 iterations, the floor changes nothing, and the constant-density solve does not converge in any norm — it integrates, so `maxIterations` is a gain. The criterion is now one configurable setting across all three loops; no default changed. |
 | 14 | 08-29 | The landing (§4). `boundaryOperatorTerms` moved per-solver; the two solvers crossed under `minShift` says **both**, not the PS-only split Part 9 implied. `minShift` on bounded and `staticBoundary` on both are now the defaults, and the bounded case ships at 4.48e-3. The half-state's divergence turns out to belong to the clamp. Three prior rows reproduced exactly. |
 
@@ -1230,8 +1355,8 @@ that existed before them.
   passes, and `run_sweep.py` is 30/30. Two known intermittent flakes, both
   pre-existing (§4).
 
-**Case status at the shipped defaults:** `tgv` and `kolmogorovIncompressible`
-(periodic) are healthy. `randomFlowIncompressible --bounded` is the case that
+**Case status at the shipped defaults:** `tgv`, `kolmogorovIncompressible` and
+`shearWave` (all periodic) are healthy. `randomFlowIncompressible --bounded` is the case that
 exercises everything; it is now the best-behaved it has ever been, and is still
 where all the remaining error lives.
 `rotatingSquarePatch --scheme divergenceFree` (free surface) is broken and is a
@@ -1389,33 +1514,62 @@ actually found; the short version:
   `rtol` as a relative disjunct. Both inert — Part 14's end rows reproduce bit
   for bit.
 
+### Part 16, the shear-wave case — ported
+
+**The first incompressible case here that grades this codebase against
+something other than itself.** Full analysis in §4; the short version:
+
+- **An exact solution with a constant pressure.** `u_x = u0 sin(k_w y)`,
+  `u_y = 0` makes both nonlinear terms vanish identically, so
+  `u_x = u0 sin(k_w y) exp(-nu k_w^2 t)` holds for all time with `p = const`.
+  Every pressure the solver produces is therefore an artifact, and dissipation
+  and volume error separate cleanly — which is why [C] reports two figures on
+  this case and why `tgv`, whose exact solution carries a real pressure field,
+  cannot make that separation.
+- **`tgv`'s 0.55x now has independent corroboration.** The viscosity is applied
+  at **0.49x** its prescribed value here, at two viscosities an order of
+  magnitude apart, on a flow where it cannot be pressure error — which is the
+  half-of-the-pairs Monaghan-switch explanation `tests/test_physics.py` states.
+- **The volume error does not converge**: `max rho` is 1.0036 ± 0.0003 across
+  nx = 32…256, while the amplitude error falls 7x. §1.1's structural density
+  bias, measured in a running simulation with a known answer.
+- **§1.2 is narrowed.** All three `ShiftApplication` modes dissipate
+  identically here (0.1% apart at `nu = 0.01`); at `nu = 0` the *default* is
+  the most dissipative. The velocity modes' dissipation penalty is not
+  intrinsic to them — on a flow with no pressure gradient it vanishes. The
+  position shift instead carries 1.8x the volume error and 2.4x the wall time.
+
 ### What is left, in order
 
-1. ~~**Land the defaults.**~~ ~~**The `cflFactor = 0.2` question.**~~
-   ~~**Fix the stopping criterion.**~~ **All done — Parts 14 and 15.**
-2. **Port [C]'s shear-wave decay case** (§4 item 8). Now the top item, and the
-   first one in a while that is about *evidence* rather than about a defect:
-   it is the missing reference case — 2D, fully periodic, no gravity and no
-   explicit viscosity, so any decay is solver artifact — and it grades
-   artificial viscosity separately from disorder on exactly the axis the
-   `ShiftApplication` modes differ on, against published curves.
-3. **Warm-start the divergence-free solve** (§4 item 9, now split by Part 15).
-   It converges, so this is the ordinary [BK] optimisation and is unblocked.
-   Do **not** warm-start the constant-density solve: it integrates, and a warm
+1. ~~**Land the defaults.**~~ ~~**The `cflFactor` question.**~~ ~~**Fix the
+   stopping criterion.**~~ ~~**Port the shear-wave case.**~~ **All done —
+   Parts 14, 15 and 16.**
+2. **Grade the shear wave against [C]'s Fig. 3 and Fig. 4.** The case is in and
+   measured against its analytic solution; the published curves are not in this
+   repository and nothing here hard-codes numbers read off them. This is the
+   one remaining step of §4 item 8 and it needs the paper, not another run.
+3. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15). It
+   converges, so this is the ordinary [BK] optimisation and is unblocked. Do
+   **not** warm-start the constant-density solve: it integrates, and a warm
    start would carry the ramp across steps.
-4. **Re-measure the divergence-free half-state's contraction** under `minShift`
-   (§4 item 3). No longer blocking anything — Part 14 removed the divergence —
-   but it is the one mechanism in this document that was observed and never
-   explained.
-5. **Then** the rename and the scheme split. The scheme split now carries a
-   sharper warning from Part 15: DFSPH proper puts the constant-density solve
-   into the momentum equation, where an amplitude set by an iteration count
-   becomes a *force* set by an iteration count.
+4. **Settle `ShiftApplication` properly**, now that there is a case that can
+   see both axes. Part 16 removed the general argument for the current default
+   without replacing it: what is wanted is `tgv` and `shearWave` and the
+   bounded case read together, since the three disagree about which mode is
+   best and each is right about a different axis.
+5. **Re-measure the divergence-free half-state's contraction** under `minShift`
+   (§4 item 3) — no longer blocking anything, still the one mechanism here
+   that was observed and never explained.
+6. **Then** the rename and the scheme split, with Part 15's warning attached:
+   DFSPH proper puts the constant-density solve into the momentum equation,
+   where an amplitude set by an iteration count becomes a force set by an
+   iteration count.
 
 ### What is next, concretely
 
-Do 2. Every defect this document opened is now either fixed or explained, and
-what it is short of is not another A/B against itself but a case with a
-published answer to be wrong against. The shear-wave case is that, and every
-remaining item — the warm start, the scheme split, the `ShiftApplication`
-question §1.2 left open — would be graded better with it in hand than without.
+Do 4, and use 2 to check it. Every defect this document opened is fixed or
+explained, and the one substantive question left about the *scheme* rather than
+its bugs is which `ShiftApplication` mode should be the default — a question
+that has been open since Part 5, was argued from a mechanism Part 16 has now
+shown does not hold in general, and now has a case that can grade both of the
+axes it trades off.

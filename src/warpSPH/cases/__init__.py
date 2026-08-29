@@ -45,6 +45,7 @@ CASE_MODULES = (
     'tgv',
     'kolmogorovIncompressible',
     'randomFlowIncompressible',
+    'shearWave',
     # non-fluid demo -- see WAVE_EQUATION_PLAN.md
     'waveEquation',
 )
