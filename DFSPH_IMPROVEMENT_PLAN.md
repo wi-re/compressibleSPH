@@ -435,6 +435,7 @@ again.
 | **Re-tuning the iteration budget** | The shipped (64, 32) is on the accuracy/cost frontier. 128 PS buys 1.26x for 1.6x the wall time; 16 DF loses 8%; the reallocation the "one converges, one does not" picture suggests, (96, 16), is 6% better for 16% more time. No free win (§1.7). |
 | **`forceShiftPressureGauge` at a free surface** (`dambreak`) | NaN in 4 steps. Bypassing the clamp fallback does not reduce the over-dissipation Part 19 measures — the run does not survive long enough to reach it. Rules out "relax the free-surface pressure handling" as a fix and confirms the clamp is load-bearing, not optional damping (§4, Part 21). |
 | **`dambreak`'s published CFL** (`cflFactor = 0.4`, [BK]'s constant, safe on every other incompressible case here) | NaN by step 30; even `0.3` NaNs by step 76. Unlike every wall-bounded case measured so far, this one needs `cflFactor = 0.2` (§4, Part 20) — the falling column's impact is sharper than `randomFlowIncompressible`'s bounded shear and the CFL's lagged `vMax` does not see it coming. |
+| **`dambreak --scheme divergenceFree` at the case's default `nx = 128`** | Diverges at step 88 (t ≈ 0.175, mid free-fall, before the column reaches the floor): maxDensity 1.23, maxVelocity 4.65, "NaN detected in velocities". At `nx = 64` the same case runs past t = 1.0, but the free surface and boundary show clustering and distortion artifacts — the surface is not clean at either resolution, and the coarser one is the only one that survives. Finer is worse here. Do not spend compute on a full-resolution incompressible dam break until the baseline test cases (item 2 below) pass. |
 | `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). | 3% better for 23% more time on the bounded case, against 115% better on the periodic one. At a wall the error is set by the boundary treatment, not by how well the PPE is solved. |
 
 ---
@@ -2210,28 +2211,48 @@ per-bin budget above). No config or default changed.
    residual of two ~30-magnitude terms, and whether it is a discretization
    error that vanishes as `nx` grows or a structural cost of the incompressible
    constraint is open. An `nx` convergence of the cycle's net on this same case
-   is the natural next instrument.
-2. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
+   is the natural next instrument — but the case's default `nx = 128` diverges
+   mid free-fall (§2), so the resolution-dependence is a stability problem as
+   much as a dissipation question, and item 2 comes first.
+2. **Baseline test cases for `divergenceFree`** — required before the
+   dam-break mechanism question is worth compute: the default-`nx` divergence
+   (§2) and the free-surface/boundary clustering at `nx = 64` mean the scheme's
+   basic correctness is not yet established. Three cases, all new for
+   `divergenceFree` (the existing `hydrostatic` is the compressible
+   density-jump test, not this):
+   1. **Square blob in free space** — no gravity, no forcing, no initial
+      velocity. Nothing should happen: the blob stays put, no spurious
+      velocities or drift. Figure of merit: max velocity stays ~0, shape
+      unchanged.
+   2. **Two-blob impact** — port the weakly-compressible `impact` case (two
+      spheres / two boxes colliding) to `divergenceFree`. The collision should
+      reproduce the WC case's outcome, not pair or explode.
+   3. **Hydrostatic pressure** — a fluid with gravity in a container. Nothing
+      much should happen: velocities stay ~0 and the pressure is the sensible
+      hydrostatic profile, not the spurious free-surface pressure noise.
+3. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
    landed as `dambreakTimestep`, active only under `--scheme divergenceFree`.
    Worth ~1.7x fewer steps at the case's own safe `cflFactor = 0.2`, not the
    ~5x guessed, and not free (`rho_max` 1.105 against the fixed-`dt`
    baseline's 1.004) — see Part 20 for why the published 0.4 diverges here.
-3. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
+4. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
    remainder). Blocked on the paper — `literature/MANIFEST.md`.
-4. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
+5. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
    Unblocked; do **not** warm-start the constant-density solve.
-5. **Re-measure the divergence-free half-state's contraction** under `minShift`
+6. **Re-measure the divergence-free half-state's contraction** under `minShift`
    (§4 item 3) — still the one mechanism observed and never explained.
-6. **Then** the rename and the scheme split.
+7. **Then** the rename and the scheme split.
 
 ### What is next, concretely
 
-Item 1's instrument ran (Part 22) and it names the channel: the incompressibility
-cycle, at the impact. What is left of item 1 is the mechanism question — the
-cycle's net is the residual of two ~30-magnitude terms, so the next measurement
-is an `nx` convergence of that net (does the −8.5 fall with resolution, i.e. is
-it a discretization error, or is it flat, i.e. a structural cost of the
-incompressible constraint?). That single run decides whether the fix to look for
-is a better projection/resample or an acceptance that the incompressible scheme
-dissipates impact flows and should be reserved for them accordingly. Items 3-5
-stand as ranked; the rename and the scheme split stay last.
+Item 1's channel is named (Part 22) — the incompressibility cycle, at the
+impact. But the dam break diverges at its default `nx = 128` (§2) and even
+`nx = 64` shows clustering and distortion at the free surface and boundary, so
+the immediate next step is **item 2: the baseline test cases** — a free-space
+square blob that should not move, a two-blob impact that should reproduce the
+WC `impact` outcome, and a hydrostatic column whose pressure should be
+sensible. Before those pass (or their failures are understood), a
+full-resolution incompressible dam break is not worth compute, and item 1's
+`nx` convergence — now also a stability study, since the default resolution
+diverges — waits. Items 4-6 stand as ranked; the rename and the scheme split
+(7) stay last.
