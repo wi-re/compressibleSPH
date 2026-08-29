@@ -1,0 +1,120 @@
+% Bibliography for the papers this codebase is built against.
+%
+% The PDFs themselves are NOT in this repository and must not be (see
+% MANIFEST.md); this file is metadata only, which carries no such restriction.
+%
+% ---------------------------------------------------------------------------
+% PROVENANCE WARNING. These entries were written from memory, before any PDF
+% was placed in `literature/`. Author lists, titles, venues and years should be
+% right; **volume numbers, issue numbers, page ranges and DOIs are the fields
+% most likely to be wrong**, and none of them has been checked against a
+% document. Verifying and correcting them against the actual PDFs is step 2 of
+% MANIFEST.md's sync procedure. Do not cite page numbers from this file in a
+% paper until that has been run.
+% ---------------------------------------------------------------------------
+%
+% Citation keys are the shorthands `DFSPH_IMPROVEMENT_PLAN.md` already uses in
+% its §5 source list, so `[C]` in that document is `cornelis2019` here. The
+% mapping is in MANIFEST.md.
+
+@article{cornelis2019,
+  author  = {Cornelis, Jens and Bender, Jan and Gissler, Christoph and Ihmsen, Markus and Teschner, Matthias},
+  title   = {An optimized source term formulation for incompressible {SPH}},
+  journal = {The Visual Computer},
+  year    = {2019},
+  volume  = {35},
+  number  = {4},
+  pages   = {579--590},
+  note    = {The paper this codebase's incompressible scheme implements (VD+PS). Its Fig. 3 (sinus amplitude) and Fig. 4 (max density) are the shear-wave reference curves.}
+}
+
+@inproceedings{bender2015,
+  author    = {Bender, Jan and Koschier, Dan},
+  title     = {Divergence-free smoothed particle hydrodynamics},
+  booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  year      = {2015},
+  pages     = {147--155},
+  note      = {DFSPH proper. Source of the published CFL constant dt <= 0.4 d/|v_max| and of the static-boundary operator statement in its 3.2.}
+}
+
+@article{ihmsen2014,
+  author  = {Ihmsen, Markus and Cornelis, Jens and Solenthaler, Barbara and Horvath, Christopher and Teschner, Matthias},
+  title   = {Implicit incompressible {SPH}},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  year    = {2014},
+  volume  = {20},
+  number  = {3},
+  pages   = {426--435},
+  note    = {IISPH. The solver this codebase's relaxed-Jacobi loop discretises.}
+}
+
+@article{band2018,
+  author  = {Band, Stefan and Gissler, Christoph and Peer, Andreas and Teschner, Matthias},
+  title   = {{MLS} pressure boundaries for divergence-free and viscous {SPH} fluids},
+  journal = {Computers \& Graphics},
+  year    = {2018},
+  volume  = {76},
+  pages   = {37--46},
+  note    = {The MLS pressure-boundary treatment. Recomputes boundary pressure inside the solver iteration, which this codebase does not.}
+}
+
+@inproceedings{bender2023,
+  author    = {Bender, Jan and Westhofen, Lukas and Jeske, Stefan Rhys},
+  title     = {Consistent {SPH} Rigid-Fluid Coupling},
+  booktitle = {Vision, Modeling, and Visualization (VMV)},
+  year      = {2023},
+  note      = {Derives DFSPH from a density constraint. The derivation behind BoundaryOperatorTerms.staticBoundary.}
+}
+
+% --- Not yet obtained -------------------------------------------------------
+% Each of these is referenced by DFSPH_IMPROVEMENT_PLAN.md as unavailable, and
+% each blocks something specific. See MANIFEST.md for what.
+
+@article{adami2012,
+  author  = {Adami, Stefan and Hu, Xiangyu Y. and Adams, Nikolaus A.},
+  title   = {A generalized wall boundary condition for smoothed particle hydrodynamics},
+  journal = {Journal of Computational Physics},
+  year    = {2012},
+  volume  = {231},
+  number  = {21},
+  pages   = {7057--7075},
+  note    = {The wall boundary condition band2018 Eq. 3 extrapolates from, including its hydrostatic term.}
+}
+
+@article{adami2013,
+  author  = {Adami, Stefan and Hu, Xiangyu Y. and Adams, Nikolaus A.},
+  title   = {A transport-velocity formulation for smoothed particle hydrodynamics},
+  journal = {Journal of Computational Physics},
+  year    = {2013},
+  volume  = {241},
+  pages   = {292--307},
+  note    = {Needed to close the open background-pressure question (plan 5, Q7): a background pressure that is set rather than allowed to drift.}
+}
+
+@article{akinci2012,
+  author  = {Akinci, Nadir and Ihmsen, Markus and Akinci, Gizem and Solenthaler, Barbara and Teschner, Matthias},
+  title   = {Versatile rigid-fluid coupling for incompressible {SPH}},
+  journal = {ACM Transactions on Graphics},
+  year    = {2012},
+  volume  = {31},
+  number  = {4},
+  note    = {Source of the boundary volume correction akinciBoundaryVolume implements. Derived for a ONE-LAYER sampling, which is why it inflates this codebase's five-layer band.}
+}
+
+@inproceedings{ihmsen2010,
+  author    = {Ihmsen, Markus and Akinci, Nadir and Gissler, Markus and Teschner, Matthias},
+  title     = {Boundary handling and adaptive time-stepping for {PCISPH}},
+  booktitle = {Workshop on Virtual Reality Interaction and Physical Simulation (VRIPHYS)},
+  year      = {2010},
+  note      = {The adaptive-timestep scheme bender2015's CFL condition descends from.}
+}
+
+@article{schechter2012,
+  author  = {Schechter, Hagit and Bridson, Robert},
+  title   = {Ghost {SPH} for animating water},
+  journal = {ACM Transactions on Graphics},
+  year    = {2012},
+  volume  = {31},
+  number  = {4},
+  note    = {The published remedy bender2015 5 cites for free-surface density underestimation -- the rotatingSquarePatch corner loss.}
+}

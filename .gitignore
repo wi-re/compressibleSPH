@@ -219,3 +219,14 @@ memory_snapshot.json
 
 # Benchmark suite output: timestamped per-run results (JSON + PNG), not curated.
 results/
+
+# Third-party papers. Copyrighted material -- never commit the documents
+# themselves, only the metadata that names them. The `/literature/*` form
+# (rather than `/literature/`) is deliberate: a directory-form ignore stops git
+# descending, and the un-ignore lines below would then never match.
+/literature/*
+!/literature/*.md
+!/literature/*.bib
+# Belt and braces against `git add -A`: no PDF in this repo is intended to be
+# tracked, and none ever has been. `git add -f` overrides this if that changes.
+*.pdf

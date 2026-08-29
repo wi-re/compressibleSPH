@@ -82,9 +82,18 @@ def initialConditions(ctx: RunContext, system) -> None:
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     particles = state.state
     kinetic = 0.5 * (particles.masses * (particles.velocities ** 2).sum(dim=-1)).sum()
+    # Density is reported for the same reason `kolmogorovIncompressible` and
+    # `shearWave` report it: dissipation and volume error are two independent
+    # axes and a comparison that sees only one of them cannot rank anything
+    # (`DFSPH_IMPROVEMENT_PLAN.md` §1.2, Part 16). Additive -- nothing reads
+    # this dict by position.
+    densities = particles.densities
     return {
         'kineticEnergy': kinetic.detach().cpu().item(),
         'maxVelocity': torch.linalg.norm(particles.velocities, dim=-1).max().detach().cpu().item(),
+        'minDensity': densities.min().detach().cpu().item(),
+        'maxDensity': densities.max().detach().cpu().item(),
+        'densityStd': densities.std().detach().cpu().item(),
     }
 
 
