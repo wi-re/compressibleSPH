@@ -31,16 +31,46 @@ Reported per sample:
                 the surface is being compacted rather than resolved.
   rhoMin/Max    fluid density bounds.
 
+  --mode run       the trajectory comparison above.
+  --mode surface   the free-surface *geometry*, which is what makes the
+                   density recovery interesting. Under a summation density a
+                   particle at a flat free surface reads about `0.5 rho0`
+                   because half its kernel support is empty -- and it does, at
+                   first (min fluid density 0.518 at t=0.02), then recovers to
+                   ~`rho0` while the fluid still plainly has a free surface.
+                   Neighbour counts settle what happened, because they are
+                   geometry rather than a field the solver can adjust: a
+                   surface particle that still has three quarters of the bulk
+                   count but reads `rho0` must have its neighbours packed
+                   closer than the bulk's. "Surface" here is the topmost
+                   particle in each `dx`-wide column -- a purely geometric
+                   definition that uses no density at all, so it cannot be
+                   circular.
+
+                   **Read the cross-scheme row with care.** By any fixed time
+                   the two schemes are at genuinely different flow states (see
+                   the front column above), so `deltaSPH` is not a controlled
+                   comparison for this, only a sanity check that the
+                   measurement is not an artifact of the definition. The clean
+                   test is DF against itself with the shift disabled at the
+                   surface, which `divergenceFree.py` has commented out and
+                   which the plan's "Known-open" entry explains is untestable
+                   as written.
+
 Usage:
   python scripts/probe_dambreakIncompressible.py --nx 64 --tLimit 1.5
   python scripts/probe_dambreakIncompressible.py --schemes divergenceFree
+  python scripts/probe_dambreakIncompressible.py --mode surface --times 0.02 0.5
 """
 from __future__ import annotations
 
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--mode', default='run', choices=['run', 'surface'])
 parser.add_argument('--schemes', nargs='*', default=['divergenceFree', 'deltaSPH'])
+parser.add_argument('--times', nargs='*', type=float, default=[0.02, 0.5],
+                    help="--mode surface: the times to take the geometry at")
 parser.add_argument('--nx', type=int, default=64)
 parser.add_argument('--tLimit', type=float, default=1.5)
 parser.add_argument('--samples', type=int, default=15)
@@ -76,10 +106,11 @@ def diagnostics(ctx, state):
     return out
 
 
-results = {}
-for scheme in args.schemes:
-    case.diagnostics = diagnostics
-    argv = ['--nx', str(args.nx), '--tLimit', str(args.tLimit), '--scheme', scheme,
+def runScheme(scheme, tLimit, diag=None):
+    """One run of `dambreak` under `scheme`, to `tLimit`."""
+    if diag is not None:
+        case.diagnostics = diag
+    argv = ['--nx', str(args.nx), '--tLimit', str(tLimit), '--scheme', scheme,
             '--quiet', '--no-store', '--no-plot']
     if scheme == 'divergenceFree':
         # The PPE derivation is specific to semi-implicit Euler; the case's own
@@ -88,9 +119,61 @@ for scheme in args.schemes:
         # (`DFSPH_IMPROVEMENT_PLAN.md` "Nothing enforces semiImplicitEuler".)
         argv += ['--integrationScheme', 'semiImplicitEuler']
     try:
-        r = caseMain(case, argv=argv)
+        return caseMain(case, argv=argv)
     finally:
         case.diagnostics = _origDiag
+
+
+if args.mode == 'surface':
+    from warpSPHCore import SupportScheme, buildVerletList
+
+    print(f"\n=== dambreak free-surface geometry, nx={args.nx} ===")
+    print("'surface' = the topmost fluid particle in each dx-wide column, which "
+          "uses no\ndensity at all. An un-compacted flat free surface would keep "
+          "about half the\nbulk's neighbours; what it reads for density is then "
+          "the question.\n")
+    hdr = (f"{'scheme':>16} {'t':>6} {'n surf':>7} {'surf nbrs':>10} "
+           f"{'bulk nbrs':>10} {'ratio':>7} {'surf rho':>10} {'bulk rho':>10} "
+           f"{'min surf rho':>13}")
+    print(hdr)
+    print('-' * len(hdr))
+    for scheme in args.schemes:
+        for tLimit in args.times:
+            r = runScheme(scheme, tLimit)
+            st = r.state.state
+            fluid = st.kinds == 0
+            pos, rho = st.positions, st.densities
+            adj = buildVerletList(st, r.ctx.config.domain, verletScale=1.0,
+                                  supportMode=SupportScheme.SuperSymmetric,
+                                  priorNeighborhood=None, verbose=False)
+            i, j = adj.i, adj.j
+            pair = fluid[i] & fluid[j]
+            counts = torch.zeros(pos.shape[0], device=pos.device)
+            counts.index_add_(0, i[pair],
+                              torch.ones(int(pair.sum()), device=pos.device))
+            dx = r.ctx.config.dx
+            col = torch.round(pos[fluid][:, 0] / dx).long()
+            y = pos[fluid][:, 1]
+            cf, rf = counts[fluid], rho[fluid]
+            top = torch.zeros_like(y, dtype=torch.bool)
+            for c in torch.unique(col):
+                idx = torch.nonzero(col == c).squeeze(-1)
+                top[idx[y[col == c].argmax()]] = True
+            deep = ~top
+            print(f"{scheme:>16} {tLimit:6.3f} {int(top.sum()):7d} "
+                  f"{float(cf[top].mean()):10.2f} {float(cf[deep].mean()):10.2f} "
+                  f"{float(cf[top].mean() / cf[deep].mean()):7.3f} "
+                  f"{float(rf[top].mean()):10.5f} {float(rf[deep].mean()):10.5f} "
+                  f"{float(rf[top].min()):13.5f}", flush=True)
+    print("\n`deltaSPH` integrates its density rather than summing it, so its "
+          "`surf rho`\ncolumn says nothing about packing -- its `ratio` is the "
+          "only comparable cell,\nand even that is at a different flow state by "
+          "the same time.")
+    raise SystemExit
+
+results = {}
+for scheme in args.schemes:
+    r = runScheme(scheme, args.tLimit, diag=diagnostics)
     results[scheme] = r
 
     tr = [row for row in r.trajectory

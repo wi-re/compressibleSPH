@@ -5,6 +5,31 @@ whose ~65 argparse flags are now this case's `params`. The `caseUtils` helpers i
 calls still take an argparse-style namespace -- they are shared with the
 notebooks -- so :func:`caseArgs` rebuilds one from the spec rather than
 rewriting them.
+
+Running it under the incompressible scheme
+------------------------------------------
+
+`--scheme divergenceFree` works and needs no wiring, and it is the only free
+surface that scheme does not break (`squarePatch` under the same scheme is a
+known method limitation). Three things to know before reading any result from
+it -- all measured, see `DFSPH_IMPROVEMENT_PLAN.md` §1.10 and Part 19, and
+`scripts/probe_dambreakIncompressible.py`:
+
+- **Pass `--integrationScheme semiImplicitEuler`.** This case defaults to
+  `rungeKutta2`, and the pressure-projection derivation is specific to
+  semi-implicit Euler: a multi-stage integrator solves each stage as if it were
+  final and then blends, so the blended velocity is not divergence-free.
+  Nothing in the code enforces this yet.
+- **There is no incompressible `timestep` hook**, so the run inherits the
+  weakly-compressible acoustic `dt`. On the shipped configuration that is ~5x
+  *finer* than Bender & Koschier's advective condition would permit, which is
+  safe but costs about 5x the wall time (294s against `deltaSPH`'s 61s for the
+  same 3000 steps at nx=64).
+- **It is markedly over-dissipative here.** Against `deltaSPH` on identical
+  geometry, resolution and `dt`, the surge front runs out at about half speed
+  and 88% of the kinetic energy disappears just as the falling column should be
+  turning into horizontal run-out. This is the case that exposed it; the
+  periodic and wall-bounded incompressible cases cannot see it.
 """
 
 from __future__ import annotations

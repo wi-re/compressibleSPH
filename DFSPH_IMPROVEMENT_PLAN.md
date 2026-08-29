@@ -347,7 +347,49 @@ The corollary is the useful part: **the divergence-free solve genuinely only
 needs `div v`**, which the continuity equation tracks exactly. Only the
 shifting solve needs a density that matches the positions. Hence `hybrid`.
 
-### 1.10 Method note: measure, do not derive from pseudocode
+### 1.10 The scheme is over-dissipative where the flow is violent, and that was invisible until a free surface was put in front of it
+
+Nineteen sessions tuned this scheme against periodic and wall-bounded cases,
+where it is now good: the bounded `randomFlowIncompressible` holds a density
+band of 4.5e-3 and the periodic cases are healthy. The first genuinely
+recognisable scenario it was asked to run — a dam break — exposes something
+none of those cases could.
+
+- **It works**, which is itself new: `dambreak --scheme divergenceFree` runs
+  3000 steps to t=1.5 with fluid density in [0.907, 1.004] and produces a
+  recognisable collapse and run-out. The only other free-surface incompressible
+  case, `rotatingSquarePatch`, is broken.
+- **The run-out is about half speed.** The surge front travels 1.50 by t=0.7
+  against `deltaSPH`'s 2.82 on identical geometry, resolution and `dt`.
+- **88% of the kinetic energy disappears between t=0.5 and t=0.8**, exactly
+  when the falling column should be turning into horizontal run-out, while
+  `deltaSPH` is still gaining. The peak is 2x higher (7.42 against 3.61) and
+  then collapses.
+
+Three things this is *not*, each checked: not a timestep artifact (the run is
+5x **finer** in time than [BK]'s condition requires, because `dambreak` has no
+incompressible `timestep` hook); not the `ShiftApplication` mode (Part 18 has
+`positionShift` as the least dissipative of the three); and not divergence or
+instability (nothing blows up, the density band is good throughout).
+
+The related observation, and the lead: **the free-surface density deficit
+disappears.** A particle at a flat free surface reads about `0.5 rho0` under a
+summation density because half its kernel support is empty, and it does — the
+minimum fluid density is 0.518 at t=0.02. By t=0.2 it is ~0.98 and it stays
+there, while the surface keeps only three quarters of the bulk's neighbour
+count, i.e. while it is still geometrically a surface. Its neighbours must
+therefore be packed closer than the bulk's. That is the constant-density solve
+compacting the surface layer to reach a setpoint the geometry forbids — §1.1's
+unreachable setpoint again, now at a free surface instead of in a disordered
+bulk, and the same thing §4 records it doing at the rotating patch's corners.
+
+Whether that compaction is what costs the energy is **not established**. It is
+the obvious candidate and it is testable: `divergenceFree.py` carries
+`pressureB[surfaceIndicators == 1] = 0.0` commented out for exactly this.
+
+See §4, Part 19, and `probe_dambreakIncompressible.py`.
+
+### 1.11 Method note: measure, do not derive from pseudocode
 
 Three over-claims in a row (Part 7's tolerance argument, Part 8's `rho`-power
 algebra, Part 8's solver-ordering claim) all came from reasoning off published
@@ -1095,26 +1137,39 @@ Under a summation density a particle at a flat free surface reads about
 `0.5 rho0`, because half its kernel support is empty. It does, at first: the
 minimum fluid density is **0.518 at t=0.02**. By t=0.2 it is 0.979, and it
 stays near `rho0` for the rest of the run — while the fluid still has a free
-surface. Measuring the geometry directly (`scratchpad` harness, neighbour
-counts within the support for the topmost particle in each `dx`-wide column,
-which uses no density at all):
+surface. Measuring the geometry directly
+(`probe_dambreakIncompressible.py --mode surface`: neighbour counts within the
+support for the topmost particle in each `dx`-wide column, a definition that
+uses no density at all and so cannot be circular):
 
-| | surface nbrs | bulk nbrs | ratio | surface `rho` |
-|---|---|---|---|---|
-| `divergenceFree`, t=0.02 | 28.6 | 42.3 | 0.677 | 0.766 |
-| `divergenceFree`, t=0.5 | 33.2 | 44.3 | **0.749** | **1.0009** |
-| `deltaSPH`, t=0.5 | 29.4 | 43.4 | 0.677 | 1.0005 *(integrated, not summed)* |
+| | surface nbrs | bulk nbrs | ratio | surface `rho` | min surface `rho` |
+|---|---|---|---|---|---|
+| `divergenceFree`, t=0.02 | 28.6 | 42.3 | 0.677 | 0.766 | **0.518** |
+| `divergenceFree`, t=0.5 | 33.2 | 44.3 | 0.749 | **1.0009** | **0.9968** |
+| `deltaSPH`, t=0.02 | 33.9 | 42.6 | 0.797 | 1.0001 | 1.0000 |
+| `deltaSPH`, t=0.5 | 29.4 | 43.4 | 0.677 | 1.0005 | 0.9994 |
 
-So the surface is **still a surface** — it keeps only three quarters of the
-bulk neighbour count — yet its summed density reads exactly `rho0`. The
-neighbours it has must therefore be closer than the bulk's. The natural reading
-is that the constant-density solve compacts the surface layer until the
-truncated kernel sum reaches `rho0`, which is what §4 records it doing at the
-rotating patch's corners, here succeeding rather than breaking. **That reading
-is not established by this measurement**: the `deltaSPH` row is a different
-flow state at the same time (its front is 0.6 further along), so the 0.749
-against 0.677 is suggestive, not controlled. A clean test would compare
-DF-with-and-without the shift at the surface — `divergenceFree.py` has
+**The solid statement is the within-scheme one.** Over that interval
+`divergenceFree`'s surface density goes from 0.766 mean / 0.518 worst to
+1.0009 mean / 0.9968 worst — a full recovery to `rho0` — while its surface
+neighbour count stays at 0.68-0.75 of the bulk's, i.e. while the surface is
+still geometrically a surface. The neighbours it has must therefore be closer
+together than the bulk's. Surface compaction by the constant-density solve is
+the natural reading of that, and it is what §4 records the same solve doing at
+the rotating patch's corners — here succeeding rather than breaking.
+
+**The cross-scheme comparison does not support it, and should not be quoted as
+if it did.** The `deltaSPH` ratio is 0.797 at t=0.02 and 0.677 at t=0.5 — it
+*crosses* `divergenceFree`'s 0.677 and 0.749, so the ordering reverses between
+the two times. The ratio is evidently dominated by how thin and spread the
+sheet is at that instant, not by the scheme, which is unsurprising given the
+two runs are at visibly different flow states by any fixed time (fronts 0.6
+apart at t=0.5). It discriminates nothing here. (`deltaSPH`'s density column
+says nothing either way — it integrates rather than sums.)
+
+So the compaction reading rests entirely on the within-`divergenceFree`
+recovery, which is real but is one observation. The clean test is DF against
+itself with the shift disabled at surface particles: `divergenceFree.py` has
 `pressureB[surfaceIndicators == 1] = 0.0` commented out for exactly this, and
 §4's "Known-open" entry explains why it is untestable as written.
 
@@ -1225,6 +1280,12 @@ time units there, 88% in 0.3 here), in the regime that exposes it.
   commented out in `divergenceFree.py`) is untestable as-is: `detectFreeSurface`
   flags 96/100 particles at nx=32 and 52% at nx=96 on this thin patch, and it
   is wired into only one of three solver paths.
+  **`dambreak` is now the better vehicle for that fix** (§1.10, Part 19): it is
+  a real free surface the scheme does *not* break, its surface population is a
+  sensible fraction rather than 96%, and it shows the same solve driving surface
+  density back to `rho0` against the geometry — succeeding there rather than
+  detonating. Whatever the fix is, it can be measured on `dambreak` first and
+  brought to the patch after.
 - **Nothing enforces `semiImplicitEuler`.** The PPE derivation is specific to
   it. All three incompressible cases set it explicitly, but `CaseSpec`'s
   default is `rungeKutta2` and no code path checks `scheme == divergenceFree`
