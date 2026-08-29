@@ -129,7 +129,7 @@ def kolmogorovIncompressibleTimestep(ctx: RunContext, state) -> float:
     particles = state.state
     h = particles.supports.mean().item()
     vMax = particles.velocities.norm(dim=1).max().item()
-    nu = ctx.param('nu')
+    nu = ctx.param('nu', 0.0)
     kernelScale = float(sphKernelScale(ctx.config.kernel.value, ctx.config.dim))
     # The advective condition is Bender & Koschier's, in their units: `dt <=
     # 0.4 * d / |v_max|` with `d` the particle *diameter*, i.e. the sampling

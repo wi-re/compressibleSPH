@@ -3,48 +3,63 @@
 % The PDFs themselves are NOT in this repository and must not be (see
 % MANIFEST.md); this file is metadata only, which carries no such restriction.
 %
-% ---------------------------------------------------------------------------
-% PROVENANCE WARNING. These entries were written from memory, before any PDF
-% was placed in `literature/`. Author lists, titles, venues and years should be
-% right; **volume numbers, issue numbers, page ranges and DOIs are the fields
-% most likely to be wrong**, and none of them has been checked against a
-% document. Verifying and correcting them against the actual PDFs is step 2 of
-% MANIFEST.md's sync procedure. Do not cite page numbers from this file in a
-% paper until that has been run.
-% ---------------------------------------------------------------------------
+% Provenance: every entry in the curated sections below was rebuilt on
+% 2026-08-29 from the document's own front matter and from its DOI record
+% (Crossref / DataCite content negotiation), not from memory. Volume, issue,
+% page range, article number and DOI have each been checked against at least one
+% of those two sources; where the two disagreed, the DOI record won and the
+% disagreement is recorded in the entry's `note`. Every such entry has a PDF in
+% literature/, and `scripts/check_literature.py` enforces that.
 %
-% Citation keys are the shorthands `DFSPH_IMPROVEMENT_PLAN.md` already uses in
-% its §5 source list, so `[C]` in that document is `cornelis2019` here. The
-% mapping is in MANIFEST.md.
+% The final section, "Extended set", was added on 2026-08-29 in a lighter pass:
+% bibliographic records only, from each document's DOI record (and, for ACM
+% article numbers, the PDF's own reference block). No abstracts were extracted
+% for these, so they have no block in ABSTRACTS.md and no editorial `note`; the
+% DOI-wins rule still applies, and early-view-vs-volume-year discrepancies are
+% noted. Three arrivals had no usable text layer (scanned Gingold & Monaghan
+% 1977, Monaghan 1992, Monaghan 1994); their PDFs are parked in
+% literature/scans/ and are deliberately absent from this file.
+%
+% Citation keys are `firstauthor + year`, suffixed when that collides, and the
+% PDF filenames in this directory are `<key>_<slug>.pdf`. The shorthands used
+% by DFSPH_IMPROVEMENT_PLAN.md 5 map as: [C] = cornelis2019, [BK] = bender2015,
+% [I] = ihmsen2014, [B] = band2018, [BWJ23] = bender2023.
+
+
+% --- The incompressible scheme this codebase implements ------------------------
 
 @article{cornelis2019,
   author  = {Cornelis, Jens and Bender, Jan and Gissler, Christoph and Ihmsen, Markus and Teschner, Matthias},
-  title   = {An optimized source term formulation for incompressible {SPH}},
+  title   = {An Optimized Source Term Formulation For Incompressible {SPH}},
   journal = {The Visual Computer},
   year    = {2019},
   volume  = {35},
   number  = {4},
   pages   = {579--590},
+  doi     = {10.1007/s00371-018-1488-8},
   note    = {The paper this codebase's incompressible scheme implements (VD+PS). Its Fig. 3 (sinus amplitude) and Fig. 4 (max density) are the shear-wave reference curves.}
 }
 
 @inproceedings{bender2015,
   author    = {Bender, Jan and Koschier, Dan},
-  title     = {Divergence-free smoothed particle hydrodynamics},
+  title     = {Divergence-Free Smoothed Particle Hydrodynamics},
   booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
   year      = {2015},
   pages     = {147--155},
+  publisher = {ACM},
+  doi       = {10.1145/2786784.2786796},
   note      = {DFSPH proper. Source of the published CFL constant dt <= 0.4 d/|v_max| and of the static-boundary operator statement in its 3.2.}
 }
 
 @article{ihmsen2014,
   author  = {Ihmsen, Markus and Cornelis, Jens and Solenthaler, Barbara and Horvath, Christopher and Teschner, Matthias},
-  title   = {Implicit incompressible {SPH}},
+  title   = {Implicit Incompressible {SPH}},
   journal = {IEEE Transactions on Visualization and Computer Graphics},
   year    = {2014},
   volume  = {20},
   number  = {3},
   pages   = {426--435},
+  doi     = {10.1109/TVCG.2013.105},
   note    = {IISPH. The solver this codebase's relaxed-Jacobi loop discretises.}
 }
 
@@ -55,6 +70,7 @@
   year    = {2018},
   volume  = {76},
   pages   = {37--46},
+  doi     = {10.1016/j.cag.2018.08.001},
   note    = {The MLS pressure-boundary treatment. Recomputes boundary pressure inside the solver iteration, which this codebase does not.}
 }
 
@@ -63,12 +79,104 @@
   title     = {Consistent {SPH} Rigid-Fluid Coupling},
   booktitle = {Vision, Modeling, and Visualization (VMV)},
   year      = {2023},
+  pages     = {209--217},
+  publisher = {The Eurographics Association},
+  doi       = {10.2312/vmv.20231244},
   note      = {Derives DFSPH from a density constraint. The derivation behind BoundaryOperatorTerms.staticBoundary.}
 }
 
-% --- Not yet obtained -------------------------------------------------------
-% Each of these is referenced by DFSPH_IMPROVEMENT_PLAN.md as unavailable, and
-% each blocks something specific. See MANIFEST.md for what.
+
+% --- Boundary handling and fluid-rigid coupling --------------------------------
+
+@article{akinci2012,
+  author    = {Akinci, Nadir and Ihmsen, Markus and Akinci, Gizem and Solenthaler, Barbara and Teschner, Matthias},
+  title     = {Versatile rigid-fluid coupling for incompressible {SPH}},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2012},
+  volume    = {31},
+  number    = {4},
+  articleno = {62},
+  pages     = {62:1--62:8},
+  numpages  = {8},
+  doi       = {10.1145/2185520.2185558},
+  note      = {Source of the boundary volume correction akinciBoundaryVolume implements. Derived for a ONE-LAYER sampling, which is why it inflates this codebase's five-layer band.}
+}
+
+@article{schechter2012,
+  author    = {Schechter, Hagit and Bridson, Robert},
+  title     = {Ghost {SPH} for animating water},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2012},
+  volume    = {31},
+  number    = {4},
+  articleno = {61},
+  pages     = {61:1--61:8},
+  numpages  = {8},
+  doi       = {10.1145/2185520.2185557},
+  note      = {The published remedy bender2015 5 cites for free-surface density underestimation -- the rotatingSquarePatch corner loss.}
+}
+
+@article{band2018pb,
+  author    = {Band, Stefan and Gissler, Christoph and Ihmsen, Markus and Cornelis, Jens and Peer, Andreas and Teschner, Matthias},
+  title     = {Pressure Boundaries for Implicit Incompressible {SPH}},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2018},
+  volume    = {37},
+  number    = {2},
+  articleno = {14},
+  pages     = {14:1--14:11},
+  numpages  = {11},
+  doi       = {10.1145/3180486},
+  note      = {Solves an extended PPE over fluid AND boundary samples, in volume-centric form. The stronger version of the treatment this codebase skips.}
+}
+
+@article{gissler2019,
+  author    = {Gissler, Christoph and Peer, Andreas and Band, Stefan and Bender, Jan and Teschner, Matthias},
+  title     = {Interlinked {SPH} Pressure Solvers for Strong Fluid-Rigid Coupling},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2019},
+  volume    = {38},
+  number    = {1},
+  articleno = {5},
+  pages     = {5:1--5:13},
+  numpages  = {13},
+  doi       = {10.1145/3284980},
+  note      = {Strong fluid-rigid coupling. Relevant to the absent two-way coupling noted in plan 4.}
+}
+
+@inproceedings{koschier2017,
+  author    = {Koschier, Dan and Bender, Jan},
+  title     = {Density maps for improved {SPH} boundary handling},
+  booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  year      = {2017},
+  pages     = {1--10},
+  publisher = {ACM},
+  doi       = {10.1145/3099564.3099565},
+  note      = {The density-map alternative to particle-sampled boundaries. Predecessor of bender2019vmaps.}
+}
+
+@inproceedings{bender2019vmaps,
+  author    = {Bender, Jan and Kugelstadt, Tassilo and Weiler, Marcel and Koschier, Dan},
+  title     = {Volume Maps: An Implicit Boundary Representation for {SPH}},
+  booktitle = {Motion, Interaction and Games (MIG)},
+  year      = {2019},
+  pages     = {1--10},
+  publisher = {ACM},
+  doi       = {10.1145/3359566.3360077},
+  note      = {Precomputes the boundary VOLUME contribution rather than its density contribution, so derivatives come from differentiating the kernel as usual.}
+}
+
+@article{bender2020,
+  author  = {Bender, Jan and Kugelstadt, Tassilo and Weiler, Marcel and Koschier, Dan},
+  title   = {Implicit Frictional Boundary Handling for {SPH}},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  year    = {2020},
+  volume  = {26},
+  number  = {10},
+  pages   = {2982--2993},
+  doi     = {10.1109/TVCG.2020.3004245},
+  note    = {Extends bender2019vmaps with an implicit friction model. NOTE: the published abstract is the volume-maps abstract verbatim; friction is described in the body, not the abstract.}
+}
 
 @article{adami2012,
   author  = {Adami, Stefan and Hu, Xiangyu Y. and Adams, Nikolaus A.},
@@ -78,7 +186,103 @@
   volume  = {231},
   number  = {21},
   pages   = {7057--7075},
+  doi     = {10.1016/j.jcp.2012.05.005},
   note    = {The wall boundary condition band2018 Eq. 3 extrapolates from, including its hydrostatic term.}
+}
+
+@inproceedings{ihmsen2010,
+  author    = {Ihmsen, Markus and Akinci, Nadir and Gissler, Marc and Teschner, Matthias},
+  title     = {Boundary handling and adaptive time-stepping for {PCISPH}},
+  booktitle = {Workshop on Virtual Reality Interaction and Physical Simulation (VRIPHYS)},
+  year      = {2010},
+  pages     = {79--88},
+  publisher = {The Eurographics Association},
+  doi       = {10.2312/PE/vriphys/vriphys10/079-088},
+  note      = {The adaptive-timestep scheme bender2015's CFL condition descends from.}
+}
+
+
+% --- Pressure solvers, non-pressure forces, multiphase -------------------------
+
+@article{bender2017,
+  author  = {Bender, Jan and Koschier, Dan},
+  title   = {Divergence-Free {SPH} for Incompressible and Viscous Fluids},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  year    = {2017},
+  volume  = {23},
+  number  = {3},
+  pages   = {1193--1206},
+  doi     = {10.1109/TVCG.2016.2578335},
+  note    = {The extended DFSPH paper. Where the two-solver formulation is stated at length.}
+}
+
+@article{weiler2018,
+  author  = {Weiler, Marcel and Koschier, Dan and Brand, Magnus and Bender, Jan},
+  title   = {A Physically Consistent Implicit Viscosity Solver for {SPH} Fluids},
+  journal = {Computer Graphics Forum},
+  year    = {2018},
+  volume  = {37},
+  number  = {2},
+  pages   = {145--155},
+  doi     = {10.1111/cgf.13349},
+  note    = {First author is Weiler, not Koschier -- the old filename koschier18_viscosity.pdf was wrong.}
+}
+
+@article{jeske2023,
+  author    = {Jeske, Stefan Rhys and Westhofen, Lukas and L\"{o}schner, Fabian and Fern\'{a}ndez-Fern\'{a}ndez, Jos\'{e} Antonio and Bender, Jan},
+  title     = {Implicit Surface Tension for {SPH} Fluid Simulation},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2023},
+  volume    = {43},
+  number    = {1},
+  articleno = {13},
+  pages     = {13:1--13:14},
+  numpages  = {14},
+  doi       = {10.1145/3631936}
+}
+
+@inproceedings{bender2017micropolar,
+  author    = {Bender, Jan and Koschier, Dan and Kugelstadt, Tassilo and Weiler, Marcel},
+  title     = {A micropolar material model for turbulent {SPH} fluids},
+  booktitle = {Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  year      = {2017},
+  pages     = {1--8},
+  publisher = {ACM},
+  doi       = {10.1145/3099564.3099578}
+}
+
+@article{bender2019micropolar,
+  author  = {Bender, Jan and Koschier, Dan and Kugelstadt, Tassilo and Weiler, Marcel},
+  title   = {Turbulent Micropolar {SPH} Fluids with Foam},
+  journal = {IEEE Transactions on Visualization and Computer Graphics},
+  year    = {2019},
+  volume  = {25},
+  number  = {6},
+  pages   = {2284--2295},
+  doi     = {10.1109/TVCG.2018.2832080}
+}
+
+@article{boettcher2025,
+  author    = {B\"{o}ttcher, Timna and Westhofen, Lukas and Jeske, Stefan Rhys and Bender, Jan},
+  title     = {Implicit Incompressible Porous Flow using {SPH}},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2025},
+  volume    = {44},
+  number    = {6},
+  articleno = {268},
+  pages     = {268:1--268:13},
+  numpages  = {13},
+  doi       = {10.1145/3763325}
+}
+
+@article{bender2026,
+  author    = {Bender, Jan and Jeske, Stefan Rhys and B\"{o}ttcher, Timna and L\"{o}schner, Fabian},
+  title     = {Primal {SPH} Solver for Strongly Coupled Multiphase Simulations with High Density Ratios},
+  journal   = {Computer Graphics Forum},
+  year      = {2026},
+  articleno = {e70559},
+  doi       = {10.1111/cgf.70559},
+  note      = {SCA 2026. Early-view article; no volume/issue assigned at the time of writing.}
 }
 
 @article{adami2013,
@@ -88,33 +292,1032 @@
   year    = {2013},
   volume  = {241},
   pages   = {292--307},
+  doi     = {10.1016/j.jcp.2013.01.043},
   note    = {Needed to close the open background-pressure question (plan 5, Q7): a background pressure that is set rather than allowed to drift.}
 }
 
-@article{akinci2012,
-  author  = {Akinci, Nadir and Ihmsen, Markus and Akinci, Gizem and Solenthaler, Barbara and Teschner, Matthias},
-  title   = {Versatile rigid-fluid coupling for incompressible {SPH}},
-  journal = {ACM Transactions on Graphics},
-  year    = {2012},
-  volume  = {31},
-  number  = {4},
-  note    = {Source of the boundary volume correction akinciBoundaryVolume implements. Derived for a ONE-LAYER sampling, which is why it inflates this codebase's five-layer band.}
+
+% --- Spatial adaptivity, data structures, analytic boundaries ------------------
+
+@inproceedings{winchenbach2016,
+  author    = {Winchenbach, Rene and Hochstetter, Hendrik and Kolb, Andreas},
+  title     = {Constrained Neighbor Lists for {SPH}-based Fluid Simulations},
+  booktitle = {Eurographics/ACM SIGGRAPH Symposium on Computer Animation (SCA)},
+  year      = {2016},
+  pages     = {49--56},
+  publisher = {The Eurographics Association},
+  doi       = {10.2312/sca.20161222}
 }
 
-@inproceedings{ihmsen2010,
-  author    = {Ihmsen, Markus and Akinci, Nadir and Gissler, Markus and Teschner, Matthias},
-  title     = {Boundary handling and adaptive time-stepping for {PCISPH}},
+@article{winchenbach2017,
+  author    = {Winchenbach, Rene and Hochstetter, Hendrik and Kolb, Andreas},
+  title     = {Infinite continuous adaptivity for incompressible {SPH}},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2017},
+  volume    = {36},
+  number    = {4},
+  articleno = {102},
+  pages     = {102:1--102:10},
+  numpages  = {10},
+  doi       = {10.1145/3072959.3073713}
+}
+
+@inproceedings{winchenbach2019,
+  author    = {Winchenbach, Rene and Kolb, Andreas},
+  title     = {Multi-Level-Memory Structures for Adaptive {SPH} Simulations},
+  booktitle = {Vision, Modeling, and Visualization (VMV)},
+  year      = {2019},
+  pages     = {99--107},
+  publisher = {The Eurographics Association},
+  doi       = {10.2312/vmv.20191323}
+}
+
+@article{winchenbach2020mlm,
+  author  = {Winchenbach, Rene and Kolb, Andreas},
+  title   = {Multi-Level Memory Structures for Simulating and Rendering Smoothed Particle Hydrodynamics},
+  journal = {Computer Graphics Forum},
+  year    = {2020},
+  volume  = {39},
+  number  = {6},
+  pages   = {527--541},
+  doi     = {10.1111/cgf.14090}
+}
+
+@article{winchenbach2020,
+  author    = {Winchenbach, Rene and Akhunov, Rustam and Kolb, Andreas},
+  title     = {Semi-analytic boundary handling below particle resolution for smoothed particle hydrodynamics},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2020},
+  volume    = {39},
+  number    = {6},
+  articleno = {173},
+  pages     = {173:1--173:17},
+  numpages  = {17},
+  doi       = {10.1145/3414685.3417829}
+}
+
+@article{winchenbach2021,
+  author  = {Winchenbach, Rene and Kolb, Andreas},
+  title   = {Optimized Refinement for Spatially Adaptive {SPH}},
+  journal = {ACM Transactions on Graphics},
+  year    = {2021},
+  volume  = {40},
+  number  = {1},
+  pages   = {1--15},
+  doi     = {10.1145/3363555},
+  note    = {The copy here is the author's version, which carries placeholder volume/issue/article numbers on its front page; the fields above are the published ones.}
+}
+
+@inproceedings{winchenbach2024integrals,
+  author    = {Winchenbach, Rene and Kolb, Andreas and Thuerey, Nils},
+  title     = {Fully Analytic Higher-Order Boundary Integrals for Two-Dimensional {SPH}},
+  booktitle = {2024 International SPHERIC Workshop, Berlin, June 18--20, 2024},
+  year      = {2024}
+}
+
+@article{winchenbach2025analytic,
+  author  = {Winchenbach, Rene and Kolb, Andreas},
+  title   = {Solving Boundary Handling Analytically in Two Dimensions for Smoothed Particle Hydrodynamics},
+  journal = {Journal of Computational Physics},
+  year    = {2026},
+  volume  = {555},
+  pages   = {114788},
+  doi     = {10.1016/j.jcp.2026.114788},
+  note    = {Journal-length version of winchenbach2024integrals. Preprint was arXiv:2507.21686.}
+}
+
+@article{winchenbach2025diffsph,
+  author  = {Winchenbach, Rene and Thuerey, Nils},
+  title   = {di{ff}{SPH}: Differentiable Smoothed Particle Hydrodynamics for Hybrid Machine Learning Solutions in Fluid Mechanics},
+  journal = {Journal of Computational Physics},
+  year    = {2026},
+  volume  = {555},
+  pages   = {114769},
+  doi     = {10.1016/j.jcp.2026.114769},
+  note    = {Preprint (arXiv:2507.21684) was titled "diffSPH: Differentiable Smoothed Particle Hydrodynamics for Adjoint Optimization and Machine Learning"; published title changed.}
+}
+
+
+% --- Machine learning on SPH ---------------------------------------------------
+
+@inproceedings{winchenbach2024sfbc,
+  author        = {Winchenbach, Rene and Thuerey, Nils},
+  title         = {Symmetric Basis Convolutions for Learning Lagrangian Fluid Mechanics},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2403.16680},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG}
+}
+
+@inproceedings{winchenbach2023spheric,
+  author    = {Winchenbach, Rene and Thuerey, Nils},
+  title     = {A Hybrid Framework for Fluid Flow Simulations: Combining {SPH} with Machine Learning},
+  booktitle = {2023 International SPHERIC Workshop, Rhodes, June 27--29, 2023},
+  year      = {2023}
+}
+
+@inproceedings{winchenbach2024pmac,
+  author    = {Winchenbach, Rene and Thuerey, Nils},
+  title     = {Cross-Validation of {SPH}-based Machine Learning Models using the Taylor-Green Vortex Case},
+  booktitle = {Particle Methods and Applications Conference (PMAC), Santa Fe, January 22--24, 2024},
+  year      = {2024},
+  note      = {Extended abstract (1 page).}
+}
+
+@inproceedings{winchenbach2024spheric,
+  author    = {Winchenbach, Rene and Thuerey, Nils},
+  title     = {Physically-Motivated Machine Learning Models for Lagrangian Fluid Mechanics},
+  booktitle = {2024 International SPHERIC Workshop, Berlin, June 18--20, 2024},
+  year      = {2024}
+}
+
+@inproceedings{winchenbach2025spheric,
+  author    = {Winchenbach, Rene and Thuerey, Nils},
+  title     = {{MoriNet}: A Machine Learning-based Mori-Zwanzig Perspective on Weakly Compressible {SPH}},
+  booktitle = {19th International SPHERIC Workshop, Barcelona, June 2025},
+  year      = {2025}
+}
+
+
+% --- Extended set (one step removed; bibliographic records only, added 2026-08-29) ---
+%
+% Background and related work reached from the core set. Verified against DOI
+% records; not read for relevance, and not indexed in ABSTRACTS.md.
+
+@article{adams2007,
+  author    = {Adams, Bart and Pauly, Mark and Keiser, Richard and Guibas, Leonidas J.},
+  title     = {Adaptively Sampled Particle Fluids},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2007},
+  volume    = {26},
+  number    = {3},
+  articleno = {48},
+  pages     = {48:1--48:7},
+  numpages  = {7},
+  doi       = {10.1145/1239451.1239499}
+}
+
+@article{akinci2013,
+  author    = {Akinci, Nadir and Akinci, Gizem and Teschner, Matthias},
+  title     = {Versatile Surface Tension and Adhesion for {SPH} Fluids},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2013},
+  volume    = {32},
+  number    = {6},
+  articleno = {182},
+  pages     = {182:1--182:8},
+  numpages  = {8},
+  doi       = {10.1145/2508363.2508395}
+}
+
+@article{akinci2013coupling,
+  author    = {Akinci, Nadir and Cornelis, Jens and Akinci, Gizem and Teschner, Matthias},
+  title     = {Coupling Elastic Solids with Smoothed Particle Hydrodynamics Fluids},
+  journal   = {Computer Animation and Virtual Worlds},
+  year      = {2013},
+  volume    = {24},
+  number    = {3-4},
+  pages     = {195--203},
+  doi       = {10.1002/cav.1499}
+}
+
+@article{ando2013,
+  author    = {Ando, Ryoichi and Th\"{u}rey, Nils and Wojtan, Chris},
+  title     = {Highly Adaptive Liquid Simulations on Tetrahedral Meshes},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2013},
+  volume    = {32},
+  number    = {4},
+  articleno = {103},
+  pages     = {103:1--103:10},
+  numpages  = {10},
+  doi       = {10.1145/2461912.2461982}
+}
+
+@inproceedings{band2017,
+  author    = {Band, Stefan and Gissler, Christoph and Teschner, Matthias},
+  title     = {Moving Least Squares Boundaries for {SPH} Fluids},
   booktitle = {Workshop on Virtual Reality Interaction and Physical Simulation (VRIPHYS)},
-  year      = {2010},
-  note      = {The adaptive-timestep scheme bender2015's CFL condition descends from.}
+  publisher = {The Eurographics Association},
+  year      = {2017},
+  doi       = {10.2312/vriphys.20171080}
 }
 
-@article{schechter2012,
-  author  = {Schechter, Hagit and Bridson, Robert},
-  title   = {Ghost {SPH} for animating water},
-  journal = {ACM Transactions on Graphics},
-  year    = {2012},
-  volume  = {31},
-  number  = {4},
-  note    = {The published remedy bender2015 5 cites for free-surface density underestimation -- the rotatingSquarePatch corner loss.}
+@article{batty2007,
+  author    = {Batty, Christopher and Bertails, Florence and Bridson, Robert},
+  title     = {A Fast Variational Framework for Accurate Solid-Fluid Coupling},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2007},
+  volume    = {26},
+  number    = {3},
+  articleno = {100},
+  pages     = {100:1--100:7},
+  numpages  = {7},
+  doi       = {10.1145/1239451.1239551}
 }
+
+@article{batty2012,
+  author    = {Batty, Christopher and Uribe, Andres and Audoly, Basile and Grinspun, Eitan},
+  title     = {Discrete Viscous Sheets},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2012},
+  volume    = {31},
+  number    = {4},
+  articleno = {113},
+  pages     = {113:1--113:7},
+  numpages  = {7},
+  doi       = {10.1145/2185520.2185609}
+}
+
+@inproceedings{becker2007,
+  author    = {Becker, Markus and Teschner, Matthias},
+  title     = {Weakly Compressible {SPH} for Free Surface Flows},
+  booktitle = {Proceedings of the 2007 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {The Eurographics Association},
+  year      = {2007},
+  pages     = {209--218},
+  doi       = {10.2312/SCA/SCA07/209-218}
+}
+
+@article{becker2009,
+  author    = {Becker, Markus and Tessendorf, Hendrik and Teschner, Matthias},
+  title     = {Direct Forcing for Lagrangian Rigid-Fluid Coupling},
+  journal   = {IEEE Transactions on Visualization and Computer Graphics},
+  year      = {2009},
+  volume    = {15},
+  number    = {3},
+  pages     = {493--503},
+  doi       = {10.1109/TVCG.2008.107}
+}
+
+@inproceedings{bell2005,
+  author    = {Bell, Nathan and Yu, Yizhou and Mucha, Peter J.},
+  title     = {Particle-Based Simulation of Granular Materials},
+  booktitle = {Proceedings of the 2005 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {ACM},
+  year      = {2005},
+  pages     = {77--86},
+  doi       = {10.1145/1073368.1073379}
+}
+
+@article{bodin2011,
+  author    = {Bodin, Kenneth and Lacoursi\`{e}re, Claude and Servin, Martin},
+  title     = {Constraint Fluids},
+  journal   = {IEEE Transactions on Visualization and Computer Graphics},
+  year      = {2012},
+  volume    = {18},
+  number    = {3},
+  pages     = {516--526},
+  doi       = {10.1109/TVCG.2011.29},
+  note      = {Volume 18(3) is 2012; cited elsewhere (and keyed here) as 2011, the online-first year.}
+}
+
+@article{caltagirone2015,
+  author    = {Caltagirone, Jean-Paul and Vincent, St\'{e}phane},
+  title     = {A Kinematics Scalar Projection Method ({KSP}) for Incompressible Flows with Variable Density},
+  journal   = {Open Journal of Fluid Dynamics},
+  year      = {2015},
+  volume    = {5},
+  number    = {2},
+  pages     = {171--182},
+  doi       = {10.4236/ojfd.2015.52019}
+}
+
+@article{chiron2019,
+  author    = {Chiron, L. and de Leffe, M. and Oger, G. and Le Touz\'{e}, D.},
+  title     = {Fast and Accurate {SPH} Modelling of {3D} Complex Wall Boundaries in Viscous and Non Viscous Flows},
+  journal   = {Computer Physics Communications},
+  year      = {2019},
+  volume    = {234},
+  pages     = {93--111},
+  doi       = {10.1016/j.cpc.2018.08.001}
+}
+
+@inproceedings{clavet2005,
+  author    = {Clavet, Simon and Beaudoin, Philippe and Poulin, Pierre},
+  title     = {Particle-Based Viscoelastic Fluid Simulation},
+  booktitle = {Proceedings of the 2005 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {ACM},
+  year      = {2005},
+  pages     = {219--228},
+  doi       = {10.1145/1073368.1073400}
+}
+
+@article{cleary1999,
+  author    = {Cleary, Paul W. and Monaghan, Joseph J.},
+  title     = {Conduction Modelling Using Smoothed Particle Hydrodynamics},
+  journal   = {Journal of Computational Physics},
+  year      = {1999},
+  volume    = {148},
+  number    = {1},
+  pages     = {227--264},
+  doi       = {10.1006/jcph.1998.6118}
+}
+
+@article{colagrossi2003,
+  author    = {Colagrossi, Andrea and Landrini, Maurizio},
+  title     = {Numerical Simulation of Interfacial Flows by Smoothed Particle Hydrodynamics},
+  journal   = {Journal of Computational Physics},
+  year      = {2003},
+  volume    = {191},
+  number    = {2},
+  pages     = {448--475},
+  doi       = {10.1016/S0021-9991(03)00324-3}
+}
+
+@article{cornelis2014,
+  author    = {Cornelis, Jens and Ihmsen, Markus and Peer, Andreas and Teschner, Matthias},
+  title     = {{IISPH}-{FLIP} for Incompressible Fluids},
+  journal   = {Computer Graphics Forum},
+  year      = {2014},
+  volume    = {33},
+  number    = {2},
+  pages     = {255--262},
+  doi       = {10.1111/cgf.12324}
+}
+
+@article{cummins1999,
+  author    = {Cummins, Sharen J. and Rudman, Murray},
+  title     = {An {SPH} Projection Method},
+  journal   = {Journal of Computational Physics},
+  year      = {1999},
+  volume    = {152},
+  number    = {2},
+  pages     = {584--607},
+  doi       = {10.1006/jcph.1999.6246}
+}
+
+@article{degoes2015,
+  author    = {de Goes, Fernando and Wallez, Corentin and Huang, Jin and Pavlov, Dmitry and Desbrun, Mathieu},
+  title     = {Power Particles: An Incompressible Fluid Solver Based on Power Diagrams},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2015},
+  volume    = {34},
+  number    = {4},
+  articleno = {50},
+  pages     = {50:1--50:11},
+  numpages  = {11},
+  doi       = {10.1145/2766901}
+}
+
+@article{dehnen2012,
+  author    = {Dehnen, Walter and Aly, Hossam},
+  title     = {Improving Convergence in Smoothed Particle Hydrodynamics Simulations Without Pairing Instability},
+  journal   = {Monthly Notices of the Royal Astronomical Society},
+  year      = {2012},
+  volume    = {425},
+  number    = {2},
+  pages     = {1068--1082},
+  doi       = {10.1111/j.1365-2966.2012.21439.x}
+}
+
+@inproceedings{desbrun1996,
+  author    = {Desbrun, Mathieu and Gascuel, Marie-Paule},
+  title     = {Smoothed Particles: A New Paradigm for Animating Highly Deformable Bodies},
+  booktitle = {Computer Animation and Simulation '96 (Eurographics Workshop)},
+  publisher = {Springer},
+  year      = {1996},
+  pages     = {61--76},
+  doi       = {10.1007/978-3-7091-7486-9_5}
+}
+
+@article{deul2014,
+  author    = {Deul, Crispin and Charrier, Patrick and Bender, Jan},
+  title     = {Position-Based Rigid-Body Dynamics},
+  journal   = {Computer Animation and Virtual Worlds},
+  year      = {2016},
+  volume    = {27},
+  number    = {2},
+  pages     = {103--112},
+  doi       = {10.1002/cav.1614},
+  note      = {Volume 27(2) is 2016; cited elsewhere (and keyed here) as 2014, the early-view year.}
+}
+
+@article{ferrand2013,
+  author    = {Ferrand, M. and Laurence, D. R. and Rogers, B. D. and Violeau, D. and Kassiotis, C.},
+  title     = {Unified Semi-Analytical Wall Boundary Conditions for Inviscid, Laminar or Turbulent Flows in the Meshless {SPH} Method},
+  journal   = {International Journal for Numerical Methods in Fluids},
+  year      = {2013},
+  volume    = {71},
+  number    = {4},
+  pages     = {446--472},
+  doi       = {10.1002/fld.3666},
+  note      = {Volume 71(4) is 2013; the DOI record's issued date is the 2012 early-view date.}
+}
+
+@article{foster1996,
+  author    = {Foster, Nick and Metaxas, Dimitri},
+  title     = {Realistic Animation of Liquids},
+  journal   = {Graphical Models and Image Processing},
+  year      = {1996},
+  volume    = {58},
+  number    = {5},
+  pages     = {471--483},
+  doi       = {10.1006/gmip.1996.0039}
+}
+
+@inproceedings{foster2001,
+  author    = {Foster, Nick and Fedkiw, Ronald},
+  title     = {Practical Animation of Liquids},
+  booktitle = {Proceedings of the 28th Annual Conference on Computer Graphics and Interactive Techniques (SIGGRAPH)},
+  publisher = {ACM},
+  year      = {2001},
+  pages     = {23--30},
+  doi       = {10.1145/383259.383261}
+}
+
+@article{fujisawa2015,
+  author    = {Fujisawa, Makoto and Miura, Kenjiro T.},
+  title     = {An Efficient Boundary Handling with a Modified Density Calculation for {SPH}},
+  journal   = {Computer Graphics Forum},
+  year      = {2015},
+  volume    = {34},
+  number    = {7},
+  pages     = {155--162},
+  doi       = {10.1111/cgf.12754},
+  note      = {Pacific Graphics 2015.}
+}
+
+@article{ghia1982,
+  author    = {Ghia, U. and Ghia, K. N. and Shin, C. T.},
+  title     = {High-{Re} Solutions for Incompressible Flow Using the {Navier-Stokes} Equations and a Multigrid Method},
+  journal   = {Journal of Computational Physics},
+  year      = {1982},
+  volume    = {48},
+  number    = {3},
+  pages     = {387--411},
+  doi       = {10.1016/0021-9991(82)90058-4}
+}
+
+@article{gissler2017,
+  author    = {Gissler, Christoph and Band, Stefan and Peer, Andreas and Ihmsen, Markus and Teschner, Matthias},
+  title     = {Generalized Drag Force for Particle-Based Simulations},
+  journal   = {Computers \& Graphics},
+  year      = {2017},
+  volume    = {69},
+  pages     = {1--11},
+  doi       = {10.1016/j.cag.2017.09.002}
+}
+
+@inproceedings{harada2007,
+  author    = {Harada, Takahiro and Koshizuka, Seiichi and Kawaguchi, Yoichiro},
+  title     = {Smoothed Particle Hydrodynamics in Complex Shapes},
+  booktitle = {Proceedings of the 23rd Spring Conference on Computer Graphics (SCCG)},
+  publisher = {ACM},
+  year      = {2007},
+  pages     = {191--197},
+  doi       = {10.1145/2614348.2614375}
+}
+
+@article{he2012,
+  author    = {He, Xiaowei and Liu, Ning and Li, Sheng and Wang, Hongan and Wang, Guoping},
+  title     = {Local Poisson {SPH} for Viscous Incompressible Fluids},
+  journal   = {Computer Graphics Forum},
+  year      = {2012},
+  volume    = {31},
+  number    = {6},
+  pages     = {1948--1958},
+  doi       = {10.1111/j.1467-8659.2012.03074.x}
+}
+
+@article{he2014,
+  author    = {He, Xiaowei and Wang, Huamin and Zhang, Fengjun and Wang, Hongan and Wang, Guoping and Zhou, Kun},
+  title     = {Robust Simulation of Sparsely Sampled Thin Features in {SPH}-Based Free Surface Flows},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2014},
+  volume    = {34},
+  number    = {1},
+  articleno = {7},
+  pages     = {7:1--7:9},
+  numpages  = {9},
+  doi       = {10.1145/2682630}
+}
+
+@article{hu2005,
+  author    = {Hu, X. Y. and Adams, N. A.},
+  title     = {A Multi-Phase {SPH} Method for Macroscopic and Mesoscopic Flows},
+  journal   = {Journal of Computational Physics},
+  year      = {2006},
+  volume    = {213},
+  number    = {2},
+  pages     = {844--861},
+  doi       = {10.1016/j.jcp.2005.09.001},
+  note      = {Volume 213(2) is 2006; keyed here as 2005 after the received/DOI-suffix year.}
+}
+
+@article{hu2007,
+  author    = {Hu, X. Y. and Adams, N. A.},
+  title     = {An Incompressible Multi-Phase {SPH} Method},
+  journal   = {Journal of Computational Physics},
+  year      = {2007},
+  volume    = {227},
+  number    = {1},
+  pages     = {264--278},
+  doi       = {10.1016/j.jcp.2007.07.013}
+}
+
+@article{huber2015,
+  author    = {Huber, Markus and Eberhardt, Bernhard and Weiskopf, Daniel},
+  title     = {Boundary Handling at Cloth-Fluid Contact},
+  journal   = {Computer Graphics Forum},
+  year      = {2015},
+  volume    = {34},
+  number    = {1},
+  pages     = {14--25},
+  doi       = {10.1111/cgf.12455},
+  note      = {Volume 34(1) is 2015; the DOI record's issued date is the 2014 early-view date.}
+}
+
+@article{ihmsen2011,
+  author    = {Ihmsen, Markus and Akinci, Nadir and Becker, Markus and Teschner, Matthias},
+  title     = {A Parallel {SPH} Implementation on Multi-Core {CPUs}},
+  journal   = {Computer Graphics Forum},
+  year      = {2011},
+  volume    = {30},
+  number    = {1},
+  pages     = {99--112},
+  doi       = {10.1111/j.1467-8659.2010.01832.x},
+  note      = {Volume 30(1) is 2011; the DOI record's issued date is the 2010 early-view date.}
+}
+
+@inproceedings{ihmsen2014star,
+  author    = {Ihmsen, Markus and Orthmann, Jens and Solenthaler, Barbara and Kolb, Andreas and Teschner, Matthias},
+  title     = {{SPH} Fluids in Computer Graphics},
+  booktitle = {Eurographics 2014 -- State of the Art Reports (STAR)},
+  publisher = {The Eurographics Association},
+  year      = {2014},
+  doi       = {10.2312/egst.20141034}
+}
+
+@article{kang2014,
+  author    = {Kang, Nahyup and Sagong, Donghoon},
+  title     = {Incompressible {SPH} Using the Divergence-Free Condition},
+  journal   = {Computer Graphics Forum},
+  year      = {2014},
+  volume    = {33},
+  number    = {7},
+  pages     = {219--228},
+  doi       = {10.1111/cgf.12490}
+}
+
+@techreport{keiser2006,
+  author    = {Keiser, Richard and Adams, Bart and Dutr\'{e}, Philip and Guibas, Leonidas J. and Pauly, Mark},
+  title     = {Multiresolution Particle-Based Fluids},
+  institution = {Department of Computer Science, ETH Zurich},
+  year      = {2006},
+  number    = {520},
+  doi       = {10.3929/ethz-a-006780981}
+}
+
+@article{koschier2022,
+  author    = {Koschier, Dan and Bender, Jan and Solenthaler, Barbara and Teschner, Matthias},
+  title     = {A Survey on {SPH} Methods in Computer Graphics},
+  journal   = {Computer Graphics Forum},
+  year      = {2022},
+  volume    = {41},
+  number    = {2},
+  pages     = {737--760},
+  doi       = {10.1111/cgf.14508}
+}
+
+@article{kruisbrink2018,
+  author    = {Kruisbrink, Arno C. H. and Korzilius, Stan P. and Pearce, Frazer R. and Morvan, Herv\'{e} P.},
+  title     = {{SPH} Particle Collisions for the Reduction of Particle Clustering, Interface Stabilisation and Wall Modelling},
+  journal   = {Journal of Applied Mathematics and Physics},
+  year      = {2018},
+  volume    = {6},
+  number    = {9},
+  pages     = {1860--1882},
+  doi       = {10.4236/jamp.2018.69158}
+}
+
+@article{kugelstadt2021,
+  author    = {Kugelstadt, Tassilo and Bender, Jan and Fern\'{a}ndez-Fern\'{a}ndez, Jos\'{e} Antonio and Jeske, Stefan Rhys and L\"{o}schner, Fabian and Longva, Andreas},
+  title     = {Fast Corotated Elastic {SPH} Solids with Implicit Zero-Energy Mode Control},
+  journal   = {Proceedings of the ACM on Computer Graphics and Interactive Techniques},
+  year      = {2021},
+  volume    = {4},
+  number    = {3},
+  articleno = {33},
+  pages     = {33:1--33:21},
+  numpages  = {21},
+  doi       = {10.1145/3480142},
+  note      = {SCA 2021.}
+}
+
+@article{kulasegaram2004,
+  author    = {Kulasegaram, S. and Bonet, J. and Lewis, R. W. and Profit, M.},
+  title     = {A Variational Formulation Based Contact Algorithm for Rigid Boundaries in Two-Dimensional {SPH} Applications},
+  journal   = {Computational Mechanics},
+  year      = {2004},
+  volume    = {33},
+  number    = {4},
+  pages     = {316--325},
+  doi       = {10.1007/s00466-003-0534-0}
+}
+
+@article{leroy2014,
+  author    = {Leroy, A. and Violeau, D. and Ferrand, M. and Kassiotis, C.},
+  title     = {Unified Semi-Analytical Wall Boundary Conditions Applied to 2-D Incompressible {SPH}},
+  journal   = {Journal of Computational Physics},
+  year      = {2014},
+  volume    = {261},
+  pages     = {106--129},
+  doi       = {10.1016/j.jcp.2013.12.035}
+}
+
+@article{liu2021,
+  author    = {Liu, Sinuo and Wang, Xiaokun and Ban, Xiaojuan and Xu, Yanrui and Zhou, Jing and Kosinka, Ji\v{r}\'{\i} and Telea, Alexandru C.},
+  title     = {Turbulent Details Simulation for {SPH} Fluids via Vorticity Refinement},
+  journal   = {Computer Graphics Forum},
+  year      = {2021},
+  volume    = {40},
+  number    = {1},
+  pages     = {54--67},
+  doi       = {10.1111/cgf.14095},
+  note      = {Volume 40(1) is 2021; the DOI record's issued date is the 2020 early-view date.}
+}
+
+@article{losasso2008,
+  author    = {Losasso, Frank and Talton, Jerry O. and Kwatra, Nipun and Fedkiw, Ronald},
+  title     = {Two-Way Coupled {SPH} and Particle Level Set Fluid Simulation},
+  journal   = {IEEE Transactions on Visualization and Computer Graphics},
+  year      = {2008},
+  volume    = {14},
+  number    = {4},
+  pages     = {797--804},
+  doi       = {10.1109/TVCG.2008.37}
+}
+
+@article{lucy1977,
+  author    = {Lucy, L. B.},
+  title     = {A Numerical Approach to the Testing of the Fission Hypothesis},
+  journal   = {The Astronomical Journal},
+  year      = {1977},
+  volume    = {82},
+  number    = {12},
+  pages     = {1013--1024},
+  doi       = {10.1086/112164}
+}
+
+@article{macklin2013,
+  author    = {Macklin, Miles and M\"{u}ller, Matthias},
+  title     = {Position Based Fluids},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2013},
+  volume    = {32},
+  number    = {4},
+  articleno = {104},
+  pages     = {104:1--104:12},
+  numpages  = {12},
+  doi       = {10.1145/2461912.2461984}
+}
+
+@article{marrone2011,
+  author    = {Marrone, S. and Antuono, M. and Colagrossi, A. and Colicchio, G. and Le Touz\'{e}, D. and Graziani, G.},
+  title     = {{$\delta$-SPH} Model for Simulating Violent Impact Flows},
+  journal   = {Computer Methods in Applied Mechanics and Engineering},
+  year      = {2011},
+  volume    = {200},
+  number    = {13--16},
+  pages     = {1526--1542},
+  doi       = {10.1016/j.cma.2010.12.016}
+}
+
+@article{monaghan1989,
+  author    = {Monaghan, Joseph J.},
+  title     = {On the Problem of Penetration in Particle Methods},
+  journal   = {Journal of Computational Physics},
+  year      = {1989},
+  volume    = {82},
+  number    = {1},
+  pages     = {1--15},
+  doi       = {10.1016/0021-9991(89)90032-6}
+}
+
+@article{monaghan2002,
+  author    = {Monaghan, J. J.},
+  title     = {{SPH} Compressible Turbulence},
+  journal   = {Monthly Notices of the Royal Astronomical Society},
+  year      = {2002},
+  volume    = {335},
+  number    = {3},
+  pages     = {843--852},
+  doi       = {10.1046/j.1365-8711.2002.05678.x}
+}
+
+@article{monaghan2005,
+  author    = {Monaghan, J. J.},
+  title     = {Smoothed Particle Hydrodynamics},
+  journal   = {Reports on Progress in Physics},
+  year      = {2005},
+  volume    = {68},
+  number    = {8},
+  pages     = {1703--1759},
+  doi       = {10.1088/0034-4885/68/8/R01}
+}
+
+@article{monaghan2009,
+  author    = {Monaghan, J. J. and Kajtar, J. B.},
+  title     = {{SPH} Particle Boundary Forces for Arbitrary Boundaries},
+  journal   = {Computer Physics Communications},
+  year      = {2009},
+  volume    = {180},
+  number    = {10},
+  pages     = {1811--1820},
+  doi       = {10.1016/j.cpc.2009.05.008}
+}
+
+@article{morris1997,
+  author    = {Morris, Joseph P. and Fox, Patrick J. and Zhu, Yi},
+  title     = {Modeling Low Reynolds Number Incompressible Flows Using {SPH}},
+  journal   = {Journal of Computational Physics},
+  year      = {1997},
+  volume    = {136},
+  number    = {1},
+  pages     = {214--226},
+  doi       = {10.1006/jcph.1997.5776}
+}
+
+@article{morris1997switch,
+  author    = {Morris, Joseph P. and Monaghan, Joseph J.},
+  title     = {A Switch to Reduce {SPH} Viscosity},
+  journal   = {Journal of Computational Physics},
+  year      = {1997},
+  volume    = {136},
+  number    = {1},
+  pages     = {41--50},
+  doi       = {10.1006/jcph.1997.5690}
+}
+
+@inproceedings{muller2003,
+  author    = {M\"{u}ller, Matthias and Charypar, David and Gross, Markus},
+  title     = {Particle-Based Fluid Simulation for Interactive Applications},
+  booktitle = {Proceedings of the 2003 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {The Eurographics Association},
+  year      = {2003},
+  pages     = {154--159},
+  doi       = {10.2312/SCA03/154-159}
+}
+
+@article{muller2004,
+  author    = {M\"{u}ller, Matthias and Schirm, Simon and Teschner, Matthias and Heidelberger, Bruno and Gross, Markus},
+  title     = {Interaction of Fluids with Deformable Solids},
+  journal   = {Computer Animation and Virtual Worlds},
+  year      = {2004},
+  volume    = {15},
+  number    = {3-4},
+  pages     = {159--171},
+  doi       = {10.1002/cav.18}
+}
+
+@inproceedings{muller2005,
+  author    = {M\"{u}ller, Matthias and Solenthaler, Barbara and Keiser, Richard and Gross, Markus},
+  title     = {Particle-Based Fluid-Fluid Interaction},
+  booktitle = {Proceedings of the 2005 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {ACM},
+  year      = {2005},
+  pages     = {237--244},
+  doi       = {10.1145/1073368.1073402}
+}
+
+@article{orthmann2012,
+  author    = {Orthmann, Jens and Kolb, Andreas},
+  title     = {Temporal Blending for Adaptive {SPH}},
+  journal   = {Computer Graphics Forum},
+  year      = {2012},
+  volume    = {31},
+  number    = {8},
+  pages     = {2436--2449},
+  doi       = {10.1111/j.1467-8659.2012.03186.x}
+}
+
+@article{peer2015,
+  author    = {Peer, Andreas and Ihmsen, Markus and Cornelis, Jens and Teschner, Matthias},
+  title     = {An Implicit Viscosity Formulation for {SPH} Fluids},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2015},
+  volume    = {34},
+  number    = {4},
+  articleno = {114},
+  pages     = {114:1--114:10},
+  numpages  = {10},
+  doi       = {10.1145/2766925}
+}
+
+@article{peer2016,
+  author    = {Peer, Andreas and Teschner, Matthias},
+  title     = {Prescribed Velocity Gradients for Highly Viscous {SPH} Fluids with Vorticity Diffusion},
+  journal   = {IEEE Transactions on Visualization and Computer Graphics},
+  year      = {2017},
+  volume    = {23},
+  number    = {12},
+  pages     = {2656--2662},
+  doi       = {10.1109/TVCG.2016.2636144},
+  note      = {Volume 23(12) is 2017; cited elsewhere (and keyed here) as 2016, the early-view year.}
+}
+
+@article{peer2017,
+  author    = {Peer, Andreas and Gissler, Christoph and Band, Stefan and Teschner, Matthias},
+  title     = {An Implicit {SPH} Formulation for Incompressible Linearly Elastic Solids},
+  journal   = {Computer Graphics Forum},
+  year      = {2018},
+  volume    = {37},
+  number    = {6},
+  pages     = {135--148},
+  doi       = {10.1111/cgf.13317},
+  note      = {Volume 37(6) is 2018; cited elsewhere (and keyed here) as 2017, the early-view year.}
+}
+
+@article{price2010,
+  author    = {Price, Daniel J.},
+  title     = {Smoothed Particle Magnetohydrodynamics -- {IV}. Using the Vector Potential},
+  journal   = {Monthly Notices of the Royal Astronomical Society},
+  year      = {2010},
+  volume    = {401},
+  number    = {3},
+  pages     = {1475--1499},
+  doi       = {10.1111/j.1365-2966.2009.15763.x}
+}
+
+@article{price2012,
+  author    = {Price, Daniel J.},
+  title     = {Smoothed Particle Hydrodynamics and Magnetohydrodynamics},
+  journal   = {Journal of Computational Physics},
+  year      = {2012},
+  volume    = {231},
+  number    = {3},
+  pages     = {759--794},
+  doi       = {10.1016/j.jcp.2010.12.011}
+}
+
+@inproceedings{raveendran2011,
+  author    = {Raveendran, Karthik and Wojtan, Chris and Turk, Greg},
+  title     = {Hybrid Smoothed Particle Hydrodynamics},
+  booktitle = {Proceedings of the 2011 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {ACM},
+  year      = {2011},
+  pages     = {33--42},
+  doi       = {10.1145/2019406.2019411}
+}
+
+@article{shao2003,
+  author    = {Shao, Songdong and Lo, Edmond Y. M.},
+  title     = {Incompressible {SPH} Method for Simulating {Newtonian} and Non-{Newtonian} Flows with a Free Surface},
+  journal   = {Advances in Water Resources},
+  year      = {2003},
+  volume    = {26},
+  number    = {7},
+  pages     = {787--800},
+  doi       = {10.1016/S0309-1708(03)00030-7}
+}
+
+@inproceedings{sin2009,
+  author    = {Sin, Funshing and Bargteil, Adam W. and Hodgins, Jessica K.},
+  title     = {A Point-Based Method for Animating Incompressible Flow},
+  booktitle = {Proceedings of the 2009 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {ACM},
+  year      = {2009},
+  pages     = {247--255},
+  doi       = {10.1145/1599470.1599502}
+}
+
+@article{solenthaler2007,
+  author    = {Solenthaler, Barbara and Schl\"{a}fli, J\"{u}rg and Pajarola, Renato},
+  title     = {A Unified Particle Model for Fluid-Solid Interactions},
+  journal   = {Computer Animation and Virtual Worlds},
+  year      = {2007},
+  volume    = {18},
+  number    = {1},
+  pages     = {69--82},
+  doi       = {10.1002/cav.162}
+}
+
+@inproceedings{solenthaler2008,
+  author    = {Solenthaler, Barbara and Pajarola, Renato},
+  title     = {Density Contrast {SPH} Interfaces},
+  booktitle = {Proceedings of the 2008 ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA)},
+  publisher = {The Eurographics Association},
+  year      = {2008},
+  pages     = {211--218},
+  doi       = {10.2312/SCA/SCA08/211-218}
+}
+
+@article{solenthaler2009,
+  author    = {Solenthaler, Barbara and Pajarola, Renato},
+  title     = {Predictive-Corrective Incompressible {SPH}},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2009},
+  volume    = {28},
+  number    = {3},
+  articleno = {40},
+  pages     = {40:1--40:6},
+  numpages  = {6},
+  doi       = {10.1145/1531326.1531346}
+}
+
+@article{solenthaler2011,
+  author    = {Solenthaler, Barbara and Gross, Markus},
+  title     = {Two-Scale Particle Simulation},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2011},
+  volume    = {30},
+  number    = {4},
+  articleno = {81},
+  pages     = {81:1--81:7},
+  numpages  = {7},
+  doi       = {10.1145/1964921.1964976},
+  note      = {SIGGRAPH 2011.}
+}
+
+@inproceedings{stam1995,
+  author    = {Stam, Jos and Fiume, Eugene},
+  title     = {Depicting Fire and Other Gaseous Phenomena Using Diffusion Processes},
+  booktitle = {Proceedings of the 22nd Annual Conference on Computer Graphics and Interactive Techniques (SIGGRAPH)},
+  publisher = {ACM},
+  year      = {1995},
+  pages     = {129--136},
+  doi       = {10.1145/218380.218430}
+}
+
+@article{takahashi2015,
+  author    = {Takahashi, Tetsuya and Dobashi, Yoshinori and Fujishiro, Issei and Nishita, Tomoyuki and Lin, Ming C.},
+  title     = {Implicit Formulation for {SPH}-Based Viscous Fluids},
+  journal   = {Computer Graphics Forum},
+  year      = {2015},
+  volume    = {34},
+  number    = {2},
+  pages     = {493--502},
+  doi       = {10.1111/cgf.12578}
+}
+
+@article{takahashi2018,
+  author    = {Takahashi, Tetsuya and Dobashi, Yoshinori and Nishita, Tomoyuki and Lin, Ming C.},
+  title     = {An Efficient Hybrid Incompressible {SPH} Solver with Interface Handling for Boundary Conditions},
+  journal   = {Computer Graphics Forum},
+  year      = {2018},
+  volume    = {37},
+  number    = {1},
+  pages     = {313--324},
+  doi       = {10.1111/cgf.13292},
+  note      = {Volume 37(1) is 2018; the DOI record's issued date is the 2017 early-view date.}
+}
+
+@inproceedings{weiler2016,
+  author    = {Weiler, Marcel and Koschier, Dan and Bender, Jan},
+  title     = {Projective Fluids},
+  booktitle = {Proceedings of the 9th International Conference on Motion in Games (MIG)},
+  publisher = {ACM},
+  year      = {2016},
+  pages     = {79--84},
+  doi       = {10.1145/2994258.2994282}
+}
+
+@article{yang2012,
+  author    = {Yang, Lipeng and Li, Shuai and Hao, Aimin and Qin, Hong},
+  title     = {Realtime Two-Way Coupling of Meshless Fluids and Nonlinear {FEM}},
+  journal   = {Computer Graphics Forum},
+  year      = {2012},
+  volume    = {31},
+  number    = {7},
+  pages     = {2037--2046},
+  doi       = {10.1111/j.1467-8659.2012.03196.x}
+}
+
+@article{yildiz2009,
+  author    = {Yildiz, M. and Rook, R. A. and Suleman, A.},
+  title     = {{SPH} with the Multiple Boundary Tangent Method},
+  journal   = {International Journal for Numerical Methods in Engineering},
+  year      = {2009},
+  volume    = {77},
+  number    = {10},
+  pages     = {1416--1438},
+  doi       = {10.1002/nme.2458},
+  note      = {Volume 77(10) is 2009; the DOI record's issued date is the 2008 early-view date.}
+}
+
+@article{zhu2005,
+  author    = {Zhu, Yongning and Bridson, Robert},
+  title     = {Animating Sand as a Fluid},
+  journal   = {ACM Transactions on Graphics},
+  year      = {2005},
+  volume    = {24},
+  number    = {3},
+  pages     = {965--972},
+  doi       = {10.1145/1073204.1073298},
+  note      = {SIGGRAPH 2005.}
+}
+
+@article{zorilla2020,
+  author    = {Zorilla, Fernando and Ritter, Marcel and Sappl, Johannes and Rauch, Wolfgang and Harders, Matthias},
+  title     = {Accelerating Surface Tension Calculation in {SPH} via Particle Classification and {Monte Carlo} Integration},
+  journal   = {Computers},
+  year      = {2020},
+  volume    = {9},
+  number    = {2},
+  articleno = {23},
+  pages     = {23},
+  doi       = {10.3390/computers9020023}
+}
+

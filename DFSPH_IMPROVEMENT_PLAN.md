@@ -429,6 +429,8 @@ again.
 | **Reordering `inStepVelocity` to [BK] Alg. 1** | Demoted, not run. Under `semiImplicitEuler` the position advances with the *updated* velocity, making the codebase's ordering equivalent to [BK]'s up to loop phase. The surviving difference is a one-step lag (`DF` computed before `CD`), not an absence of projection. |
 | **Adopting the published stopping criterion** | Bit-identical on the constant-density solve (its test never fires under any of the three statistics) and 1.53x *worse* on the divergence-free one, where it collapses the solve to 3.0 iterations by cancellation. It buys [BK]'s iteration count and pays for it in density error (§1.7, Part 15). |
 | **Re-tuning the iteration budget** | The shipped (64, 32) is on the accuracy/cost frontier. 128 PS buys 1.26x for 1.6x the wall time; 16 DF loses 8%; the reallocation the "one converges, one does not" picture suggests, (96, 16), is 6% better for 16% more time. No free win (§1.7). |
+| **`forceShiftPressureGauge` at a free surface** (`dambreak`) | NaN in 4 steps. Bypassing the clamp fallback does not reduce the over-dissipation Part 19 measures — the run does not survive long enough to reach it. Rules out "relax the free-surface pressure handling" as a fix and confirms the clamp is load-bearing, not optional damping (§4, Part 21). |
+| **`dambreak`'s published CFL** (`cflFactor = 0.4`, [BK]'s constant, safe on every other incompressible case here) | NaN by step 30; even `0.3` NaNs by step 76. Unlike every wall-bounded case measured so far, this one needs `cflFactor = 0.2` (§4, Part 20) — the falling column's impact is sharper than `randomFlowIncompressible`'s bounded shear and the CFL's lagged `vMax` does not see it coming. |
 | `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). | 3% better for 23% more time on the bounded case, against 115% better on the periodic one. At a wall the error is set by the boundary treatment, not by how well the PPE is solved. |
 
 ---
@@ -1276,16 +1278,18 @@ time units there, 88% in 0.3 here), in the regime that exposes it.
   Two real, independent bugs on that case are ruled out as the primary driver
   but still want fixing: it has **no `Case.timestep` hook** (so `dt` is never
   adapted under any scheme) and it inherits `integrationScheme='rungeKutta2'`.
-  The existing candidate fix (`pressureB[surfaceIndicators == 1] = 0.0`,
-  commented out in `divergenceFree.py`) is untestable as-is: `detectFreeSurface`
-  flags 96/100 particles at nx=32 and 52% at nx=96 on this thin patch, and it
-  is wired into only one of three solver paths.
-  **`dambreak` is now the better vehicle for that fix** (§1.10, Part 19): it is
-  a real free surface the scheme does *not* break, its surface population is a
-  sensible fraction rather than 96%, and it shows the same solve driving surface
-  density back to `rho0` against the geometry — succeeding there rather than
-  detonating. Whatever the fix is, it can be measured on `dambreak` first and
-  brought to the patch after.
+  The commented-out `pressureB[surfaceIndicators == 1] = 0.0` in
+  `divergenceFree.py` is untestable as-is on this case (`detectFreeSurface`
+  flags 96/100 particles at nx=32 on this thin patch) and, per Part 21, is not
+  actually [BK]'s remedy anyway — it sits in the divergence-free solve, not the
+  constant-density one, and it zeros the pressure outright rather than only
+  its negative part. **Part 21 measured the real remedy's boundary on
+  `dambreak` instead**, via the already-wired `forceShiftPressureGauge`: taking
+  the clamp *away* (the opposite direction from strengthening it) NaNs the run
+  in 4 steps, so the clamp is necessary, not merely damping. What is left of
+  [BK]'s own remedy — Schechter & Bridson's ghost particles, now in
+  `literature/` (`schechter2012`) — is the one structural option neither case
+  has tried.
 - **Nothing enforces `semiImplicitEuler`.** The PPE derivation is specific to
   it. All three incompressible cases set it explicitly, but `CaseSpec`'s
   default is `rungeKutta2` and no code path checks `scheme == divergenceFree`
@@ -1341,9 +1345,16 @@ time units there, 88% in 0.3 here), in the regime that exposes it.
   derivation behind `staticBoundary`.**
 - Plus SPlisHSPlasH source (`~/dev/SPlisHSPlasH`) as reference implementation.
 
-**Still unavailable:** Adami et al. 2012 (wall BC), Akinci et al. 2012
-(rigid-fluid coupling), Ihmsen et al. 2010 (adaptive timestep), Adami et al.
-2013 (transport velocity — needed to close the background-pressure question).
+**Nothing is unavailable any more.** As of 08-29 all five above, plus the four
+previously listed here as unavailable — Adami et al. 2012 (wall BC), Akinci et
+al. 2012 (rigid-fluid coupling), Ihmsen et al. 2010 (adaptive timestep), Adami
+et al. 2013 (transport velocity, the background-pressure question) — are in
+`literature/`, along with 27 others. `literature/MANIFEST.md` maps the
+shorthands above to bib keys and filenames and says what each newly-present
+paper unblocks; `literature/ABSTRACTS.md` is the searchable index. Being
+*present* is not being *read*: the claims below still carry whatever provenance
+they carried before, and re-checking them against the documents is now possible
+rather than done.
 
 ### The published CFL is calibrated against a metric a free surface silences
 
@@ -1480,7 +1491,7 @@ All are round-tripped through `incompressibleConfigToDict` /
 | `boundaryOperatorTerms` (on `IncompressibleSolverConfig`) | `None` | Bundle-level override: `None` means "each solver's own", any value forces both. Every A/B in this document sets it, so every recorded row still means what it says. |
 | `akinciBoundaryVolume` | `False` | `consistent` only. Measured `m~/m_nominal` mean 1.102, max 1.456 on the five-layer band. Best row in the table *inside the operator*; fatal as actual mass (§2). |
 | `shiftPressureGauge` | **`minShift`** | The Part 4 fix. `nonNegativeClamp` is the historical clamp and stays selectable. Scoped to solves with **no free surface** — Part 14 dropped the pinned-row half of that scoping, which is what makes it reach the bounded case at all. |
-| `forceShiftPressureGauge` | `False` | Bypasses what is left of that scoping, i.e. the free-surface half — the half nobody has measured. Its original target, the pinned-row half, is gone: half that guard's justification measured false (§1.5) and the other half's evidence was taken at 3x the CFL (§3.6). |
+| `forceShiftPressureGauge` | `False` | Bypasses what is left of that scoping, i.e. the free-surface half. Its original target, the pinned-row half, is gone: half that guard's justification measured false (§1.5) and the other half's evidence was taken at 3x the CFL (§3.6). **The free-surface half is now measured (Part 21) and stays off**: forcing it on `dambreak` NaNs in 4 steps. |
 | `shiftApplication` | `positionShift` | The paper-faithful default, and **settled in Part 18**: at a pinned `dt` the velocity modes buy 2x lower density error for **2.1x the kinetic-energy loss** on an inviscid case (41% retained against 81%), and the wall behaviour that used to justify them is identical — zero particles past the wall for all three modes. Its old justification (3.2x `tgv` dissipation) was withdrawn in Part 17 as unreproducible and resolution-dependent. |
 | `densityEvolution` | `summation` | `continuity` (WCSPH standard) fails everywhere but `tgv`; `hybrid` matches `summation` exactly where support is complete, for ~21% less wall time on `tgv`, and dies at 286 steps at an mDBC wall (§4 item 7). |
 | `mdbcPressureRelaxation` | `0.3` | Load-bearing for `mdbcMlsPressure` — at 1.0 it NaNs in 7-8 steps. Never swept; chosen to match the solver's own `relaxationFactor`. |
@@ -1668,6 +1679,8 @@ One line each, for locating the full write-up in git history.
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
 | 19 | 08-29 | A dam break under `--scheme divergenceFree` (§4). It works — 3000 steps, no divergence, a recognisable collapse, the first free surface this scheme has not broken. But the run-out is half `deltaSPH`'s speed and 88% of the kinetic energy is dissipated at the moment the fall should become run-out. The free-surface density deficit (0.518 at t=0.02) disappears while the surface stays geometrically a surface. |
+| 20 | 08-29 | `dambreak`'s incompressible `timestep` hook, landed. The published CFL (0.4) diverges here, unlike every other incompressible case measured — bisected to a safe `cflFactor = 0.2`, which buys 1.7x fewer steps (not the ~5x guessed) at the cost of a worse `rho_max` (1.105 vs 1.004). First hint that the impact itself is the sharp event Part 19's dissipation traces back to. |
+| 21 | 08-29 | The free-surface clamp ruled out as the dissipation's cause. [BK]'s own text (read from the PDF, now that `literature/` exists) says clamping negative pressure at the surface *is* their published remedy, not a gap; forcing it off (`forceShiftPressureGauge`, previously untested at the free surface) NaNs `dambreak` in 4 steps rather than reducing the loss. Narrows item 1 to the impact itself. |
 | 18 | 08-29 | The tail measured, and `ShiftApplication` settles (§4). At a pinned `dt`: **zero** wall penetration for all three modes, so §6's whole case for the velocity modes is void; and the velocity modes cost **2.1x** the kinetic energy of an inviscid flow for 2x lower density error. The default stays, on a measurement. Part 17's excursion claim was my own adaptive-`dt` artifact and is retracted. |
 | 17 | 08-29 | `ShiftApplication` re-measured at the current defaults (§4). The 3.2x that justified the shipped default does not reproduce — at `tgv`'s own nx=256 the three modes agree to 12%, and the ratio moves 2x with resolution, so it cannot be the resolution-independent residual §1.2 blames. `positionAndVelocity` is better on every sustained metric at equal cost; the default stays on tail behaviour and energy monotonicity. |
 | 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
@@ -1715,7 +1728,9 @@ known method limitation, not an implementation bug — and is untouched by the
 Part 14 defaults, which are both no-ops there. **`dambreak --scheme
 divergenceFree` runs** (Part 19) — the scheme's only working free surface — but
 at half `deltaSPH`'s run-out speed and with most of the flow's energy
-dissipated on impact.
+dissipated on impact. It also needs its own, tighter CFL: `--cflFactor 0.2`
+(Part 20), not the `0.4` every other incompressible case in this document
+ships — the published constant diverges on this case.
 
 ### Part 12, the CFL condition — landed and verified
 
@@ -1959,18 +1974,148 @@ Full tables in §4. `dambreak --scheme divergenceFree`, nx=64, 3000 steps:
   the natural reading and is what §4 records at the rotating patch's corners,
   but this measurement does not isolate it.
 
+### Part 20, `dambreak`'s timestep hook — landed, and the "~5x cheaper" guess corrected
+
+Part 19 guessed that giving `dambreak` an incompressible `timestep` hook would
+be "cheap" and buy roughly 5x. `dambreakTimestep` (`cases/dambreak.py`) now
+does this — active only under `--scheme divergenceFree`, reusing
+`kolmogorovIncompressibleTimestep` exactly as `randomFlowIncompressible` does,
+and a strict no-op for `deltaSPH` (`Case.timestep` is one hook shared by every
+scheme a case might run under; it returns `config.dt` unchanged when
+`ctx.scheme` is not `divergenceFree`). Measuring it found two things the guess
+got wrong.
+
+**The published CFL constant is not safe on this case.** `randomFlowIncompressible
+--bounded` ships `cflFactor = 0.4` under the Part 14 defaults; `dambreak` does
+not have the option. Bisected on `dambreak --nx 64 --scheme divergenceFree`,
+full run to t=1.5 (nx=64, `--integrationScheme semiImplicitEuler`):
+
+| `cflFactor` | outcome | steps | `rho` range |
+|---|---|---|---|
+| 0.4 (published) | **NaN at step 30** (t≈0.2) | — | — |
+| 0.3 | **NaN at step 76** (t≈0.3) | — | — |
+| 0.25 | survives | 1960 | [0.507, 1.231] |
+| **0.2** | survives | **1769** | **[0.507, 1.105]** |
+| fixed `dt=5e-4` (Part 19 baseline) | survives | 3000 | [0.907, 1.004] |
+
+0.2 is the recommended value: 0.25 is technically stable but its `rho_max`
+(1.231) is markedly worse, so there is no reason to run it. The mechanism is
+presumably §1.6 again — the falling column's impact is a sharper, more
+localised event than `randomFlowIncompressible`'s gentle bounded shear, and the
+CFL condition's `vMax` is read from the *previous* step, so a fast-developing
+local spike at the point of impact is exactly what a lagged advective
+condition sees latest. **Unmeasured**: whether this is the same mechanism
+behind Part 19's over-dissipation, since both are about what happens at the
+moment of impact — worth keeping in mind while doing item 1.
+
+**The step-count win is real but far smaller than guessed, and it is not free.**
+At the recommended `cflFactor = 0.2`, the full run to t=1.5 takes 1769 steps
+against the fixed-`dt` baseline's 3000 — **1.7x fewer**, not ~5x. (The 5x
+figure in Part 19 was `dt_adv` at the *initial*, near-rest state compared
+against the shipped fixed `dt`; it was never a measurement of the adaptive
+run, which spends much of its time at higher `vMax` once the column falls,
+where the CFL condition hands back a smaller `dt` than that initial estimate.)
+And it is not a win on every axis: `rho_max` over the whole run is 1.105
+against the baseline's 1.004, i.e. adaptive stepping here is trading some
+density accuracy for fewer steps, not dominating the fixed `dt` on both. Wall
+time was not compared cleanly — this session's GPU had unrelated processes
+resident throughout (an `nvidia-smi` check found four other python/llama.cpp
+processes holding device memory), which the rest of this document has already
+found is enough to swamp a per-step difference (§4, Part 14 point 3), so no
+wall-time number is reported here.
+
+**What shipped:** `dambreakTimestep` in `cases/dambreak.py`, and the case
+docstring now says `--cflFactor 0.2`, not the published 0.4.
+`scripts/probe_dambreakIncompressible.py`'s `runScheme` passes it for
+`divergenceFree` runs so every number that probe reports from here on is at
+the stable value. No default in `Case.defaults` changed — `cflFactor` is one
+config field shared by every scheme a case can run under, `deltaSPH` still
+gets its own `0.3` unchanged, and a `divergenceFree` run requires passing
+`--cflFactor 0.2` explicitly, the same way it already requires
+`--integrationScheme semiImplicitEuler`.
+
+### Part 21, the dissipation is not the free-surface clamp — the literature and a measurement agree
+
+Item 1's leading candidate was §1.10's compaction story: the constant-density
+solve drives free-surface particles back toward `rho0` against what the
+geometry allows, and that was flagged as the plausible (but unestablished)
+cause of Part 19's 88% kinetic-energy loss at impact. Two things now weigh
+against it, one from the literature and one from a measurement — read
+together with `literature/` before touching any code, per this session's
+brief.
+
+**The mechanism the codebase already runs at the free surface is [BK]'s own
+published remedy, not a gap.** `bender2015`'s discussion section (extracted
+from the PDF, p.9): "In SPH simulations the density near a free surface is
+underestimated which causes unnatural particle clustering artifacts. In our
+implementation this problem is solved by clamping negative pressures to
+zero." That is exactly `ShiftPressureGauge.nonNegativeClamp`, which
+`solveIncompressible` already falls back to on any solve with free-surface
+particles (§1.5) — so the shipped configuration already implements the
+paper's fix, it does not omit it. The paper's own "better solution" is
+`schechter2012`'s ghost particles, a structural addition (a sampled layer in
+the surrounding air), not a one-line pressure edit — so the commented-out
+`pressureB[surfaceIndicators == 1] = 0.0` in `divergenceFree.py` that §1.10
+and the old Known-open entry pointed at is neither this codebase's own
+workaround nor the paper's remedy; it is a third, unpublished idea that
+happens to be sitting in the file, in the wrong solver besides (the
+divergence-free solve, which does not target density, rather than
+`solveIncompressible`, which does).
+
+**Removing the clamp does not slow the dissipation down — it kills the run in
+four steps.** `scripts/probe_dambreakSurfaceGauge.py` forces
+`forceShiftPressureGauge = True`, which keeps `ShiftPressureGauge.minShift`
+active at the free surface instead of falling back to the clamp — the
+free-surface half of that guard, explicitly flagged as untested in
+`solver.py`'s own field description. Same case, same `cflFactor = 0.2`, nx=64:
+
+| gauge at the free surface | outcome |
+|---|---|
+| shipped (clamp) | 1327 steps to t=1.0, no divergence, KE peaks 11.72 at t≈0.46 then falls to 1.18 by t=1.0 — Part 19's dissipation, reproduced |
+| forced `minShift` (no clamp) | **NaN at step 4** (t≈0.03); `nLow` (surface population) roughly doubles in the first 3 steps and `rhoMin` collapses to 0.19 |
+
+So the clamp is load-bearing, not a source of drag to relax: without it the
+surface does not merely stay under-dense, it destabilises immediately — a
+signed shifting potential can pull particles together at a boundary with
+genuinely truncated support (§1.5's own reasoning, and exactly the caveat §4
+item 12 already carried for MINRES-without-clamp: "a shifting potential that
+may go negative can pull particles together... needs a free-surface test").
+This is that test, run for the first time because `dambreak` is the first
+working free surface, and it settles `forceShiftPressureGauge`'s free-surface
+half as unsafe rather than merely unmeasured.
+
+**Consequence: item 1's search moves off the free-surface treatment and onto
+the impact itself.** The compaction is real (§1.10 measured it) and the clamp
+that produces it is necessary for the run to survive at all, but forcing it
+off does not reduce the dissipation — there is no dissipation to observe once
+it is off, because the run is already dead. That rules out "relax the
+free-surface pressure handling" as a fix and leaves the moment of impact — the
+falling column striking the floor — as the remaining candidate, which is also
+where Part 19's own timing (loss concentrated at t=0.5-0.8) and Part 20's CFL
+finding (this case cannot survive the published constant, unlike every other
+bounded case measured) both point.
+
+Landed: `scripts/probe_dambreakSurfaceGauge.py`, the free-surface A/B above.
+No config or default changed — `forceShiftPressureGauge` stays `False`.
+
 ### What is left, in order
 
 1. **Explain the dam break's dissipation** (Part 19). It is now the largest
    unexplained defect in the scheme, it shows up on the one scenario anyone
    would call realistic, and Part 18 says it is not the `ShiftApplication`
-   mode. Two things to separate first: whether the loss is the free-surface
-   compaction (test with the surface-scoped shift `divergenceFree.py` already
-   has commented out) or the impact itself.
-2. **Give `dambreak` an incompressible `timestep` hook.** It runs 5x finer in
-   time than the published CFL requires because it inherits the
-   weakly-compressible acoustic timestep. Cheap, and it makes every subsequent
-   dam-break experiment 5x cheaper — do it before item 1, not after.
+   mode. **Narrowed by Part 21**: it is not the free-surface clamp — forcing
+   it off does not slow the dissipation, it NaNs the run in 4 steps — so the
+   remaining candidate is the impact itself (the falling column striking the
+   floor), where Part 19's own timing and Part 20's CFL finding both already
+   point. No probe isolates the impact yet; a per-particle or per-region
+   energy budget around t=0.4-0.5 (when KE peaks and turns over) is the
+   natural next instrument, following this document's own method note (§1.11:
+   measure, don't derive).
+2. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
+   landed as `dambreakTimestep`, active only under `--scheme divergenceFree`.
+   Worth ~1.7x fewer steps at the case's own safe `cflFactor = 0.2`, not the
+   ~5x guessed, and not free (`rho_max` 1.105 against the fixed-`dt`
+   baseline's 1.004) — see Part 20 for why the published 0.4 diverges here.
 3. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
    remainder). Blocked on the paper — `literature/MANIFEST.md`.
 4. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
@@ -1981,8 +2126,11 @@ Full tables in §4. `dambreak --scheme divergenceFree`, nx=64, 3000 steps:
 
 ### What is next, concretely
 
-Do 2, then 1. The scheme has been tuned against periodic and wall-bounded cases
-for nineteen sessions and it is now good on them; the dam break is the first
-time it has been asked to do something a user would recognise, and it loses
-most of the flow's energy doing it. That is a larger defect than anything left
-on the list, and it was invisible until a free surface was put in front of it.
+Item 2 is done; item 1 is next. The scheme has been tuned against periodic and
+wall-bounded cases for nineteen sessions and it is now good on them; the dam
+break is the first time it has been asked to do something a user would
+recognise, and it loses most of the flow's energy doing it. That is a larger
+defect than anything left on the list, and it was invisible until a free
+surface was put in front of it. Part 20 adds a second reason to suspect the
+impact specifically: this is the only incompressible case measured so far that
+cannot run at the published CFL at all.

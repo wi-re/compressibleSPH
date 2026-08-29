@@ -20,11 +20,24 @@ it -- all measured, see `DFSPH_IMPROVEMENT_PLAN.md` §1.10 and Part 19, and
   semi-implicit Euler: a multi-stage integrator solves each stage as if it were
   final and then blends, so the blended velocity is not divergence-free.
   Nothing in the code enforces this yet.
-- **There is no incompressible `timestep` hook**, so the run inherits the
-  weakly-compressible acoustic `dt`. On the shipped configuration that is ~5x
-  *finer* than Bender & Koschier's advective condition would permit, which is
-  safe but costs about 5x the wall time (294s against `deltaSPH`'s 61s for the
-  same 3000 steps at nx=64).
+- **`dambreakTimestep` gives `--scheme divergenceFree` Bender & Koschier's
+  advective CFL** instead of inheriting the weakly-compressible acoustic `dt`
+  fixed once at setup. `deltaSPH` runs are untouched -- `Case.timestep` is one
+  hook shared by every scheme a case might run under (see
+  `randomFlowIncompressible`'s docstring), so this hook only acts under
+  `divergenceFree` and returns `config.dt` unchanged otherwise.
+- **Pass `--cflFactor 0.2`, not the published 0.4.** Measured
+  (`DFSPH_IMPROVEMENT_PLAN.md` Part 20): unlike `randomFlowIncompressible
+  --bounded`, where 0.4 is the landed default, this case **diverges** at 0.4
+  (NaN by step 30) and at 0.3 (NaN by step 76) -- the falling column's impact
+  is a sharper event than that case's gentle bounded flow, and the CFL's
+  lagged `vMax` does not see it coming (§1.6). 0.25 survives but with a
+  markedly worse density excursion (`rho_max` 1.23) than 0.2 (1.11); **0.2 is
+  the recommended value.** Even so, it is not the free win Part 19 guessed at:
+  it buys ~1.7x fewer steps over the full run (1769 against the fixed-`dt`
+  baseline's 3000), not ~5x, and `rho_max` over the whole run is 1.11 against
+  the baseline's 1.004 -- adaptive stepping here trades some density accuracy
+  for fewer steps, it does not dominate the fixed `dt` on both axes.
 - **It is markedly over-dissipative here.** Against `deltaSPH` on identical
   geometry, resolution and `dt`, the surge front runs out at about half speed
   and 88% of the kinetic energy disappears just as the falling column should be
@@ -42,9 +55,11 @@ import torch
 from ..caseUtils import (SimulationProperties, buildDomain, buildPresetObstacles,
                          buildRegions, sampleNoise, setupFreestream, setupKolmogorov)
 from ..configurations.moduleConfigurations.gravity import GravityType
+from ..enumTypes import IncompressibleSPHScheme
 from ..initializers import initializeWeaklyCompressibleSimulation
 from ..modules import setupWeaklyCompressibleTimestep
 from ..runner import Case, RunContext, caseMain, registerCase
+from .kolmogorovIncompressible import kolmogorovIncompressibleTimestep
 from .plotting import (Field, buildFieldPlotter, openWindow, pumpEvents,
                        refreshFieldPlotter)
 
@@ -156,6 +171,26 @@ def initialConditions(ctx: RunContext, system) -> None:
         ctx.config, ctx.schemeConfig, system, ctx.param('targetDt'), verbose=ctx.spec.verbose)
 
 
+def dambreakTimestep(ctx: RunContext, state) -> float:
+    """Bender & Koschier's advective CFL, but only under `--scheme
+    divergenceFree`.
+
+    `deltaSPH`'s own dt is fixed once, at setup, by `setupWeaklyCompressibleTimestep`
+    in `initialConditions` above -- `adaptiveDt` is not otherwise exercised
+    per step (nothing in the run loop revisits `config.dt` for a case without a
+    `timestep` hook), so returning it unchanged here reproduces that path
+    exactly. `divergenceFree` has no acoustic term and needs a real advective
+    dt instead, which is `kolmogorovIncompressibleTimestep`'s formula --
+    reused as-is, the same way `randomFlowIncompressible` reuses it for its own
+    bounded case. dambreak has no `nu` param and runs inviscid under this
+    scheme (`configureScheme` never touches `diffusionParams`), so that
+    function's viscous term is always inert here.
+    """
+    if ctx.scheme is not IncompressibleSPHScheme.divergenceFree:
+        return ctx.config.dt
+    return kolmogorovIncompressibleTimestep(ctx, state)
+
+
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
     particles = state.state
     fluid = particles.kinds == 0
@@ -234,6 +269,7 @@ dambreakCase = registerCase(Case(
     setupPlot=setupPlot,
     updatePlot=updatePlot,
     extraData=extraData,
+    timestep=dambreakTimestep,
     defaults=dict(
         caseName='3-dambreak',
         dim=2,

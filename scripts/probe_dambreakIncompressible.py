@@ -117,7 +117,14 @@ def runScheme(scheme, tLimit, diag=None):
         # default is rungeKutta2, which would solve each RK stage as if it were
         # final and then blend, so the blended velocity is not divergence-free.
         # (`DFSPH_IMPROVEMENT_PLAN.md` "Nothing enforces semiImplicitEuler".)
-        argv += ['--integrationScheme', 'semiImplicitEuler']
+        # `cflFactor`'s shipped default (0.3) is `deltaSPH`'s own h-based
+        # acoustic constant; `dambreakTimestep` reinterprets it as Bender &
+        # Koschier's dx-based advective constant under this scheme. Unlike
+        # `randomFlowIncompressible --bounded`, this case is NOT stable at
+        # their published 0.4 (NaN by step 30) or even 0.3 (NaN by step 76) --
+        # measured in `DFSPH_IMPROVEMENT_PLAN.md` Part 20. 0.2 is the
+        # recommended value.
+        argv += ['--integrationScheme', 'semiImplicitEuler', '--cflFactor', '0.2']
     try:
         return caseMain(case, argv=argv)
     finally:
