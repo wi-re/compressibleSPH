@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'BoundaryOperatorTerms', 'DensityEvolution', 'resolveDensityEvolution', 'resolveBoundaryOperatorTerms', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'JacobiConvergenceCriterion', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'BoundaryOperatorTerms', 'DensityEvolution', 'resolveDensityEvolution', 'resolveBoundaryOperatorTerms', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -237,6 +237,43 @@ class ShiftApplication(Enum):
     inStepVelocity = 2
 
 
+class JacobiConvergenceCriterion(Enum):
+    """Which statistic of the residual the relaxed-Jacobi loops compare against
+    ``tolerance``.
+
+    The two solvers shipped two different tests and neither was reachable from
+    the config, so `DFSPH_IMPROVEMENT_PLAN.md` §1.7 -- "the stopping criterion
+    is broken" -- could be argued but not measured. These are the same two
+    tests plus the published one, as one setting. With ``r = b - A p`` over
+    fluid rows:
+
+    - ``flooredOneSided``: ``mean(clamp(-r, min=-tolerance))``.
+      `solveIncompressible`'s historical test, and its default. One-sided (only
+      over-compression counts towards the error) *and* floored, so an
+      under-dense particle contributes at most ``-tolerance`` rather than its
+      full negative value and cannot cancel an over-dense one. Neither
+      published criterion floors: [BK] Alg. 3 tests ``rho_avg - rho0 > eta``
+      and [I] §5.1 the same shape, both on the plain average.
+    - ``oneSided``: ``mean(-r)``, i.e. the published form with the floor
+      removed. This is the one-line difference §1.7 identifies.
+    - ``meanAbsolute``: ``mean(|r|)``. Both divergence-free loops' historical
+      test, and their default. The only one of the three that is a norm, so the
+      only one that cannot be satisfied by cancellation.
+
+    The three are *not* interchangeable at a fixed `tolerance` -- they have
+    different scales, and a value tuned for one is meaningless for another.
+    Changing the criterion means re-tuning `tolerance` with it.
+
+    Orthogonal to this, `rtol`/`atol` add a relative disjunct
+    (``mean|r| <= atol + rtol * mean|b|``) to whichever statistic is chosen.
+
+    See `modules/incompressible/convergence.py` and Part 15.
+    """
+    flooredOneSided = 0
+    oneSided = 1
+    meanAbsolute = 2
+
+
 class BoundaryOperatorTerms(Enum):
     """Which pressure-operator terms a *static* neighbour (`kind != 0`:
     boundary, ghost) is allowed to contribute to.
@@ -428,10 +465,11 @@ class RelaxedJacobiSolverConfig:
     relaxationFactor: float = field(default=0.5, metadata={"description": "Relaxation factor for the relaxed Jacobi solver (ignored by the Krylov paths and by relaxationMode='optimal')"})
     relaxationMode: JacobiRelaxationMode = field(default=JacobiRelaxationMode.fixed, metadata={"description": "Relaxation mode for the relaxed-Jacobi path: fixed (constant relaxationFactor, byte-identical default) or optimal (per-step exact residual-minimizing step; same matvec count, monotonically decreasing residual, no stability window; divergenceFree/IISPH solver only)"})
     solverType: PressureSolverType = field(default=PressureSolverType.relaxedJacobi, metadata={"description": "Pressure solver: relaxedJacobi (default) or a Krylov method (cg/bicg/bicgStab/gmres/minres)"})
-    rtol: float = field(default=1e-5, metadata={"description": "Relative residual tolerance for the Krylov solvers (converge when ||r|| < atol + rtol*||b||)"})
-    atol: float = field(default=0.0, metadata={"description": "Absolute residual floor for the Krylov solvers (0 = relative tolerance only)"})
+    rtol: float = field(default=1e-5, metadata={"description": "Relative residual tolerance (converge when ||r|| <= atol + rtol*||b||). Read by the Krylov solvers as their primary test, and by the relaxed-Jacobi loops as a DISJUNCT alongside the absolute tolerance test -- either one satisfied ends the solve. 0 disables the relative test on the Jacobi path. The Jacobi path measures both norms as means of absolute values over fluid rows. See DFSPH_IMPROVEMENT_PLAN.md 1.7 and Part 15."})
+    atol: float = field(default=0.0, metadata={"description": "Absolute residual floor for the rtol test (0 = purely relative). Read by the Krylov solvers and by the relaxed-Jacobi loops' relative disjunct; distinct from tolerance, which is the absolute test on the configured convergenceCriterion's statistic."})
     restart: int = field(default=30, metadata={"description": "GMRES restart length (ignored by the other solvers)"})
     krylovFp64: bool = field(default=False, metadata={"description": "Run the Krylov recurrence in float64 while the SPH matvec stays float32 (opt-in; improves the residual by roughly an order of magnitude on this ill-conditioned operator at negligible extra cost)"})
+    convergenceCriterion: JacobiConvergenceCriterion = field(default=JacobiConvergenceCriterion.meanAbsolute, metadata={"description": "Which residual statistic the relaxed-Jacobi loop compares against tolerance: flooredOneSided (mean(clamp(-r, min=-tolerance)) -- solveIncompressible's historical test, one-sided and floored so under-dense particles cannot cancel over-dense ones), oneSided (mean(-r) -- the published form, [BK] Alg. 3 and [I] 5.1, without the floor), or meanAbsolute (mean(|r|) -- both divergence-free loops' historical test, and the only one of the three that is a norm). The three have different scales, so tolerance has to be re-tuned alongside this. buildDefaultPSConfig/buildDefaultDFConfig carry the shipped values. Ignored by the Krylov paths, which have their own rtol/atol contract. See JacobiConvergenceCriterion's docstring and DFSPH_IMPROVEMENT_PLAN.md 1.7 and Part 15."})
     boundaryOperatorTerms: BoundaryOperatorTerms = field(default=BoundaryOperatorTerms.staticBoundary, metadata={"description": "Which pressure-operator terms a static (kind != 0) neighbour contributes to *in this solver*: full (boundary and ghost particles are treated exactly like fluid ones in both computeAlpha's sums and the divergence the solvers iterate) or staticBoundary (the published formulation -- a particle that never moves takes no reaction force, so it is dropped from computeAlpha's second sum AND from the divergence's neighbour-acceleration term). The two single-sided values diagonalOnly/operatorOnly are diagnostics. The two solvers are configured separately because the operator they build is the only thing they share; the setting was measured on both crossed (Part 14) and staticBoundary on BOTH is the default, because splitting it is 1.45x worse on the constant-density side alone and 16x worse on the divergence-free side alone. IncompressibleSolverConfig.boundaryOperatorTerms, if set, overrides both. A no-op on cases with no kind != 0 particles. See BoundaryOperatorTerms' docstring and DFSPH_IMPROVEMENT_PLAN.md Parts 9, 13 and 14."})
 
 
@@ -445,6 +483,10 @@ def buildDefaultPSConfig() -> RelaxedJacobiSolverConfig:
         # Stated explicitly here rather than left to the field default, since
         # this pair of builders is where the shipped tuning is read off.
         boundaryOperatorTerms=BoundaryOperatorTerms.staticBoundary,
+        # The constant-density solve's historical test (Part 15). It is the
+        # one §1.7 calls broken; it is still the default because the
+        # replacements measured worse -- see Part 15.
+        convergenceCriterion=JacobiConvergenceCriterion.flooredOneSided,
     )
 def buildDefaultDFConfig() -> RelaxedJacobiSolverConfig:
     return RelaxedJacobiSolverConfig(
@@ -453,6 +495,8 @@ def buildDefaultDFConfig() -> RelaxedJacobiSolverConfig:
         tolerance=2.5e-3,
         relaxationFactor=0.3,
         boundaryOperatorTerms=BoundaryOperatorTerms.staticBoundary,
+        # Both divergence-free loops' historical test (Part 15).
+        convergenceCriterion=JacobiConvergenceCriterion.meanAbsolute,
     )
 
 

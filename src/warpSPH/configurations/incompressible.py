@@ -144,6 +144,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'restart': config.solverConfig.pressureSolver.restart,
                 'krylovFp64': config.solverConfig.pressureSolver.krylovFp64,
                 'boundaryOperatorTerms': config.solverConfig.pressureSolver.boundaryOperatorTerms.name,
+                'convergenceCriterion': config.solverConfig.pressureSolver.convergenceCriterion.name,
             },
             'divergenceFreeSolver': {
                 'minIterations': config.solverConfig.divergenceFreeSolver.minIterations,
@@ -157,6 +158,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'restart': config.solverConfig.divergenceFreeSolver.restart,
                 'krylovFp64': config.solverConfig.divergenceFreeSolver.krylovFp64,
                 'boundaryOperatorTerms': config.solverConfig.divergenceFreeSolver.boundaryOperatorTerms.name,
+                'convergenceCriterion': config.solverConfig.divergenceFreeSolver.convergenceCriterion.name,
             },
             'integrateRho': config.solverConfig.integrateRho,
             'densityEvolution': config.solverConfig.densityEvolution.name,
@@ -248,6 +250,10 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
                   buildDefaultIncompressibleSolverConfig().densityEvolution)
         return DensityEvolution[v] if isinstance(v, str) else v
 
+    def _convergenceCriterion(d, default):
+        v = d.get('convergenceCriterion', default)
+        return JacobiConvergenceCriterion[v] if isinstance(v, str) else v
+
     def _boundaryOperatorTerms(d, default):
         v = d.get('boundaryOperatorTerms', default)
         return BoundaryOperatorTerms[v] if isinstance(v, str) else v
@@ -270,6 +276,7 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             restart=psDict.get('restart', buildDefaultPSConfig().restart),
             krylovFp64=psDict.get('krylovFp64', buildDefaultPSConfig().krylovFp64),
             boundaryOperatorTerms=_boundaryOperatorTerms(psDict, buildDefaultPSConfig().boundaryOperatorTerms),
+            convergenceCriterion=_convergenceCriterion(psDict, buildDefaultPSConfig().convergenceCriterion),
         ),
         divergenceFreeSolver=RelaxedJacobiSolverConfig(
             minIterations=dfDict.get('minIterations', buildDefaultDFConfig().minIterations),
@@ -283,6 +290,7 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             restart=dfDict.get('restart', buildDefaultDFConfig().restart),
             krylovFp64=dfDict.get('krylovFp64', buildDefaultDFConfig().krylovFp64),
             boundaryOperatorTerms=_boundaryOperatorTerms(dfDict, buildDefaultDFConfig().boundaryOperatorTerms),
+            convergenceCriterion=_convergenceCriterion(dfDict, buildDefaultDFConfig().convergenceCriterion),
         ),
         integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho),
         densityEvolution=_densityEvolution(solverConfigDict),

@@ -167,34 +167,109 @@ Caveat carried forward: `n_h = 4` was fixed throughout, so "half a spacing" and
 "one eighth of `h`" are not distinguished by this data. One sweep at a
 different `n_h` would settle which governs.
 
-### 1.7 The stopping criterion is broken, and it is the last unexplained thing
+### 1.7 The constant-density solve does not converge — it integrates
 
-`solveIncompressible` runs its full 64 iterations every step for 1000 steps and
-never satisfies its tolerance — under every gauge, every `dt`, every solver
-(relaxed-Jacobi, MINRES, BiCGStab), and both shift configurations. But the
-iterations are productive:
+The claim this section used to make was "the stopping criterion is broken, and
+it is the last unexplained thing". Part 15 measured it, and the criterion turns
+out not to be the defect. Two things are:
 
-| maxIterations | `rhoErr` | `rhoMax` | `pMean` max |
+**The periodic cases converge; only the bounded one does not.** At the shipped
+defaults `kolmogorovIncompressible` at nx=128 terminates *both* solvers at 3
+iterations on every one of 200 steps, with the constant-density statistic at
+2.26e-5 against a 5e-4 tolerance — a factor of 22 inside it. The
+"never terminates under every gauge, every `dt`, every solver" claim was taken
+under the clamp gauge and never re-checked after `minShift` landed. Like every
+other error in this document, non-termination is a **near-wall** phenomenon
+(§1.6).
+
+**On the bounded case the constant-density solve is an integrator, not a
+solve.** Measured along a fixed iterate path (`probe_stoppingCriterion.py
+--mode trace`, 200 steps, nx=128):
+
+| iteration k | 1 | 2 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|---|
+| `mean\|r\|` | 1.085e-3 | 1.077e-3 | 1.074e-3 | 1.071e-3 | 1.069e-3 | 1.065e-3 | 1.056e-3 |
+| pressure range `p_max - p_min` | 0.97 | 1.76 | 3.37 | 6.68 | 13.9 | 28.8 | 59.1 |
+
+**64 sweeps remove 2.7% of the residual and grow the pressure field 61x,
+linearly in `k` at about 0.92 per iteration.** That is what an iteration whose
+increment `omega r / alpha` is nearly constant does — and the increment is
+nearly constant because `A p` is nearly zero for the field being built, i.e.
+the source lives almost entirely in the operator's near-null space, which is
+§1.1 measured inside a single solve instead of across steps.
+
+Three consequences:
+
+1. **No residual criterion can fire here, and no repair of the criterion
+   changes that.** The residual is not shrinking, so the tolerance's *value*
+   and *form* are both beside the point.
+2. **`maxIterations` on `pressureSolver` is a gain, not a budget.** It sets the
+   shift amplitude. That is why §1.7's old table showed accuracy improving with
+   iteration count — that was the gain rising, not a solve converging — and it
+   is a physical parameter wearing a numerical parameter's name.
+3. **The divergence-free solve is the opposite and is fine.** Its residual
+   contracts 2.9x over 32 sweeps and its pressure range grows 34% and settles.
+   It converges; it is merely stopped early by its cap.
+
+**The floor is not the defect.** §1.7 used to name it as the one-line fix:
+this codebase floors each particle's negative residual contribution at
+`-tolerance` (`mean(clamp(-r, min=-tolerance))`) where both papers take a plain
+one-sided average, so under-dense particles cannot cancel over-dense ones.
+Measured along the same fixed path, the three statistics on the
+constant-density solve are 1.033e-3 (floored), 1.020e-3 (one-sided, the
+published form) and 1.086e-3 (mean absolute) — **within 6% of each other, and
+all a factor of two above the tolerance**. Removing the floor changes nothing.
+Retracted; see §3.
+
+**Where the floor does matter is the divergence-free solve, and switching it
+buys the published iteration count at the published price.** There the
+one-sided average is 1.96e-3 against mean-absolute's 1.57e-2 — **8x smaller,
+purely by cancellation** — and it is already below the 2.5e-3 tolerance at the
+*first* iteration. Run end to end at the shipped tolerances (900 steps,
+bounded, nx=128):
+
+| PS criterion | DF criterion | PS iters | DF iters | band, 2nd half | t_final | wall s |
+|---|---|---|---|---|---|---|
+| `flooredOneSided` | `meanAbsolute` *(shipped)* | 64.0 | 31.9 | **4.4810e-3** | 6.1498 | 126.3 |
+| `flooredOneSided` | `oneSided` | 64.0 | **3.0** | 6.8773e-3 | 6.0397 | 93.3 |
+| `oneSided` | `meanAbsolute` | 64.0 | 31.9 | **4.4810e-3** | 6.1498 | 125.6 |
+| `oneSided` | `oneSided` | 64.0 | 3.0 | 6.8773e-3 | 6.0397 | 93.0 |
+
+Two things to read off. **Swapping the constant-density criterion is
+bit-identical** — 4.4810e-3 and t=6.1498 to every digit either way — which is
+the cleanest possible confirmation that it never fires. And **adopting the
+published criterion on the divergence-free solve collapses it to 3.0
+iterations**, which is [BK]'s reported 4.5 to within the difference between two
+cases, **for 1.53x the density error**. The published iteration count is
+purchasable here by choosing the statistic, and what it costs is exactly the
+iterations it skips. That is a reason to be careful about comparing iteration
+counts across papers, not a reason to adopt the criterion.
+
+**The iteration budget is nevertheless well chosen** — measured, not assumed
+(`--mode budget`, 900 steps, bounded, uncontended):
+
+| PS cap | DF cap | band, 2nd half | wall s |
 |---|---|---|---|
-| 64 (default) | 1.15e-3 | 7.91e-3 | 28.9 |
-| 16 | 2.29e-3 | 1.08e-2 | 15.9 |
-| 8 | 3.80e-3 | 1.87e-2 | 9.57 |
+| 128 | 32 | 3.54e-3 | 203.2 |
+| **64** | **32** *(shipped)* | **4.48e-3** | **127.2** |
+| 96 | 16 | 4.20e-3 | 147.3 |
+| 64 | 16 | 4.84e-3 | 108.1 |
+| 32 | 32 | 6.54e-3 | — |
+| 16 | 32 | 1.06e-2 | — |
+| 8 | 32 | 1.71e-2 | — |
 
-So the solve *is* converging in the sense that matters while never meeting a
-criterion that is structurally unreachable. Two concrete defects:
+Cutting the constant-density budget is expensive (16x fewer iterations is 6.8x
+the error) and doubling it saturates (1.26x the accuracy for 1.6x the cost);
+the divergence-free budget is nearly flat (32 → 8 costs 24%). The obvious
+reallocation — buy constant-density iterations with divergence-free ones — does
+not pay: (96, 16) is 6% better than the shipped pair for 16% more time. The
+shipped (64, 32) sits on the frontier.
 
-1. An **absolute** compression threshold cannot be met when the source carries
-   a structural mean the operator cannot remove. `RelaxedJacobiSolverConfig`
-   already has `rtol` (`solver.py:223`); the relaxed-Jacobi path ignores it.
-2. Both papers' criteria are one-sided on the *average*
-   (`rho_avg - rho0 > eta`, [BK] Alg. 3; [I] §5.1), so under-dense particles
-   cancel over-dense ones. This codebase floors each particle's negative
-   contribution at `-threshold` (`incompressible.py:218-220`), forbidding
-   exactly that cancellation. That is the difference that makes the structural
-   bias binding here and not there, and it is one line.
-
-**A solver that never terminates cannot report that a change helped it**, which
-is why every convergence number in this document is a residual, not a count.
+**So the practical statement is the one the numbers support: this solver's
+iteration count is a tuning parameter that happens to be spelled as a
+convergence budget, the tolerance on it is decorative on the bounded case and
+binding on the periodic ones, and the honest fix is to say so rather than to
+adjust a threshold that nothing can reach.**
 
 ### 1.8 Static boundary particles do not take reaction forces
 
@@ -277,7 +352,9 @@ again.
 | **One-sided source clamping** | Published negative result — [I] §3.2: "causes implausible alignments of single particles at the fluid surface for CG and Jacobi." |
 | **Krylov on the clamped solve** | Published negative result, confirmed end-to-end: post-hoc `gauge='nonnegative'` gives `rhoErr` 3.6e-1 (MINRES, garbage) or NaN at step 4 (CG, BiCGStab). [I] §3.2 and [BK] §5 both state it. |
 | **Reordering `inStepVelocity` to [BK] Alg. 1** | Demoted, not run. Under `semiImplicitEuler` the position advances with the *updated* velocity, making the codebase's ordering equivalent to [BK]'s up to loop phase. The surviving difference is a one-step lag (`DF` computed before `CD`), not an absence of projection. |
-| **Krylov `minres` as a wall fix** | 3% better for 23% more time on the bounded case, against 115% better on the periodic one. At a wall the error is set by the boundary treatment, not by how well the PPE is solved. |
+| **Adopting the published stopping criterion** | Bit-identical on the constant-density solve (its test never fires under any of the three statistics) and 1.53x *worse* on the divergence-free one, where it collapses the solve to 3.0 iterations by cancellation. It buys [BK]'s iteration count and pays for it in density error (§1.7, Part 15). |
+| **Re-tuning the iteration budget** | The shipped (64, 32) is on the accuracy/cost frontier. 128 PS buys 1.26x for 1.6x the wall time; 16 DF loses 8%; the reallocation the "one converges, one does not" picture suggests, (96, 16), is 6% better for 16% more time. No free win (§1.7). |
+| `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). | 3% better for 23% more time on the bounded case, against 115% better on the periodic one. At a wall the error is set by the boundary treatment, not by how well the PPE is solved. |
 
 ---
 
@@ -337,7 +414,15 @@ Kept because each was acted on or nearly acted on.
    half-state NaN'd at t=1.65 under the clamp gauge; under `minShift` the same
    configuration runs all 901 steps. Whether the halved per-sweep contraction
    behind it is also gone is unmeasured (§4 item 3).
-13. **"The knee is at about 0.2 and the published 0.4 is not near it"**
+13. **"The stopping criterion is broken, and the floor is the one-line fix"**
+   (§1.7, Parts 4-13) — **retracted twice over.** The floored one-sided
+   average, the published unfloored one and the mean absolute all read within
+   6% of each other on the constant-density solve and all sit a factor of two
+   above the tolerance, so the floor is not what keeps it from terminating.
+   And the premise was already half false: at the shipped defaults the
+   *periodic* cases terminate both solvers in 3 iterations. What is actually
+   happening is not a criterion defect at all (new §1.7).
+14. **"The knee is at about 0.2 and the published 0.4 is not near it"**
    (Part 12) — **retracted.** True at the shipped boundary configuration, and
    an artifact of it: the 2.83x that a halved timestep bought was the near-wall
    band, and once the band is gone halving buys 1.17x. The sweep's own numbers
@@ -583,6 +668,74 @@ And the wall-clock columns are **not** comparable across the two sweeps: they
 were run in different sessions with different GPU contention, which is enough
 to swamp the per-step difference entirely (see the previous section's point 3).
 
+### The stopping criterion — measured, and it was the wrong suspect (Part 15, `probe_stoppingCriterion.py`)
+
+**No default changed; the finding did.** The full analysis is in the rewritten
+§1.7. What landed in code is the machinery that made it measurable:
+
+- **One configurable criterion across all three relaxed-Jacobi loops.** They
+  used to spell two different tests inline and neither was reachable from the
+  config, so "the criterion is broken" could be argued but not tested.
+  `JacobiConvergenceCriterion` names the three forms — `flooredOneSided`
+  (`solveIncompressible`'s historical test), `oneSided` ([BK] Alg. 3 / [I]
+  §5.1) and `meanAbsolute` (both divergence-free loops' historical test) — and
+  `modules/incompressible/convergence.py` computes them. The defaults are each
+  solver's own historical statistic, so this is inert: the two end rows of
+  Part 14's probe reproduce bit for bit.
+- **`rtol` wired into the relaxed-Jacobi path as a disjunct** (§4 item 4's
+  ask), with the same `mean|r| <= atol + rtol*mean|b|` contract the Krylov path
+  states. It is inert at the shipped `rtol = 1e-5` and provably so: on the
+  bounded case `mean|r| / mean|b|` is about 0.97 *at the last iteration*, which
+  is the finding below in one number.
+
+The measurement is `--mode trace`, which disables early exit
+(`minIterations = maxIterations`, `rtol = 0`) so that every criterion is
+evaluated **along the same iterate path** — same states, same iterates, three
+readings, directly comparable rather than three different simulations.
+
+Four results:
+
+1. **The premise was half wrong.** `kolmogorovIncompressible` at nx=128
+   terminates both solvers in 3 iterations on every step, statistic 2.26e-5
+   against a 5e-4 tolerance. Non-termination is a bounded-case phenomenon and
+   has been since `minShift` became the default in Part 4; nobody re-checked.
+2. **The floor is not the defect.** On the constant-density solve the three
+   statistics read 1.033e-3 / 1.020e-3 / 1.086e-3 — within 6%, all a factor of
+   two above the tolerance. §1.7's "it is one line" is retracted.
+3. **The constant-density solve does not converge in any norm.** 64 sweeps
+   remove 2.7% of the residual and grow the pressure range 61x, linearly in the
+   iteration count. It is an integrator; `maxIterations` is a gain. That is
+   §1.1's unreachable setpoint observed *inside* one solve rather than across
+   steps, and it explains why every criterion this document has tried failed
+   in the same way.
+4. **The published criterion's shape flatters published iteration counts, and
+   the price is measured.** On the divergence-free solve the one-sided average
+   is 8x smaller than the mean absolute (1.96e-3 vs 1.57e-2) purely by
+   cancellation, and it is already under tolerance at the first iteration.
+   Adopting it end to end takes that solve from 31.9 iterations to **3.0** —
+   [BK]'s reported 4.5, near enough — **at 1.53x the density error** (6.88e-3
+   against 4.48e-3). The same swap on the constant-density solve is
+   **bit-identical**, which is the cleanest confirmation that its criterion
+   never fires at all. Table in §1.7.
+
+And one negative result worth its own line: **the shipped iteration budget is
+on the accuracy/cost frontier** and should not change. Doubling the
+constant-density budget buys 1.26x for 1.6x the wall time; halving the
+divergence-free one loses 8%; the reallocation that the "one converges, one
+does not" picture suggests — buy PS iterations with DF ones — measures worse
+than the shipped pair at equal cost. Table in §1.7.
+
+**What this changes downstream.** Item 9 (warm start) was gated on "fix the
+stopping criterion first, because warm-starting a solver that is winding up
+carries the wind-up across steps". That is now precise rather than
+precautionary, and it splits the item: the divergence-free solve converges, so
+warm-starting it is the ordinary optimisation [BK] describes; the
+constant-density solve is an integrator, so warm-starting it would carry a
+*linear ramp* across steps and is contraindicated outright. Item 11 (the real
+`dfsph` scheme) inherits a sharper warning too: DFSPH proper puts the
+constant-density solve into the *momentum* equation, where an amplitude set by
+an iteration count becomes a force set by an iteration count.
+
 ### Open items, ranked
 
 1. ~~**Run the 2x2x2x2.**~~ ~~**Land `minShift`-on-bounded + `staticBoundary`
@@ -610,9 +763,13 @@ to swamp the per-step difference entirely (see the previous section's point 3).
    halved there — if it is, the mechanism is still live and merely survivable,
    and it is worth understanding before any third solve is added; if it is not,
    this item closes. `probe_boundaryOperatorTerms.py --mode diag` measures it.
-4. **Wire `rtol` into the relaxed-Jacobi path** as a disjunction with the
-   existing absolute test (§1.7), and re-measure. Then the one-sided-average
-   vs floored-average criterion behind a flag.
+4. ~~**Wire `rtol` into the relaxed-Jacobi path**~~ ~~**Then the
+   one-sided-average vs floored-average criterion behind a flag.**~~ **Both
+   done — Part 15.** Both are in and both are inert, and the measurement they
+   enabled says neither was the defect: the constant-density solve does not
+   converge in any norm, so no residual criterion can end it (new §1.7). What
+   is left of this item is *documentation*, not code — `maxIterations` on
+   `pressureSolver` should be named and described as the shift gain it is.
 5. **Move `computeMdbcPressure` inside the solver iteration** ([B] Alg. 1
    recomputes `p_b` from the current iterate every sweep, so it is a pure
    function of `p_f` with no state and no lag) and add [B]'s **SVD safe
@@ -637,11 +794,14 @@ to swamp the per-step difference entirely (see the previous section's point 3).
    amplitude) separately from disorder/volume error (Fig. 4, max density) on
    exactly the axis the `ShiftApplication` modes differ on, with published
    curves to compare against.
-9. **Warm start.** [BK] does a full one (worth ~3x in iteration count), [I] and
-   [C] do `0.5 p(t-dt)`, [B] does none; this codebase does none
-   (`incompressible.py:167`). Apply **after** the stopping criterion is fixed —
-   warm-starting a solver that is winding up carries the wind-up across steps,
-   which the cold start currently prevents.
+9. **Warm start — on the divergence-free solve only.** [BK] does a full one
+   (worth ~3x in iteration count), [I] and [C] do `0.5 p(t-dt)`, [B] does none;
+   this codebase does none (`incompressible.py:167`). Part 15 splits the item:
+   the divergence-free solve genuinely converges, so warm-starting it is the
+   ordinary optimisation and is now unblocked. The constant-density solve is an
+   integrator whose pressure grows linearly in the iteration count, so
+   warm-starting *it* would carry that ramp across steps — the cold start is
+   load-bearing there, and this is no longer a "wait and see" but a "do not".
 10. **Rename `dfsph.py`/`dfsph_step` → `vdps.py`** (§1.3). Zero-risk, and the
     registered scheme name already needs no change.
 11. **The scheme split.** Add a real `dfsph` scheme once 1–4 land. Fully
@@ -872,6 +1032,9 @@ All are round-tripped through `incompressibleConfigToDict` /
 | `shiftApplication` | `positionShift` | The paper-faithful default. `positionAndVelocity` and `inStepVelocity` are much better at walls and dissipative in the bulk (§1.2). |
 | `densityEvolution` | `summation` | `continuity` (WCSPH standard) fails everywhere but `tgv`; `hybrid` matches `summation` exactly where support is complete, for ~21% less wall time on `tgv`, and dies at 286 steps at an mDBC wall (§4 item 7). |
 | `mdbcPressureRelaxation` | `0.3` | Load-bearing for `mdbcMlsPressure` — at 1.0 it NaNs in 7-8 steps. Never swept; chosen to match the solver's own `relaxationFactor`. |
+| `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). |
+| `rtol` (relaxed-Jacobi path) | `1e-5` | Now a *disjunct* alongside the absolute test, same contract as the Krylov path. Inert at the default: `mean\|r\|/mean\|b\|` is ~0.97 at the last iteration on the bounded case. |
+| `maxIterations` (`pressureSolver`) | `64` | **A gain, not a budget** (§1.7). The constant-density solve does not converge; its pressure grows linearly in the iteration count, so this sets the shift amplitude. Measured on the frontier: 128 buys 1.26x for 1.6x the time, 32 costs 1.46x. |
 | `mdbcNoPenetrationShift` | `True` | Removing it is worse (§2). |
 | `integrateRho` | `False` | Legacy alias; `resolveDensityEvolution` maps `True` → `continuity`. |
 | `cflFactor` (incompressible cases) | **`0.4`** | Working tree only; multiplies `dx`. See §7. |
@@ -943,6 +1106,15 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   explicit reproduction check against them, so it is the cheapest regression
   test for "did anything under the incompressible path move". `--rows` subsets
   it.
+- `probe_stoppingCriterion.py` *(new, Part 15)* — `--mode trace` evaluates all
+  three criteria **along one fixed iterate path** (early exit disabled, so the
+  runs are bit-identical and only the reading changes) and prints each
+  statistic and the pressure range per iteration; `--mode budget` sweeps the
+  two solvers' `maxIterations` (`--budgets 64:32 128:16`); `--mode ab` crosses the two
+  solvers' criteria end to end at the shipped tolerances, which is what "adopt
+  [BK] Alg. 3" actually means. Point it at
+  `--case kolmogorovIncompressible --extra` for the periodic contrast, which is
+  where the non-termination claim breaks.
 - `probe_consistentCoupling.py` — [BWJ23]'s `consistent` mode end to end.
 - `probe_cflCondition.py` *(new, Part 12)* — `--mode verify` checks that
   `dt |v_max| / dx == cflFactor` exactly whenever the advective term binds
@@ -1023,6 +1195,7 @@ One line each, for locating the full write-up in git history.
 | 11 | 08-28 | [BWJ23] — the derivation behind Part 9. `BoundaryPressureMode.consistent`, the best configuration measured. |
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
+| 15 | 08-29 | The stopping criterion (§1.7). It was the wrong suspect: the periodic cases terminate in 3 iterations, the floor changes nothing, and the constant-density solve does not converge in any norm — it integrates, so `maxIterations` is a gain. The criterion is now one configurable setting across all three loops; no default changed. |
 | 14 | 08-29 | The landing (§4). `boundaryOperatorTerms` moved per-solver; the two solvers crossed under `minShift` says **both**, not the PS-only split Part 9 implied. `minShift` on bounded and `staticBoundary` on both are now the defaults, and the bounded case ships at 4.48e-3. The half-state's divergence turns out to belong to the clamp. Three prior rows reproduced exactly. |
 
 ---
@@ -1189,33 +1362,60 @@ the 4.48e-3 configuration with no flags. Full tables in §4; the short version:
 - Suite 241/1 skipped, gradcheck passes, `run_sweep.py` 30/30, config
   round-trips.
 
+### Part 15, the stopping criterion — measured, and retired as a mystery
+
+**No default changed.** §1.7 has been rewritten around what the measurement
+actually found; the short version:
+
+- **The periodic cases converge in 3 iterations** at the shipped defaults, both
+  solvers. "Never terminates under every gauge" was a clamp-gauge observation
+  that outlived the clamp. Non-termination is a near-wall phenomenon, like
+  everything else here.
+- **The floor was the wrong suspect.** All three criteria read within 6% of
+  each other on the constant-density solve and all sit a factor of two above
+  the tolerance.
+- **That solve does not converge in any norm.** 64 sweeps remove 2.7% of the
+  residual and grow the pressure field 61x, linearly in the iteration count.
+  It is an integrator, and `maxIterations` is a shift gain wearing a
+  convergence budget's name. No criterion can end it, which is why every one
+  tried has failed identically.
+- **The published criterion buys the published iteration count, and it costs
+  accuracy**: adopting it takes the divergence-free solve from 31.9 iterations
+  to 3.0 — [BK]'s 4.5, near enough — for 1.53x the density error. On the
+  constant-density solve the same swap is bit-identical.
+- **The shipped iteration budget is on the frontier** and should stay.
+- Landed in code: one configurable `JacobiConvergenceCriterion` across all
+  three relaxed-Jacobi loops (they spelled two different tests inline), and
+  `rtol` as a relative disjunct. Both inert — Part 14's end rows reproduce bit
+  for bit.
+
 ### What is left, in order
 
-1. ~~**Land `minShift`-on-bounded + `staticBoundary` as the defaults.**~~
-   ~~**The `cflFactor = 0.2` question.**~~ **Both done — Part 14 (§4).** The
-   defaults are landed and verified end to end, and the CFL re-run closes the
-   timestep question in favour of keeping the published 0.4.
-2. **Fix the stopping criterion** (§1.7 / §4 item 4) — `rtol` as a disjunction,
-   then the one-sided average. **Now the top item, and the last thing that has
-   survived every experiment**: relaxed-Jacobi, MINRES, BiCGStab, every `dt`,
-   every gauge, both shift configurations, all sixteen cells of the factorial,
-   and all five of Part 14's. The only place iteration counts have ever come
-   off their caps is a shrunken `dt`, which is not a fix.
-3. **Re-measure the divergence-free half-state's contraction** (§4 item 3)
-   under `minShift`. Part 14 removed the divergence, so this is no longer a
-   blocker for anything — but the ~20%-against-~50% per-sweep contraction was
-   measured under the clamp and nobody has looked at it since, and it is the
-   one mechanism in this document that was observed and never explained.
-   Cheap: `probe_boundaryOperatorTerms.py --mode dfTrace/--solvers`.
-4. **Then** the shear-wave case, the warm start, the rename, and the scheme
-   split — in that order. The warm start in particular still wants the
-   stopping criterion first (§4 item 9), and the scheme split still wants
-   both (§4 item 11).
+1. ~~**Land the defaults.**~~ ~~**The `cflFactor = 0.2` question.**~~
+   ~~**Fix the stopping criterion.**~~ **All done — Parts 14 and 15.**
+2. **Port [C]'s shear-wave decay case** (§4 item 8). Now the top item, and the
+   first one in a while that is about *evidence* rather than about a defect:
+   it is the missing reference case — 2D, fully periodic, no gravity and no
+   explicit viscosity, so any decay is solver artifact — and it grades
+   artificial viscosity separately from disorder on exactly the axis the
+   `ShiftApplication` modes differ on, against published curves.
+3. **Warm-start the divergence-free solve** (§4 item 9, now split by Part 15).
+   It converges, so this is the ordinary [BK] optimisation and is unblocked.
+   Do **not** warm-start the constant-density solve: it integrates, and a warm
+   start would carry the ramp across steps.
+4. **Re-measure the divergence-free half-state's contraction** under `minShift`
+   (§4 item 3). No longer blocking anything — Part 14 removed the divergence —
+   but it is the one mechanism in this document that was observed and never
+   explained.
+5. **Then** the rename and the scheme split. The scheme split now carries a
+   sharper warning from Part 15: DFSPH proper puts the constant-density solve
+   into the momentum equation, where an amplitude set by an iteration count
+   becomes a *force* set by an iteration count.
 
 ### What is next, concretely
 
-Do 2. Every default decision this document was holding open has now been made
-and measured, and the stopping criterion is what is left holding up the rest of
-the list: the warm start needs it, the real `dfsph` scheme needs it, and it is
-the reason both solvers still run to their iteration caps on a problem they are
-solving well enough to have cut the density error 40x without it.
+Do 2. Every defect this document opened is now either fixed or explained, and
+what it is short of is not another A/B against itself but a case with a
+published answer to be wrong against. The shear-wave case is that, and every
+remaining item — the warm start, the scheme split, the `ShiftApplication`
+question §1.2 left open — would be graded better with it in hand than without.

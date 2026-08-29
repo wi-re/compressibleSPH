@@ -38,6 +38,7 @@ from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
 from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge, BoundaryOperatorTerms, resolveBoundaryOperatorTerms
+from .convergence import evaluateResidual, sourceNorm
 from .krylov import solvePressureKrylov
 from .consistent import applyConsistentCoupling
 from ...configurations import BoundaryPressureMode
@@ -206,6 +207,15 @@ def _solveIncompressibleImpl(
         error = 0.
         gaugeOffset = torch.zeros((), device=pressureB.device, dtype=pressureB.dtype)
 
+        # The stopping test: an absolute test on the configured statistic, and
+        # (when `rtol > 0`) a relative disjunct on `mean|r|`. See
+        # `convergence.py` and `JacobiConvergenceCriterion`; this solver's
+        # historical statistic is `flooredOneSided`, which is the one §1.7
+        # calls broken.
+        criterion = psSolver.convergenceCriterion
+        bNorm = sourceNorm(sourceTerm, fluidMask, psSolver.rtol)
+        relTarget = None if bNorm is None else psSolver.atol + psSolver.rtol * bNorm
+
         # print(f"Solving for divergence-free velocities with maxIters={maxIters}, threshold={threshold:.6g}, omega={omega:.6g}")
 
         for i in range(maxIters):
@@ -256,15 +266,14 @@ def _solveIncompressibleImpl(
                         pressureB = torch.clamp(pressureB, min=0.0)  # Ensure non-negative pressures
                         pressureB = torch.where(fluidMask, pressureB, boundaryPressure)
 
-                residual_clamped = torch.clamp(-residual, min=-threshold)
-
-                error = torch.mean(residual_clamped[fluidMask]).cpu().item()
-                # error = torch.mean(torch.abs(residual)).cpu().item()
+                error, rNorm = evaluateResidual(residual, fluidMask, criterion,
+                                                threshold, bNorm)
                 errors.append(error)
 
                 pressures.append((pressureB.min().cpu().item(), pressureB.max().cpu().item(), pressureB.mean().cpu().item()))
 
-                if i >= minIters and error < threshold:
+                if i >= minIters and (error < threshold
+                                      or (relTarget is not None and rNorm <= relTarget)):
                 #     print(f"Converged after {i+1} iterations with error: {error:.6g}")
                     break
                 

@@ -57,6 +57,7 @@ from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
 from ...configurations import PressureSolverType, JacobiRelaxationMode, BoundaryOperatorTerms, resolveBoundaryOperatorTerms
 from .krylov import solvePressureKrylov
+from .convergence import evaluateResidual, sourceNorm
 from .consistent import applyConsistentCoupling
 from ...configurations import BoundaryPressureMode
 
@@ -139,6 +140,13 @@ def _solveDivergenceFreeOptimal(
             )
 
         residual = sourceTerm - op(pressureA)
+        # See `convergence.py`: an absolute test on the configured statistic
+        # plus, when `rtol > 0`, a relative disjunct on `mean|r|`. Both
+        # divergence-free loops default to `meanAbsolute`, their historical
+        # statistic.
+        criterion = dfSolver.convergenceCriterion
+        bNorm = sourceNorm(sourceTerm, fluidMask, dfSolver.rtol)
+        relTarget = None if bNorm is None else dfSolver.atol + dfSolver.rtol * bNorm
         for i in range(maxIters):
                 # Zero the trial step at boundary rows *before* the matvec:
                 # `u` is the pressure field `op()` evaluates, so this both
@@ -175,12 +183,14 @@ def _solveDivergenceFreeOptimal(
                 if (i + 1) % 16 == 0:
                         residual = sourceTerm - op(pressureB)  # bound fp32 recurrence drift
 
-                error = torch.mean(torch.abs(residual[fluidMask])).cpu().item()
+                error, rNorm = evaluateResidual(residual, fluidMask, criterion,
+                                                threshold, bNorm)
                 errors.append(error)
 
                 pressures.append((pressureB.min().cpu().item(), pressureB.max().cpu().item(), pressureB.mean().cpu().item()))
 
-                if i >= minIters and error < threshold:
+                if i >= minIters and (error < threshold
+                                      or (relTarget is not None and rNorm <= relTarget)):
                     break
 
                 if verbose:
@@ -310,6 +320,11 @@ def _solveDivergenceFreeImpl(
         minIters = schemeConfig.solverConfig.divergenceFreeSolver.minIterations
         maxIters = schemeConfig.solverConfig.divergenceFreeSolver.maxIterations
         threshold = schemeConfig.solverConfig.divergenceFreeSolver.tolerance
+        # See `convergence.py` and `_solveDivergenceFreeOptimal`'s copy of this
+        # comment.
+        criterion = dfSolver.convergenceCriterion
+        bNorm = sourceNorm(sourceTerm, fluidMask, dfSolver.rtol)
+        relTarget = None if bNorm is None else dfSolver.atol + dfSolver.rtol * bNorm
         omega = schemeConfig.solverConfig.divergenceFreeSolver.relaxationFactor
         # print(f"Solving for divergence-free velocities with maxIters={maxIters}, threshold={threshold:.6g}, omega={omega:.6g}")
 
@@ -342,16 +357,14 @@ def _solveDivergenceFreeImpl(
 
 
                 # pressureB[particles.surfaceIndicators == 1] = 0.0  # Set pressures to zero for surface particles
-                # residual_clamped = torch.clamp(residual, min=-threshold).abs()
-
-                # error = torch.mean(residual_clamped).cpu().item()
-
-                error = torch.mean(torch.abs(residual[fluidMask])).cpu().item()
+                error, rNorm = evaluateResidual(residual, fluidMask, criterion,
+                                                threshold, bNorm)
                 errors.append(error)
 
                 pressures.append((pressureB.min().cpu().item(), pressureB.max().cpu().item(), pressureB.mean().cpu().item()))
 
-                if i >= minIters and error < threshold:
+                if i >= minIters and (error < threshold
+                                      or (relTarget is not None and rNorm <= relTarget)):
                 #     print(f"Converged after {i+1} iterations with error: {error:.6g}")
                     break
                 
