@@ -1045,6 +1045,85 @@ Part 17 compared three modes at three different timesteps and read the
 difference as a property of the modes. The probe's docstring warned about
 exactly this; the warning was not heeded.
 
+### A dam break — the incompressible scheme's first working free surface (Part 19, `probe_dambreakIncompressible.py`)
+
+Every incompressible case in this document is periodic or wall-bounded except
+`rotatingSquarePatch`, which is broken in a way [BK] §5 documents as a method
+limitation and which is a hard free-surface test (four convex corners, and the
+arms it grows are surface-tension-sensitive). A dam break is the easier one:
+gravity-driven, one mostly-flat free surface. `dambreak` is a weakly-compressible
+case and takes `--scheme divergenceFree` with no wiring, so this costs nothing
+to ask.
+
+**It works.** nx=64, 3000 steps to t=1.5, no divergence, fluid density in
+[0.907, 1.004] for the whole run, and a recognisable dam break: the column
+falls, spreads, and runs out along the floor. That is the first free surface
+this scheme has done without breaking.
+
+**But it is a different dam break from the validated one.** `deltaSPH` is the
+control — same geometry, same resolution, same `dt`:
+
+| t | DF KE | DF front | deltaSPH KE | deltaSPH front |
+|---|---|---|---|---|
+| 0.3 | 4.15 | -0.767 | 2.12 | -0.586 |
+| 0.5 | **7.42** | -0.270 | 3.61 | 0.353 |
+| 0.7 | 3.16 | 0.137 | 4.23 | **1.462** |
+| 0.8 | 1.66 | 0.344 | 4.35 | 1.984 *(far wall)* |
+| 1.0 | 1.11 | 0.809 | 3.69 | — |
+| 1.5 | 0.84 | 1.676 | 1.32 | — |
+
+Two things, and they are the same thing seen twice:
+
+1. **The run-out is roughly half speed.** From its start at x=-1.359 the front
+   has travelled 1.50 by t=0.7 against `deltaSPH`'s 2.82. `deltaSPH` reaches
+   the far wall at t≈0.8; the incompressible run has not by t=1.5.
+2. **The kinetic energy peaks 2x higher and then collapses.** 7.42 at t=0.5
+   against 3.61, then **88% of it is gone by t=0.8** while `deltaSPH` is still
+   gaining. The peak is the column *falling*; what does not happen is the
+   turn — the vertical momentum that should become horizontal run-out is
+   dissipated instead.
+
+**It is not a timestep artifact.** `dambreak` has no incompressible `timestep`
+hook, so it runs at the weakly-compressible `dt = 5e-4`. With `dx = 0.03125`
+and `|v|` peaking near 5, [BK]'s condition would permit `2.5e-3` — the run is
+**5x finer in time than the CFL requires**, not coarser. (It is also why it
+costs 294s against `deltaSPH`'s 61s for the same 3000 steps; an incompressible
+`timestep` hook would recover most of that, and is worth adding.)
+
+**The free-surface density deficit disappears, and that is worth explaining.**
+Under a summation density a particle at a flat free surface reads about
+`0.5 rho0`, because half its kernel support is empty. It does, at first: the
+minimum fluid density is **0.518 at t=0.02**. By t=0.2 it is 0.979, and it
+stays near `rho0` for the rest of the run — while the fluid still has a free
+surface. Measuring the geometry directly (`scratchpad` harness, neighbour
+counts within the support for the topmost particle in each `dx`-wide column,
+which uses no density at all):
+
+| | surface nbrs | bulk nbrs | ratio | surface `rho` |
+|---|---|---|---|---|
+| `divergenceFree`, t=0.02 | 28.6 | 42.3 | 0.677 | 0.766 |
+| `divergenceFree`, t=0.5 | 33.2 | 44.3 | **0.749** | **1.0009** |
+| `deltaSPH`, t=0.5 | 29.4 | 43.4 | 0.677 | 1.0005 *(integrated, not summed)* |
+
+So the surface is **still a surface** — it keeps only three quarters of the
+bulk neighbour count — yet its summed density reads exactly `rho0`. The
+neighbours it has must therefore be closer than the bulk's. The natural reading
+is that the constant-density solve compacts the surface layer until the
+truncated kernel sum reaches `rho0`, which is what §4 records it doing at the
+rotating patch's corners, here succeeding rather than breaking. **That reading
+is not established by this measurement**: the `deltaSPH` row is a different
+flow state at the same time (its front is 0.6 further along), so the 0.749
+against 0.677 is suggestive, not controlled. A clean test would compare
+DF-with-and-without the shift at the surface — `divergenceFree.py` has
+`pressureB[surfaceIndicators == 1] = 0.0` commented out for exactly this, and
+§4's "Known-open" entry explains why it is untestable as written.
+
+**Where this leaves the scheme.** It does free surfaces, on the easy case,
+without breaking — but it delivers half the run-out and dissipates most of the
+flow's energy at the moment the dam break is supposed to convert it. That is
+the same over-dissipation Part 18 measured on the bounded case (19% of KE in 6
+time units there, 88% in 0.3 here), in the regime that exposes it.
+
 ### Open items, ranked
 
 1. ~~**Run the 2x2x2x2.**~~ ~~**Land `minShift`-on-bounded + `staticBoundary`
@@ -1429,6 +1508,10 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   [BK] Alg. 3" actually means. Point it at
   `--case kolmogorovIncompressible --extra` for the periodic contrast, which is
   where the non-termination claim breaks.
+- `probe_dambreakIncompressible.py` *(new, Part 19)* — the dam break under
+  both schemes, reporting surge front, column height, kinetic energy and the
+  size of the population that reads as free surface under a summation density.
+  `--schemes divergenceFree` for one of them.
 - `probe_shiftApplication.py` *(new, Part 17)* — the three modes across `tgv`,
   the bounded case and `shearWave` in one table. `--nx/--tgvSteps` matter more
   than usual here: the `tgv` ratio is resolution-dependent for two of the three
@@ -1523,6 +1606,7 @@ One line each, for locating the full write-up in git history.
 | 11 | 08-28 | [BWJ23] — the derivation behind Part 9. `BoundaryPressureMode.consistent`, the best configuration measured. |
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
+| 19 | 08-29 | A dam break under `--scheme divergenceFree` (§4). It works — 3000 steps, no divergence, a recognisable collapse, the first free surface this scheme has not broken. But the run-out is half `deltaSPH`'s speed and 88% of the kinetic energy is dissipated at the moment the fall should become run-out. The free-surface density deficit (0.518 at t=0.02) disappears while the surface stays geometrically a surface. |
 | 18 | 08-29 | The tail measured, and `ShiftApplication` settles (§4). At a pinned `dt`: **zero** wall penetration for all three modes, so §6's whole case for the velocity modes is void; and the velocity modes cost **2.1x** the kinetic energy of an inviscid flow for 2x lower density error. The default stays, on a measurement. Part 17's excursion claim was my own adaptive-`dt` artifact and is retracted. |
 | 17 | 08-29 | `ShiftApplication` re-measured at the current defaults (§4). The 3.2x that justified the shipped default does not reproduce — at `tgv`'s own nx=256 the three modes agree to 12%, and the ratio moves 2x with resolution, so it cannot be the resolution-independent residual §1.2 blames. `positionAndVelocity` is better on every sustained metric at equal cost; the default stays on tail behaviour and energy monotonicity. |
 | 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
@@ -1567,7 +1651,10 @@ exercises everything; it is now the best-behaved it has ever been, and is still
 where all the remaining error lives.
 `rotatingSquarePatch --scheme divergenceFree` (free surface) is broken and is a
 known method limitation, not an implementation bug — and is untouched by the
-Part 14 defaults, which are both no-ops there.
+Part 14 defaults, which are both no-ops there. **`dambreak --scheme
+divergenceFree` runs** (Part 19) — the scheme's only working free surface — but
+at half `deltaSPH`'s run-out speed and with most of the flow's energy
+dissipated on impact.
 
 ### Part 12, the CFL condition — landed and verified
 
@@ -1789,35 +1876,52 @@ probe's docstring has always required for this comparison):
   three modes compared at three different timesteps, because the velocity modes
   damp the flow and the CFL then hands them a larger `dt`.
 
+### Part 19, a dam break — the scheme's first working free surface
+
+Full tables in §4. `dambreak --scheme divergenceFree`, nx=64, 3000 steps:
+
+- **It works.** No divergence, fluid density in [0.907, 1.004], a recognisable
+  collapse and run-out. The only other free-surface incompressible case,
+  `rotatingSquarePatch`, is broken.
+- **The run-out is half speed.** The front travels 1.50 by t=0.7 against
+  `deltaSPH`'s 2.82 on identical geometry, resolution and `dt`.
+- **88% of the kinetic energy is dissipated between t=0.5 and t=0.8** — the
+  moment the falling column should be turning into horizontal run-out — while
+  `deltaSPH` is still gaining. Same over-dissipation Part 18 measured on the
+  bounded case, in the regime that exposes it.
+- **Not a timestep artifact**: the run is 5x *finer* in time than [BK]'s CFL
+  requires, because `dambreak` has no incompressible `timestep` hook. Adding
+  one is worth ~5x wall time.
+- **The free-surface density deficit vanishes** (0.518 at t=0.02, ~0.98
+  thereafter) while the surface keeps only three quarters of the bulk neighbour
+  count, i.e. while it is still geometrically a surface. Surface compaction is
+  the natural reading and is what §4 records at the rotating patch's corners,
+  but this measurement does not isolate it.
+
 ### What is left, in order
 
-1. ~~**Land the defaults.**~~ ~~**The `cflFactor` question.**~~ ~~**Fix the
-   stopping criterion.**~~ ~~**Port the shear-wave case.**~~ ~~**Settle
-   `ShiftApplication`.**~~ **Done — Parts 14 through 18.** Every question this
-   document opened about the *scheme* is now either answered or explained.
-2. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
-   remainder). Blocked on the paper, not on a run — `literature/MANIFEST.md`
-   has the arrangement and the sync procedure.
-3. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15). It
-   converges, so this is the ordinary [BK] optimisation and is unblocked. Do
-   **not** warm-start the constant-density solve: it integrates, and a warm
-   start would carry the ramp across steps.
-4. **Re-measure the divergence-free half-state's contraction** under `minShift`
-   (§4 item 3) — no longer blocking anything, still the one mechanism here that
-   was observed and never explained.
-5. **The rename** (§4 item 10, `dfsph.py` → `vdps.py`), which is zero-risk and
-   has been waiting on everything else.
-6. **The scheme split** (§4 item 11) — the only remaining item that is new
-   construction rather than repair, and the one Part 15's finding bears on
-   hardest: DFSPH proper puts the constant-density solve into the momentum
-   equation, where an amplitude set by an iteration count becomes a force set
-   by an iteration count.
+1. **Explain the dam break's dissipation** (Part 19). It is now the largest
+   unexplained defect in the scheme, it shows up on the one scenario anyone
+   would call realistic, and Part 18 says it is not the `ShiftApplication`
+   mode. Two things to separate first: whether the loss is the free-surface
+   compaction (test with the surface-scoped shift `divergenceFree.py` already
+   has commented out) or the impact itself.
+2. **Give `dambreak` an incompressible `timestep` hook.** It runs 5x finer in
+   time than the published CFL requires because it inherits the
+   weakly-compressible acoustic timestep. Cheap, and it makes every subsequent
+   dam-break experiment 5x cheaper — do it before item 1, not after.
+3. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
+   remainder). Blocked on the paper — `literature/MANIFEST.md`.
+4. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
+   Unblocked; do **not** warm-start the constant-density solve.
+5. **Re-measure the divergence-free half-state's contraction** under `minShift`
+   (§4 item 3) — still the one mechanism observed and never explained.
+6. **Then** the rename and the scheme split.
 
 ### What is next, concretely
 
-Do 3. It is the last item that is both unblocked and worth real time: [BK]
-reports ~3x fewer iterations from a warm start, this codebase does none, and
-Part 15 established exactly which of the two solves can safely take one. After
-that the list is a paper (2), a curiosity (4), a rename (5), and a new scheme
-(6) — and 6 should not start until somebody decides whether a formulation that
-puts a non-converging solve into momentum is worth building at all.
+Do 2, then 1. The scheme has been tuned against periodic and wall-bounded cases
+for nineteen sessions and it is now good on them; the dam break is the first
+time it has been asked to do something a user would recognise, and it loses
+most of the flow's energy doing it. That is a larger defect than anything left
+on the list, and it was invisible until a free surface was put in front of it.
