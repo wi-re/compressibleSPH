@@ -9,7 +9,7 @@ pressure and divergence-free solvers different tuned defaults (iteration caps,
 tolerances, relaxation) rather than sharing one default.
 """
 
-__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'BoundaryOperatorTerms', 'DensityEvolution', 'resolveDensityEvolution', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
+__all__ = ['PressureSolverType', 'JacobiRelaxationMode', 'BoundaryPressureMode', 'ShiftPressureGauge', 'ShiftApplication', 'BoundaryOperatorTerms', 'DensityEvolution', 'resolveDensityEvolution', 'resolveBoundaryOperatorTerms', 'RelaxedJacobiSolverConfig', 'buildDefaultPSConfig', 'buildDefaultDFConfig', 'IncompressibleSolverConfig', 'buildDefaultIncompressibleSolverConfig']
 
 from ...enumTypes import *
 from typing import Optional, Union, List
@@ -143,16 +143,24 @@ class ShiftPressureGauge(Enum):
     background-pressure de-clumping force this solver relies on. See
     `DFSPH_IMPROVEMENT_PLAN.md` Part 4 for the full comparison.
 
-    **`minShift` only applies where the constant mode is actually free.**
-    `solveIncompressible` falls back to `nonNegativeClamp` for any solve that
-    has pinned pressure rows (`kind != 0`) or free-surface particles, because
-    in both cases the constant is neither free (Dirichlet rows fix it) nor
-    forceless (where kernel support is truncated the gradients stop summing to
-    zero, so a uniform pressure exerts a large real force). Setting `minShift`
-    on a wall-bounded or free-surface case is therefore a no-op, not a
-    silently different answer -- and deliberately so: forcing it through on
-    the bounded `randomFlowIncompressible` at nx=128 diverges at t=0.69 where
-    the clamp reaches t=5.5.
+    **`minShift` applies wherever the constant mode is forceless, which
+    includes this codebase's walls.** `solveIncompressible` falls back to
+    `nonNegativeClamp` only for a solve that has *free-surface* particles,
+    where the kernel support really is truncated: the gradients stop summing
+    to zero, so a uniform pressure exerts a large real force and translating
+    the field is no longer a free choice.
+
+    Until Part 14 the same fallback also fired whenever any pressure row was
+    pinned (`kind != 0`), i.e. on every wall-bounded case, on the argument
+    that Dirichlet data already fixes the constant. Both halves of that were
+    measured wrong: this codebase's walls have complete support
+    (`scripts/probe_wallSupportCompleteness.py`; `BOUNDED_BAND = 5` is wider
+    than the kernel), and the divergence that justified the fallback (t=0.69
+    on the bounded `randomFlowIncompressible` at nx=128) was measured at 3x
+    [BK]'s CFL -- at the published CFL that configuration is stable and
+    better. Paired with `BoundaryOperatorTerms.staticBoundary` it holds the
+    bounded case's density band at 4.48e-3 against 1.78e-1 for the old
+    defaults. See `DFSPH_IMPROVEMENT_PLAN.md` Parts 13 and 14.
     """
     nonNegativeClamp = 0
     minShift = 1
@@ -272,40 +280,47 @@ class BoundaryOperatorTerms(Enum):
     diagonal in the wall-adjacent bin, 55% for particles that have crossed the
     wall, and *exactly* zero beyond 3 particle spacings.
 
-    Measured on the bounded `randomFlowIncompressible`, nx=128, 900 steps, at
-    the published CFL (`cflFactor=0.4`, i.e. [BK]'s constant -- recorded as
-    `cflFactor=0.1` before Part 12 rewrote the condition in particle diameters
-    instead of support radii; the timestep is the same one): `staticBoundary`
-    cuts `mean|rho-1|`
-    from 1.78e-1 to 3.00e-2 (5.9x) and `rho_max` from 1.247 to 1.007, at the
-    same wall-clock cost, and covers 35% more simulated time because the
-    adaptive `dt` grows. Two caveats, both measured:
+    **`staticBoundary` on both solvers is the default** (Part 14), and it is
+    only worth having together with `ShiftPressureGauge.minShift`: the two are
+    one fix applied at two points, and they compose 5.4x better than
+    independently. Measured on the bounded `randomFlowIncompressible`, nx=128,
+    900 steps, at the published CFL (`cflFactor=0.4`, i.e. [BK]'s constant --
+    recorded as `cflFactor=0.1` before Part 12 rewrote the condition in
+    particle diameters instead of support radii; the timestep is the same
+    one), as the density band `mean max(|rho_max-1|, |rho_min-1|)` over the
+    second half of the run:
 
-    - **It is a published-CFL result.** At 3x [BK]'s limit (`cflFactor=1.2` in
-      the current units, the pre-Part-12 default of 0.3 support radii) it
-      diverges at t=1.41 where `full` reaches t=5.54 -- a
-      smaller `|alpha|` at the wall means a larger Jacobi step, which is not
-      survivable at 1.2 particle spacings of displacement per step. Same
-      entanglement `ShiftPressureGauge.minShift` has.
-    - **The win belongs to `solveIncompressible`.** Scoped to the
-      constant-density/shifting solve it gives 2.88e-2; scoped to
-      `solveDivergenceFree` *alone* it diverges at t=1.65, though applied to
-      both it is fine (3.00e-2) and improves both solvers' final residuals
-      (4.8x and 1.7x) -- the harm is a property of running the two solves on
-      inconsistent operators, not of the static-boundary operator. Why the
-      mismatched half-state halves the divergence-free solve's per-sweep
-      contraction is **not explained**: the boundary velocity is not the cause
-      (`BCType.zeros`, the DFSPH convention, delays the divergence from step
-      283 to 482 but does not prevent it), nor is the Jacobi stability window
-      (`rho(D^-1 A)` is 6.3777 against 6.3782), nor the iteration budget (32 ->
-      96 -> 192 delays it, then reverses). The single knob here cannot express
-      the split -- a future default belongs on `RelaxedJacobiSolverConfig`,
-      which already exists per solver.
+    | gauge | PS terms | DF terms | band | t_final |
+    |---|---|---|---|---|
+    | clamp | `full` | `full` | 1.78e-1 | 4.690 |
+    | `minShift` | `full` | `full` | 1.43e-1 | 6.458 |
+    | `minShift` | `staticBoundary` | `full` | 6.49e-3 | 6.231 |
+    | `minShift` | `full` | `staticBoundary` | 7.11e-2 | 6.301 |
+    | **`minShift`** | **`staticBoundary`** | **`staticBoundary`** | **4.48e-3** | 6.150 |
 
-    See `DFSPH_IMPROVEMENT_PLAN.md` Part 9.
+    So the operator wants to be the same on both sides: splitting it costs
+    1.45x with the divergence-free solve left historical and 16x the other way
+    round. Under the *clamp* gauge the same split was worse than that -- it
+    diverged at t=1.65 -- and why it did is still unexplained (the boundary
+    velocity is not the cause: `BCType.zeros`, the DFSPH convention, delays
+    the divergence from step 283 to 482 without preventing it; nor is the
+    Jacobi stability window, `rho(D^-1 A)` 6.3777 against 6.3782; nor the
+    iteration budget, 32 -> 96 -> 192 delays it and then reverses). Under
+    `minShift` the mismatched half-state no longer diverges at all, which
+    narrows that open question to the clamp.
+
+    One caveat, measured: **it is a published-CFL result.** At 3x [BK]'s limit
+    (`cflFactor=1.2` in the current units, the pre-Part-12 default of 0.3
+    support radii) `staticBoundary` diverges at t=1.41 where `full` reaches
+    t=5.54 -- a smaller `|alpha|` at the wall means a larger Jacobi step,
+    which is not survivable at 1.2 particle spacings of displacement per step.
+    Same entanglement `ShiftPressureGauge.minShift` has, and at that timestep
+    no configuration survives, `full` included (Part 13).
+
+    See `DFSPH_IMPROVEMENT_PLAN.md` Parts 9, 13 and 14.
     """
-    full = 0            # default: static neighbours contribute every term (historical)
-    staticBoundary = 1  # [BK]/SPlisHSPlasH: drop their reaction in *both* alpha and the operator
+    full = 0            # historical: static neighbours contribute every term
+    staticBoundary = 1  # default. [BK]/SPlisHSPlasH: drop their reaction in *both* alpha and the operator
     diagonalOnly = 2    # diagnostic: drop it in alpha only (operator unchanged)
     operatorOnly = 3    # diagnostic: drop it in the operator only (alpha unchanged)
 
@@ -385,6 +400,26 @@ def resolveDensityEvolution(solverConfig) -> 'DensityEvolution':
     return evolution
 
 
+def resolveBoundaryOperatorTerms(solverConfig, solver) -> 'BoundaryOperatorTerms':
+    """`BoundaryOperatorTerms` for one of the two solvers.
+
+    The setting lives on `RelaxedJacobiSolverConfig`, so the constant-density
+    and divergence-free solves can run different operators -- the split Part 9
+    could not express and Part 14 measured. The bundle-level
+    `IncompressibleSolverConfig.boundaryOperatorTerms` is kept as an
+    *override*: `None` (the default) means "use each solver's own setting",
+    and any other value forces both solvers to it, which is what every probe
+    script and every recorded A/B in `DFSPH_IMPROVEMENT_PLAN.md` sets.
+
+    `solver` is the per-solver `RelaxedJacobiSolverConfig`
+    (`solverConfig.pressureSolver` or `.divergenceFreeSolver`).
+    """
+    override = getattr(solverConfig, 'boundaryOperatorTerms', None)
+    if override is not None:
+        return override
+    return getattr(solver, 'boundaryOperatorTerms', BoundaryOperatorTerms.full)
+
+
 @dataclass
 class RelaxedJacobiSolverConfig:
     minIterations: int = field(default=1, metadata={"description": "Minimum number of iterations for the relaxed Jacobi solver"})
@@ -397,6 +432,7 @@ class RelaxedJacobiSolverConfig:
     atol: float = field(default=0.0, metadata={"description": "Absolute residual floor for the Krylov solvers (0 = relative tolerance only)"})
     restart: int = field(default=30, metadata={"description": "GMRES restart length (ignored by the other solvers)"})
     krylovFp64: bool = field(default=False, metadata={"description": "Run the Krylov recurrence in float64 while the SPH matvec stays float32 (opt-in; improves the residual by roughly an order of magnitude on this ill-conditioned operator at negligible extra cost)"})
+    boundaryOperatorTerms: BoundaryOperatorTerms = field(default=BoundaryOperatorTerms.staticBoundary, metadata={"description": "Which pressure-operator terms a static (kind != 0) neighbour contributes to *in this solver*: full (boundary and ghost particles are treated exactly like fluid ones in both computeAlpha's sums and the divergence the solvers iterate) or staticBoundary (the published formulation -- a particle that never moves takes no reaction force, so it is dropped from computeAlpha's second sum AND from the divergence's neighbour-acceleration term). The two single-sided values diagonalOnly/operatorOnly are diagnostics. The two solvers are configured separately because the operator they build is the only thing they share; the setting was measured on both crossed (Part 14) and staticBoundary on BOTH is the default, because splitting it is 1.45x worse on the constant-density side alone and 16x worse on the divergence-free side alone. IncompressibleSolverConfig.boundaryOperatorTerms, if set, overrides both. A no-op on cases with no kind != 0 particles. See BoundaryOperatorTerms' docstring and DFSPH_IMPROVEMENT_PLAN.md Parts 9, 13 and 14."})
 
 
 def buildDefaultPSConfig() -> RelaxedJacobiSolverConfig:
@@ -404,14 +440,19 @@ def buildDefaultPSConfig() -> RelaxedJacobiSolverConfig:
         minIterations=2,
         maxIterations=64,
         tolerance=5e-4,
-        relaxationFactor=0.3
+        relaxationFactor=0.3,
+        # Both solvers run the published static-boundary operator (Part 14).
+        # Stated explicitly here rather than left to the field default, since
+        # this pair of builders is where the shipped tuning is read off.
+        boundaryOperatorTerms=BoundaryOperatorTerms.staticBoundary,
     )
 def buildDefaultDFConfig() -> RelaxedJacobiSolverConfig:
     return RelaxedJacobiSolverConfig(
         minIterations=2,
         maxIterations=32,
         tolerance=2.5e-3,
-        relaxationFactor=0.3
+        relaxationFactor=0.3,
+        boundaryOperatorTerms=BoundaryOperatorTerms.staticBoundary,
     )
 
 
@@ -425,8 +466,8 @@ class IncompressibleSolverConfig:
     mdbcPressureRelaxation: float = field(default=0.3, metadata={"description": "Under-relaxation for BoundaryPressureMode.mdbcMlsPressure's boundary pressure update (new = old + factor*(projected - old), matching the divergence-free solver's own default relaxationFactor). Ignored by plain/mdbcDensity. The one-step-lagged MLS projection closes a positive feedback loop with the fluid pressure solve (a larger boundary pressure drives a larger nearby fluid pressure gradient, which projects to an even larger boundary pressure next step); without damping this diverges within single-digit steps even on a well-sampled boundary (see DFSPH_IMPROVEMENT_PLAN.md's mdbcMlsPressure instability finding)."})
     shiftApplication: ShiftApplication = field(default=ShiftApplication.positionShift, metadata={"description": "How finalize applies solveIncompressible's constant-density solution: positionShift (the default; a one-shot position displacement, this scheme's historical behavior) or positionAndVelocity (additionally apply it as a velocity correction, as DFSPH proper does). The latter is what makes the wall-bounded case stable -- it reaches t=8.0 at the default CFL instead of NaN-ing at t=5.54, with 9x lower near-wall density error -- but it is dissipative: it drives tgv's kinetic-energy decay to 1.93x the analytic rate. Opt-in for that reason. See ShiftApplication's docstring and DFSPH_IMPROVEMENT_PLAN.md Part 5."})
     shiftPressureGauge: ShiftPressureGauge = field(default=ShiftPressureGauge.minShift, metadata={"description": "How solveIncompressible (the implicit particle-shifting solve) pins the constant null-space component of its pressure field: minShift (the default; subtract the fluid minimum -- non-negative and gauge-fixed) or nonNegativeClamp (the historical clamp(p, min=0); a floor, not a gauge, so the constant mode drifts up without bound and NaNs kolmogorovIncompressible at nx=128/step 574). Only differs on solves where the constant mode is genuinely free -- see ShiftPressureGauge's docstring and DFSPH_IMPROVEMENT_PLAN.md Part 4."})
-    forceShiftPressureGauge: bool = field(default=False, metadata={"description": "Bypass solveIncompressible's guard that downgrades ShiftPressureGauge.minShift to nonNegativeClamp whenever there are pinned pressure rows or free-surface particles. Experiment hook only (default False = shipped behaviour). Added because half that guard's stated justification was measured false: it argues that kernel support is truncated at a wall so a constant pressure exerts a large real force, but this codebase samples boundaries as a 5-layer band against a 4-spacing support radius, and scripts/probe_wallSupportCompleteness.py measures the Shepard sum at ~1.00 and |A.1|/|A.rand| at 0.19 in the wall-adjacent bin against 0.17 in the bulk -- i.e. support is complete and the constant mode is no less null there. The guard's OTHER justification (Dirichlet rows pin the constant, so there is no free null space to gauge) is untouched and still sufficient, and free surfaces genuinely are truncated -- so this stays off by default and exists to re-run the bounded A/B that originally rejected minShift, which was measured at 3x the published CFL (the pre-Part-12 default of 0.3 support radii, i.e. cflFactor=1.2 in the particle-diameter units the condition now uses)."})
-    boundaryOperatorTerms: BoundaryOperatorTerms = field(default=BoundaryOperatorTerms.full, metadata={"description": "Which pressure-operator terms a static (kind != 0) neighbour contributes to: full (the default, historical -- boundary and ghost particles are treated exactly like fluid ones in both computeAlpha's sums and the divergence the solvers iterate), staticBoundary (the published formulation -- a particle that never moves takes no reaction force, so it is dropped from computeAlpha's second sum AND from the divergence's neighbour-acceleration term; this is what Bender & Koschier §3.2 states and what SPlisHSPlasH's computeDFSPHFactor/pressureSolveIteration implement), or the two single-sided diagnostics diagonalOnly/operatorOnly, which change one side and leave the diagonal mismatched with its operator on purpose. A no-op on cases with no kind != 0 particles. See BoundaryOperatorTerms' docstring and DFSPH_IMPROVEMENT_PLAN.md Part 9."})
+    forceShiftPressureGauge: bool = field(default=False, metadata={"description": "Bypass solveIncompressible's remaining guard, which downgrades ShiftPressureGauge.minShift to nonNegativeClamp on any solve that has free-surface particles. Experiment hook only (default False = shipped behaviour). The guard used to fire on pinned pressure rows too, i.e. on every wall-bounded case, and this flag existed to re-run the A/B that had rejected minShift there; that A/B was measured at 3x the published CFL, the re-run reversed it, and Part 13's factorial and Part 14's landing made minShift-on-bounded the default, so the pinned-row half of the guard is gone. What is left is the free-surface half, which is the case where kernel support genuinely is truncated and a constant pressure genuinely is not forceless -- untested, and off by default."})
+    boundaryOperatorTerms: Optional[BoundaryOperatorTerms] = field(default=None, metadata={"description": "Bundle-level OVERRIDE for both solvers' boundaryOperatorTerms. None (the default) means each solver uses its own RelaxedJacobiSolverConfig.boundaryOperatorTerms, which is where the shipped defaults live; setting it to full/staticBoundary/diagonalOnly/operatorOnly forces both solvers to that value, which is what every A/B recorded in DFSPH_IMPROVEMENT_PLAN.md does. The setting moved per-solver in Part 14, because the constant-density and divergence-free solves want different operators; this field is kept so the single-knob form still works. See BoundaryOperatorTerms' docstring and resolveBoundaryOperatorTerms."})
     akinciBoundaryVolume: bool = field(default=False, metadata={"description": "Whether BoundaryPressureMode.consistent also replaces boundary particle masses with Akinci et al.'s volume correction m~_k = rho0 / sum_l W_kl (l over boundary neighbours only), as the paper specifies. Default False because that correction is derived for a ONE-LAYER boundary sampling, where it makes the single layer stand in for the whole solid half-space; this codebase samples a five-layer band (randomFlow.BOUNDED_BAND), so the layers behind the interface already supply that volume and the correction inflates the interface layer instead. Ignored by every other BoundaryPressureMode."})
     mdbcNoPenetrationShift: bool = field(default=True, metadata={"description": "Whether dfsph_step applies computeMdbcNoPenShift's soft per-particle velocity-damping correction near mDBC boundaries. Default True preserves the scheme's historical always-on behavior; the original DFSPH paper (Bender & Koschier) has no such term and relies on the pressure projection alone to prevent penetration, so this is an experimental A/B toggle (DFSPH_IMPROVEMENT_PLAN.md) to check whether it is actually helping or is a crutch that makes the near-wall density error worse -- not a permanent design decision."})
 

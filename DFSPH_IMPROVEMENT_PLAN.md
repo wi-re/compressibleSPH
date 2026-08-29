@@ -325,18 +325,40 @@ Kept because each was acted on or nearly acted on.
    The case is deterministic; re-running reproduces `pMean` = 2.3838e6 and NaN
    at step 574 exactly. That determinism is what made every subsequent A/B
    trustworthy.
+11. **"The win belongs to `solveIncompressible`"** (Part 9) — **retracted.**
+   Under the clamp, `staticBoundary` scoped to the shifting solve gave 2.88e-2
+   against 3.00e-2 for both, which read as "the divergence-free half
+   contributes nothing". Under `minShift` the same split is 6.49e-3 against
+   4.48e-3, i.e. the divergence-free half contributes 1.45x, and dropping it
+   gives the *worst* divergence-free residual of any gauged row. The operator
+   wants to be the same on both sides (Part 14).
+12. **"The harm is a property of running the two solves on inconsistent
+   operators"** (Part 9) — **narrowed to the clamp.** The divergence-free
+   half-state NaN'd at t=1.65 under the clamp gauge; under `minShift` the same
+   configuration runs all 901 steps. Whether the halved per-sweep contraction
+   behind it is also gone is unmeasured (§4 item 3).
+13. **"The knee is at about 0.2 and the published 0.4 is not near it"**
+   (Part 12) — **retracted.** True at the shipped boundary configuration, and
+   an artifact of it: the 2.83x that a halved timestep bought was the near-wall
+   band, and once the band is gone halving buys 1.17x. The sweep's own numbers
+   reproduce; the inference does not survive the defaults it was measured
+   under. Same shape as corrections 1 and 9: a conclusion drawn at one
+   configuration, inverted by a change underneath it — and, as there, the
+   thing underneath was the boundary treatment.
 
 ---
 
 ## 4. The combined default change — measured
 
-**The first of the four has landed** (`cflFactor`, Part 12 — see §10), and
-**the factorial has now been run** (Part 13, below): the combination is worth
-40x, `consistent` turns out inert against `staticBoundary`, and
-`akinciBoundaryVolume` diverges once the gauge is fixed.
-**The other three are each better at the published CFL and each worse at 3x
-it. Nobody has run them together, and that is the single highest-value
-experiment left in this document.**
+**Three of the four have landed and the fourth is rejected.** `cflFactor`
+went in with Part 12; the factorial (Part 13, below) measured the combination
+at 40x and Part 14 landed the two changes behind it — `ShiftPressureGauge.
+minShift` on wall-bounded solves and `BoundaryOperatorTerms.staticBoundary` on
+both solvers. `BoundaryPressureMode.consistent` is not landing: it is inert
+once the gauge is right, and its `akinciBoundaryVolume` variant diverges.
+The table below is the history of how each was measured *alone*, which is
+what makes Part 13's interaction legible; the shipped configuration is the
+`minShift` + `staticBoundary` row of Part 13's factorial, not any row here.
 
 All rows: `randomFlowIncompressible --bounded`, nx=128, 900 steps.
 
@@ -432,33 +454,162 @@ So the question was never "0.4 with the new defaults against 1.2 with the old
 ones". **The legacy CFL was already broken; the published CFL is what makes any
 of this measurable, and it has landed.** Nothing is blocking the rest.
 
+### The per-solver split, and the landing (Part 14, `probe_perSolverBoundaryTerms.py`)
+
+**Landed.** `ShiftPressureGauge.minShift` now applies on wall-bounded solves,
+and `BoundaryOperatorTerms.staticBoundary` is the default on **both** solvers.
+Running `randomFlowIncompressible --bounded` at nx=128 with no overrides at all
+now reproduces Part 13's best cell exactly — `rho` in [0.99491, 1.00712], band
+4.4810e-3, t=6.1498, DF residual 6.4951e-3 — so the 40x is the shipped
+behaviour, not a configuration someone has to know to ask for.
+
+Two things had to be decided first.
+
+**Where the setting lives.** `boundaryOperatorTerms` moved onto
+`RelaxedJacobiSolverConfig`, so the constant-density and divergence-free solves
+can carry different operators — the split Part 9 wanted and could not express.
+`IncompressibleSolverConfig.boundaryOperatorTerms` is kept as an *override*:
+`None` (the new default) means "each solver's own", and any other value forces
+both. Every probe in this document sets the bundle-level knob, so every A/B on
+file keeps its meaning unchanged, which is what let the reproduction rows below
+be checked at all.
+
+**What the split should be.** §4 item 2 wanted `pressureSolver =
+staticBoundary` with the divergence-free solver left `full`, on Part 9's
+finding that the win belonged to the shifting solve. §10's closing list
+objected that a split is exactly the mismatched-operator configuration behind
+the unexplained
+contraction collapse. Both were inferences from clamp-gauge measurements, and
+Part 13's lesson is that those do not survive the gauge fix. So it was measured
+— `minShift` throughout, published CFL, bounded `randomFlowIncompressible`,
+nx=128, 900 steps, same band metric as the factorial:
+
+| gauge | PS terms | DF terms | `rho` range | band, 2nd half | t_final | DF resid | PS resid | wall s |
+|---|---|---|---|---|---|---|---|---|
+| clamp | `full` | `full` | [0.902, 1.247] | 1.7782e-1 | 4.690 | 7.52e-2 | 2.51e-3 | 115.6 |
+| `minShift` | `full` | `full` | [0.863, 1.154] | 1.4318e-1 | 6.458 | 1.19e-2 | 4.76e-4 | 61.8 |
+| `minShift` | `staticBoundary` | `full` | [0.988, 1.014] | 6.4889e-3 | 6.231 | 1.71e-2 | 9.24e-4 | 123.9 |
+| `minShift` | `full` | `staticBoundary` | [0.965, 1.091] | 7.1102e-2 | 6.301 | 9.20e-3 | 4.94e-4 | 74.0 |
+| **`minShift`** | **`staticBoundary`** | **`staticBoundary`** | **[0.995, 1.007]** | **4.4810e-3** | 6.150 | 6.50e-3 | 9.59e-4 | 124.9 |
+
+**Three of those five rows are configurations Part 13 published, and all three
+reproduced to every recorded digit** (1.7782e-1, 1.4318e-1, 4.4810e-3) — the
+fourth harness in this document validated that way, and here it also confirms
+that moving the setting per-solver is bit-for-bit inert at the old values.
+
+Three findings:
+
+1. **The operator wants to be the same on both sides.** Splitting it costs
+   1.45x with the divergence-free solve left historical (6.49e-3) and 16x the
+   other way round (7.11e-2). So §4 item 2's proposal is rejected by
+   measurement and §10 item 4's caution is upheld: `both` is what landed. Note
+   the two halves are not two doses of one effect — `ps-only` has the *worst*
+   divergence-free residual of any `minShift` row (1.71e-2, worse even than
+   `full`/`full`'s 1.19e-2) while `df-only` has a good one (9.20e-3) and a bad
+   density band. Each solve's operator shows up mostly in the *other* metric.
+2. **Under the gauge, the divergence-free half-state does not diverge.**
+   `df-only` is the configuration that turned a finite 901-step run into a NaN
+   at t=1.65 (§2, §4 item 3) — under the clamp. Under `minShift` it runs the
+   full 901 steps to t=6.30 with `rho` in [0.965, 1.091]. So the divergence
+   that made "mismatched operators" look dangerous belongs to the clamp, and
+   the risk §10 flagged for landing a per-solver default is not there.
+   What is *not* settled: whether the halved per-sweep contraction that §4
+   item 3 describes is also gone, or merely no longer fatal. That was measured
+   under the clamp and has not been re-measured.
+3. **It is free.** Two back-to-back 901-step comparisons disagree on the sign
+   of an ~8% wall-time difference (124.9s vs 115.6s in the first, 123.7s vs
+   123.9s in a later re-run), so the per-step cost is inside run-to-run
+   variation on a shared GPU. Per unit of *physics* it is a clear win: the
+   same 901 steps cover 31% more simulated time (t=6.150 against 4.690),
+   because the adaptive `dt` is no longer being held down by a wall band that
+   is 40x more compressed.
+
+**What actually changes, case by case** (measured, not assumed —
+`kinds != 0` and surface-flag counts taken from the running solves):
+
+| case | non-fluid rows | surface-flagged | effect of the landing |
+|---|---|---|---|
+| `randomFlowIncompressible --bounded` | 2760 / 6856 | 0 | the whole change: 1.78e-1 → 4.48e-3 |
+| `tgv`, `kolmogorovIncompressible`, `randomFlowIncompressible` (periodic) | 0 | 0 | strict no-op — `staticBoundary` has nothing to drop and `minShift` was already the default |
+| `rotatingSquarePatch --scheme divergenceFree` | 0 | 96 / 100 | strict no-op — the guard's surviving free-surface half keeps the clamp, and there are no boundary rows to change the operator |
+
+So the guard did not go away, it got scoped to the case it was right about.
+`solveIncompressible` still downgrades `minShift` to `nonNegativeClamp` when
+free-surface particles are present, where support genuinely is truncated and a
+constant pressure genuinely is not forceless (§1.5); it no longer downgrades
+merely because pressure rows are pinned. `forceShiftPressureGauge` survives as
+the bypass for that remaining half.
+
+**Verified:** full suite 241 passed / 1 skipped (the two known flakes did not
+fire), `gradcheck_incompressible.py` passes both `includeBoundaryReaction`
+branches, `run_sweep.py` 30/30, and the config round-trips with the new
+`Optional` override and the two new per-solver fields. The two end rows were
+then re-run *after* the defaults were flipped and reproduced again, which is
+the check that the old configuration is still reachable and still identical —
+the new defaults changed what you get by saying nothing, not what any explicit
+setting means.
+
+### The CFL question, re-run at the new defaults (Part 14)
+
+Part 12's sweep found a knee at `cflFactor = 0.2` and made the case that the
+published 0.4 was permissive on a bounded case. §10's list held that back on
+the grounds that it had been measured where the near-wall band dominated the
+error, and that the landing would remove 40x of that band. It does, and the
+knee goes with it. Same probe, same case, same protocol — every run to t=3.0,
+`randomFlowIncompressible --bounded`, nx=128 — before and after:
+
+| `cflFactor` | steps | mean`\|rho-1\|` **old defaults** | mean`\|rho-1\|` **Part 14 defaults** | gain |
+|---|---|---|---|---|
+| **0.4** (published) | 457 / 472 | 5.17e-3 | **9.91e-4** | **5.2x** |
+| 0.2 | 903 / 956 | 1.83e-3 | 8.50e-4 | 2.2x |
+| 0.1 | 1830 / 1935 | 1.37e-3 | 7.32e-4 | 1.9x |
+
+Read down the new column instead of across it: **halving the published
+timestep now buys 1.17x, and halving it again 1.16x** — against 2.83x and
+1.33x before. The knee at 0.2 was the boundary treatment, not the timestep.
+And the new configuration at the published 0.4 is better than the old one at
+0.1 (9.91e-4 against 1.37e-3) for a quarter of the steps.
+
+So **item 2 closes: keep `cflFactor = 0.4`.** The case for departing from a
+cited constant rested on a 2.8x that no longer exists. The tail agrees — the
+sub-rest-density fraction at 0.4 falls 12.2% → 5.8%, and `rho_max` over the
+whole run 1.202 → 1.006, so the worst particles are no longer strongly
+timestep-limited either.
+
+Two notes on reading the table. The step counts barely move (472 against 457
+at 0.4), so the accuracy is not being bought by the adaptive `dt` quietly
+shrinking — it is the same timestep on a better-conditioned near-wall state.
+And the wall-clock columns are **not** comparable across the two sweeps: they
+were run in different sessions with different GPU contention, which is enough
+to swamp the per-step difference entirely (see the previous section's point 3).
+
 ### Open items, ranked
 
-1. ~~**Run the 2x2x2x2.**~~ **Done — see above.** The follow-through is to
-   **land `minShift`-on-bounded + `staticBoundary` as the defaults**, which is
-   now a 40x result with a validated harness behind it and no measured downside
-   at the shipped CFL. Two specifics: widening `minShift` means relaxing
-   `solveIncompressible`'s guard for pinned rows (its free-surface half must
-   stay — §1.5), and `staticBoundary` should land per-solver, per item 2.
-   `consistent` and `akinciBoundaryVolume` should **not** land: the first is
-   inert against `static` and the second diverges.
-2. **Move `BoundaryOperatorTerms` to `RelaxedJacobiSolverConfig`** (per solver)
-   and default `pressureSolver` to `staticBoundary` while
-   `divergenceFreeSolver` stays `full`. That is the configuration measurement
-   endorses and it cannot be expressed today. Caveat: `both` is *also* better
-   than the baseline on every axis including both solvers' residuals, so
-   "PS only" vs "both" is a 4% accuracy question, not a stability one.
-3. **The divergence-free half-state's contraction collapse is unexplained.**
-   Under `staticBoundary` applied to the divergence-free solve alone, each
-   solve removes ~20% of its incoming residual against ~50% under `full`; the
-   incoming residual creeps 2.4e-2 → 3.8e-2 over 250 steps and then detonates
-   (max `|a_p|` 19.8 → 1.04e4 at step 276, NaN at 282). Each solve still
-   converges internally. Three mechanisms tested and eliminated (§2). The
-   surviving lead: the harm appears **only** when the two solves run
-   inconsistent operators — applied to both, the divergence-free residual is
-   the *best* of any configuration (1.57e-2 vs `full`'s 7.52e-2). So look at
-   what the constant-density solve leaves behind for the *next* step's
-   divergence-free solve, not at either solve alone.
+1. ~~**Run the 2x2x2x2.**~~ ~~**Land `minShift`-on-bounded + `staticBoundary`
+   as the defaults.**~~ **Both done — Part 13 and Part 14 above.** The
+   defaults shipped are `minShift` wherever there is no free surface and
+   `staticBoundary` on *both* solvers. `consistent` and `akinciBoundaryVolume`
+   did not land, as planned: the first is inert against `static` and the
+   second diverges.
+2. ~~**Move `BoundaryOperatorTerms` to `RelaxedJacobiSolverConfig`**~~ —
+   **done, and the split it proposed is rejected.** The setting is per-solver
+   now, but `pressureSolver = staticBoundary` with `divergenceFreeSolver =
+   full` measures 1.45x *worse* than both (6.49e-3 vs 4.48e-3), so both is the
+   default. The reasoning that endorsed the split ("the win belongs to
+   `solveIncompressible`") was a clamp-gauge result, like every other boundary
+   ranking this document has had to invert.
+3. **The divergence-free half-state's contraction collapse is unexplained —
+   and, under the gauge fix, no longer fatal.** Under `staticBoundary` applied
+   to the divergence-free solve alone *with the clamp*, each solve removes
+   ~20% of its incoming residual against ~50% under `full`; the incoming
+   residual creeps 2.4e-2 → 3.8e-2 over 250 steps and then detonates (max
+   `|a_p|` 19.8 → 1.04e4 at step 276, NaN at 282). Each solve still converges
+   internally. Three mechanisms tested and eliminated (§2). **Part 14 removed
+   the observable**: the same half-state under `minShift` runs all 901 steps to
+   t=6.30. What is unmeasured is whether the per-sweep contraction is still
+   halved there — if it is, the mechanism is still live and merely survivable,
+   and it is worth understanding before any third solve is added; if it is not,
+   this item closes. `probe_boundaryOperatorTerms.py --mode diag` measures it.
 4. **Wire `rtol` into the relaxed-Jacobi path** as a disjunction with the
    existing absolute test (§1.7), and re-measure. Then the one-sided-average
    vs floored-average criterion behind a flag.
@@ -636,9 +787,10 @@ quantified on the scene this codebase actually runs, and it is why the published
 The sweep's own answer — a 2.83x gain for the first halving and ~1.25x for each
 one after, i.e. a knee at 0.2 — was measured at the *shipped* boundary
 configuration, where the near-wall band dominates the error. §4's factorial
-then removed 40x of that band, so the sweep's case for a smaller default no
-longer stands on its own numbers and should be re-run against the new
-configuration (§10, item 2).
+then removed 40x of that band, and **the re-run at the landed defaults says the
+knee was the boundary treatment, not the timestep** (§4, Part 14): halving 0.4
+now buys 1.17x instead of 2.83x. The published constant is no longer
+permissive on this case, because the error it was permitting is gone.
 
 ### Answers to the questions that drove the literature sessions
 
@@ -711,11 +863,12 @@ All are round-tripped through `incompressibleConfigToDict` /
 
 | setting | default | notes |
 |---|---|---|
-| `boundaryPressureMode` | `mdbcDensity` | `plain` / `mdbcDensity` / `mdbcMlsPressure` / `consistent`. **`consistent` is the best measured** (§4); `mdbcMlsPressure` is the worst and should be deprecated. |
-| `boundaryOperatorTerms` | `full` | `staticBoundary` is the published formulation, 5.9x at the published CFL. `diagonalOnly`/`operatorOnly` are deliberately-mismatched diagnostics — `diagonalOnly` runs the wall's Jacobi step 1.6x too large and NaNs in 47 steps. |
+| `boundaryPressureMode` | `mdbcDensity` | `plain` / `mdbcDensity` / `mdbcMlsPressure` / `consistent`. `consistent` was the best measured under the clamp gauge and is **inert** (0.007%) against `staticBoundary` once the gauge is fixed (Part 13), so it did not land; `mdbcMlsPressure` is the worst and should be deprecated. |
+| `boundaryOperatorTerms` (per solver, on `RelaxedJacobiSolverConfig`) | **`staticBoundary`** on both | The published formulation, and one of the two defaults Part 14 landed: with `minShift` it is 40x the old default, and setting it on only one solver is 1.45x (PS only) or 16x (DF only) worse than on both. `diagonalOnly`/`operatorOnly` are deliberately-mismatched diagnostics — `diagonalOnly` runs the wall's Jacobi step 1.6x too large and NaNs in 47 steps. |
+| `boundaryOperatorTerms` (on `IncompressibleSolverConfig`) | `None` | Bundle-level override: `None` means "each solver's own", any value forces both. Every A/B in this document sets it, so every recorded row still means what it says. |
 | `akinciBoundaryVolume` | `False` | `consistent` only. Measured `m~/m_nominal` mean 1.102, max 1.456 on the five-layer band. Best row in the table *inside the operator*; fatal as actual mass (§2). |
-| `shiftPressureGauge` | **`minShift`** | The Part 4 fix, and the one default that changed. `nonNegativeClamp` is the historical clamp and stays selectable. Scoped to solves with no pinned rows and no free surface. |
-| `forceShiftPressureGauge` | `False` | Bypasses that scoping. Exists because half its justification measured false (§1.5) and the other half's evidence was measured at 3x the CFL (§3.6). |
+| `shiftPressureGauge` | **`minShift`** | The Part 4 fix. `nonNegativeClamp` is the historical clamp and stays selectable. Scoped to solves with **no free surface** — Part 14 dropped the pinned-row half of that scoping, which is what makes it reach the bounded case at all. |
+| `forceShiftPressureGauge` | `False` | Bypasses what is left of that scoping, i.e. the free-surface half — the half nobody has measured. Its original target, the pinned-row half, is gone: half that guard's justification measured false (§1.5) and the other half's evidence was taken at 3x the CFL (§3.6). |
 | `shiftApplication` | `positionShift` | The paper-faithful default. `positionAndVelocity` and `inStepVelocity` are much better at walls and dissipative in the bulk (§1.2). |
 | `densityEvolution` | `summation` | `continuity` (WCSPH standard) fails everywhere but `tgv`; `hybrid` matches `summation` exactly where support is complete, for ~21% less wall time on `tgv`, and dies at 286 steps at an mDBC wall (§4 item 7). |
 | `mdbcPressureRelaxation` | `0.3` | Load-bearing for `mdbcMlsPressure` — at 1.0 it NaNs in 7-8 steps. Never swept; chosen to match the solver's own `relaxationFactor`. |
@@ -784,6 +937,12 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   factorial. `--cfls/--gauges/--boundary` subset it; rows print as they
   complete. Ten of its cells are prior published rows, so it doubles as a
   regression check on this whole document.
+- `probe_perSolverBoundaryTerms.py` *(new, Part 14)* — the two solvers'
+  `boundaryOperatorTerms` crossed under `minShift`, which is what settled the
+  landed default. Three of its five rows are Part 13 cells and it prints an
+  explicit reproduction check against them, so it is the cheapest regression
+  test for "did anything under the incompressible path move". `--rows` subsets
+  it.
 - `probe_consistentCoupling.py` — [BWJ23]'s `consistent` mode end to end.
 - `probe_cflCondition.py` *(new, Part 12)* — `--mode verify` checks that
   `dt |v_max| / dx == cflFactor` exactly whenever the advective term binds
@@ -864,6 +1023,7 @@ One line each, for locating the full write-up in git history.
 | 11 | 08-28 | [BWJ23] — the derivation behind Part 9. `BoundaryPressureMode.consistent`, the best configuration measured. |
 | 13 | 08-28 | The factorial (§4) and the CFL sweep (§5). `minShift`+`staticBoundary` is 40x the default and 5.4x better than the two changes composing independently; `consistent` is inert and `akinci` diverges once the gauge is fixed; the legacy CFL has no viable configuration at all. Ten prior rows reproduced exactly. |
 | 12 | 08-28 | The CFL condition rewritten in [BK]'s units (particle diameters) and **landed as the default**; verified per step and bit-for-bit against the old units. The compression-only error metric measured as diluted 465x on a free surface and 1.13x on the bounded case (§5). |
+| 14 | 08-29 | The landing (§4). `boundaryOperatorTerms` moved per-solver; the two solvers crossed under `minShift` says **both**, not the PS-only split Part 9 implied. `minShift` on bounded and `staticBoundary` on both are now the defaults, and the bounded case ships at 4.48e-3. The half-state's divergence turns out to belong to the clamp. Three prior rows reproduced exactly. |
 
 ---
 
@@ -872,25 +1032,38 @@ One line each, for locating the full write-up in git history.
 ### What is shipped and stable
 
 The incompressible path is **VD+PS** (Cornelis et al.), faithfully implemented,
-registered as `divergenceFree`. Exactly one of this work's changes altered a
-shipped default; every other new switch is opt-in and default-inert, and the
-bug fixes are behaviour-preserving on every case that existed before them.
+registered as `divergenceFree`. Three of this work's changes altered a shipped
+default, all three measured before landing; every other new switch is opt-in
+and default-inert, and the bug fixes are behaviour-preserving on every case
+that existed before them.
 
-- **`ShiftPressureGauge.minShift` is the default** (Part 4). It turns
-  `kolmogorovIncompressible` at nx=128 from a NaN at step 574 into a stable
-  1000-step run with density in [0.980, 1.015]; it is a byte-identical no-op on
-  every wall-bounded or free-surface solve, and it leaves `tgv`'s analytic
-  decay rate alone to 0.4%.
+- **`cflFactor = 0.4` against the particle diameter** — [BK]'s published
+  condition in [BK]'s units (Part 12).
+- **`ShiftPressureGauge.minShift` is the default** (Part 4) **and now reaches
+  wall-bounded solves** (Part 14). It turns `kolmogorovIncompressible` at
+  nx=128 from a NaN at step 574 into a stable 1000-step run with density in
+  [0.980, 1.015], and it leaves `tgv`'s analytic decay rate alone to 0.4%. It
+  still falls back to the historical clamp where there is a free surface.
+- **`BoundaryOperatorTerms.staticBoundary` on both solvers** (Part 14), the
+  formulation [BK] §3.2 states and SPlisHSPlasH implements. It is a strict
+  no-op on every case with no `kind != 0` particles, which is every case here
+  except the bounded one.
+- Those last two are one fix at two points: together they take the bounded
+  `randomFlowIncompressible` at nx=128 from a density band of 1.78e-1 to
+  **4.48e-3**, 40x, and 5.4x better than they compose independently.
 - **Several real bugs are fixed** (§7), the largest being the Eq. 17 resample,
   the boundary-row masking, and the `drhodt` pre-projection evaluation.
-- Full suite passes (241 passed, 1 skipped) and `gradcheck_incompressible.py`
-  passes. Two known intermittent flakes, both pre-existing (§4).
+- Full suite passes (241 passed, 1 skipped), `gradcheck_incompressible.py`
+  passes, and `run_sweep.py` is 30/30. Two known intermittent flakes, both
+  pre-existing (§4).
 
 **Case status at the shipped defaults:** `tgv` and `kolmogorovIncompressible`
 (periodic) are healthy. `randomFlowIncompressible --bounded` is the case that
-exercises everything and is where all the remaining error lives.
+exercises everything; it is now the best-behaved it has ever been, and is still
+where all the remaining error lives.
 `rotatingSquarePatch --scheme divergenceFree` (free surface) is broken and is a
-known method limitation, not an implementation bug.
+known method limitation, not an implementation bug — and is untouched by the
+Part 14 defaults, which are both no-ops there.
 
 ### Part 12, the CFL condition — landed and verified
 
@@ -960,12 +1133,21 @@ middle of one.
 
 *(An independent second sweep, run concurrently, reproduced this table to
 three significant figures and extended it to `cflFactor=0.05`: 1.12e-3 for
-3692 steps, i.e. a further 1.22x. The knee at 0.2 is firm. Both runs also found
-the `--nSteps` defect above independently.)*
+3692 steps, i.e. a further 1.22x. Both runs also found the `--nSteps` defect
+above independently.)*
+
+**Superseded by Part 14, and worth reading as a warning.** Every number above
+still reproduces, but every *conclusion* drawn from them was about the
+boundary treatment wearing a timestep's clothes. Re-run at the landed defaults
+the same sweep gives 9.91e-4 at 0.4, and halving buys 1.17x rather than 2.83x:
+the knee at 0.2 was not firm, it was the near-wall band, and 0.4 turns out to
+sit in the middle of a plateau after all (§4, "The CFL question, re-run at the
+new defaults"). The one claim that survives unchanged is the negative one — 3x
+the constant is broken in every configuration.
 
 ### Part 13, the factorial — run, and it settles the default question
 
-**Done, and it changes the answer to item 1 below.** Full tables and analysis
+**Done; Part 14 then landed what it endorsed.** Full tables and analysis
 in §4; the short version:
 
 - **`minShift` (forced on bounded) + `staticBoundary` = 4.48e-3 against the
@@ -984,39 +1166,56 @@ in §4; the short version:
 - **Ten of the sixteen cells are configurations this document had already
   published, and all ten reproduced to every recorded digit.**
 
+### Part 14, the landing — done
+
+**The defaults are in.** `minShift` on wall-bounded solves, `staticBoundary`
+on both solvers, and `randomFlowIncompressible --bounded` at nx=128 now ships
+the 4.48e-3 configuration with no flags. Full tables in §4; the short version:
+
+- **The bundle-level knob moved per-solver**, and the split it was moved for
+  is rejected by measurement: `staticBoundary` on both (4.48e-3) beats the
+  constant-density solve alone (6.49e-3) and the divergence-free solve alone
+  (7.11e-2). §4 item 2 had endorsed the PS-only split on clamp-gauge evidence.
+- **Three of the five rows are prior published configurations and reproduced
+  to every digit**, which also proves the per-solver refactor inert at the old
+  values.
+- **The unexplained half-state divergence belongs to the clamp** — under
+  `minShift` that configuration runs to completion. The mechanism behind it is
+  still not explained, but it no longer gates anything.
+- **The CFL question closes with the published constant intact.** Re-running
+  Part 12's sweep at the new defaults, halving 0.4 buys 1.17x rather than
+  2.83x: the knee was the boundary treatment. The new defaults at 0.4 beat the
+  old ones at 0.1 for a quarter of the steps.
+- Suite 241/1 skipped, gradcheck passes, `run_sweep.py` 30/30, config
+  round-trips.
+
 ### What is left, in order
 
-1. **Land `minShift`-on-bounded + `staticBoundary` as the defaults.** The 40x
-   result, with a harness validated against ten prior rows and no measured
-   downside at the shipped CFL. Needs: relaxing `solveIncompressible`'s gauge
-   guard for pinned rows while keeping its free-surface half (§1.5); moving
-   `BoundaryOperatorTerms` to `RelaxedJacobiSolverConfig` so it can be set per
-   solver (§4 item 2); and a `tgv` re-grade, though both periodic cases are
-   strict no-ops for `staticBoundary` (no `kind != 0` particles) and `minShift`
-   is already their default. **Do not land `consistent` or
-   `akinciBoundaryVolume`** — inert and divergent respectively.
-2. **The `cflFactor = 0.2` question is now weaker, and should wait.** The
-   sweep's 2.8x was measured at the *shipped* boundary configuration, where the
-   near-wall band dominates the error. Item 1 removes 40x of that band. Whether
-   a smaller `dt` still buys 2.8x on top of it is unmeasured and is the natural
-   re-run after item 1 lands; the case for departing from a cited constant
-   should rest on that number, not this one.
-3. **Fix the stopping criterion** (§1.7 / §4 item 4) — `rtol` as a disjunction,
-   then the one-sided average. Still the one thing that has survived every
-   experiment: relaxed-Jacobi, MINRES, BiCGStab, every `dt`, every gauge, both
-   shift configurations, and now all sixteen cells of the factorial. (The sweep
-   is the one place iteration counts came off their caps — by shrinking `dt`,
-   not by fixing the criterion.)
-4. **The divergence-free half-state's contraction collapse** (§4 item 3) is
-   still unexplained, and item 1 makes it *more* urgent: landing
-   `staticBoundary` per-solver is exactly the mismatched-operator configuration
-   that triggers it. Verify the landed default is the `both`-solves
-   configuration, or explain the half-state first.
-5. **Then** the shear-wave case, the warm start, the rename, and the scheme
-   split — in that order, and not before 1–4 land.
+1. ~~**Land `minShift`-on-bounded + `staticBoundary` as the defaults.**~~
+   ~~**The `cflFactor = 0.2` question.**~~ **Both done — Part 14 (§4).** The
+   defaults are landed and verified end to end, and the CFL re-run closes the
+   timestep question in favour of keeping the published 0.4.
+2. **Fix the stopping criterion** (§1.7 / §4 item 4) — `rtol` as a disjunction,
+   then the one-sided average. **Now the top item, and the last thing that has
+   survived every experiment**: relaxed-Jacobi, MINRES, BiCGStab, every `dt`,
+   every gauge, both shift configurations, all sixteen cells of the factorial,
+   and all five of Part 14's. The only place iteration counts have ever come
+   off their caps is a shrunken `dt`, which is not a fix.
+3. **Re-measure the divergence-free half-state's contraction** (§4 item 3)
+   under `minShift`. Part 14 removed the divergence, so this is no longer a
+   blocker for anything — but the ~20%-against-~50% per-sweep contraction was
+   measured under the clamp and nobody has looked at it since, and it is the
+   one mechanism in this document that was observed and never explained.
+   Cheap: `probe_boundaryOperatorTerms.py --mode dfTrace/--solvers`.
+4. **Then** the shear-wave case, the warm start, the rename, and the scheme
+   split — in that order. The warm start in particular still wants the
+   stopping criterion first (§4 item 9), and the scheme split still wants
+   both (§4 item 11).
 
 ### What is next, concretely
 
-Do 1. The measurement that gated every default decision in this document has
-been made, it points one way, and what it endorses is two config changes plus a
-guard relaxation. Item 4 is the risk to watch while doing it.
+Do 2. Every default decision this document was holding open has now been made
+and measured, and the stopping criterion is what is left holding up the rest of
+the list: the warm start needs it, the real `dfsph` scheme needs it, and it is
+the reason both solvers still run to their iteration caps on a problem they are
+solving well enough to have cut the density error 40x without it.

@@ -55,7 +55,7 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType, JacobiRelaxationMode, BoundaryOperatorTerms
+from ...configurations import PressureSolverType, JacobiRelaxationMode, BoundaryOperatorTerms, resolveBoundaryOperatorTerms
 from .krylov import solvePressureKrylov
 from .consistent import applyConsistentCoupling
 from ...configurations import BoundaryPressureMode
@@ -254,10 +254,10 @@ def _solveDivergenceFreeImpl(
 
         # Which terms a static (`kind != 0`) neighbour contributes to -- see
         # `BoundaryOperatorTerms`, and `incompressible.py`'s copy of this
-        # comment. Both solvers build the same operator, so both read the same
-        # setting.
-        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
-                                BoundaryOperatorTerms.full)
+        # comment. Both solvers build the same operator but are configured
+        # separately (Part 14), so this reads the divergence-free solver's own
+        # setting; the bundle-level field still overrides both.
+        boundaryTerms = resolveBoundaryOperatorTerms(schemeConfig.solverConfig, dfSolver)
         # See `incompressible.py`: the consistent-coupling mode *is* the
         # static-boundary operator, so it forces the terms to match.
         if getattr(schemeConfig.solverConfig, 'boundaryPressureMode',

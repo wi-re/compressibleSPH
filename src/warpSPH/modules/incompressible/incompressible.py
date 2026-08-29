@@ -37,7 +37,7 @@ from .wp_alpha import computeAlpha
 from ..momentum.incompressible import computeMomentumIncompressible
 from ..pressure.iisph import computePressureAccelIISPH
 from .drift import computePressureShiftIISPH
-from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge, BoundaryOperatorTerms
+from ...configurations import PressureSolverType, JacobiRelaxationMode, ShiftPressureGauge, BoundaryOperatorTerms, resolveBoundaryOperatorTerms
 from .krylov import solvePressureKrylov
 from .consistent import applyConsistentCoupling
 from ...configurations import BoundaryPressureMode
@@ -110,13 +110,14 @@ def _solveIncompressibleImpl(
                 "recurrence the optimal step relies on")
 
         # Which terms a static (`kind != 0`) neighbour contributes to. `full`
-        # (the default) is the historical AllToAll behaviour; `staticBoundary`
-        # drops its reaction on both sides at once -- out of `alpha`'s second
-        # sum here, and out of the operator's neighbour-acceleration term in
-        # the loop below -- so the diagonal keeps matching the operator it
-        # preconditions. See `BoundaryOperatorTerms`.
-        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
-                                BoundaryOperatorTerms.full)
+        # is the historical AllToAll behaviour; `staticBoundary` drops its
+        # reaction on both sides at once -- out of `alpha`'s second sum here,
+        # and out of the operator's neighbour-acceleration term in the loop
+        # below -- so the diagonal keeps matching the operator it
+        # preconditions. Read from *this* solver's config, since the two
+        # solves are configured separately (Part 14); the bundle-level field
+        # still overrides both. See `BoundaryOperatorTerms`.
+        boundaryTerms = resolveBoundaryOperatorTerms(schemeConfig.solverConfig, psSolver)
 
         # `BoundaryPressureMode.consistent` is Bender/Westhofen/Jeske 2023 in
         # full: their Eqs. 32 and 34 *are* `staticBoundary`, so the mode forces
@@ -164,30 +165,35 @@ def _solveIncompressibleImpl(
                 boundaryPressure = torch.zeros_like(boundaryPressure)
 
         # `minShift` is a *gauge* fix, so it is only valid where the constant
-        # mode is genuinely free and genuinely forceless -- a domain with
-        # complete kernel support everywhere and no pinned pressure rows.
-        # Neither holds otherwise, for two independent reasons:
-        #   - pinned rows (kind != 0) are Dirichlet data, and Dirichlet data
-        #     already fixes the constant: there is no null space left to gauge.
-        #   - where the support is truncated (against a wall, at a free
-        #     surface) the kernel gradients no longer sum to zero, so a
-        #     *constant* pressure exerts a large real force -- the offset stops
-        #     being a gauge choice and becomes a background pressure blowing
-        #     the free/wall-adjacent particles outward.
-        # Measured, not assumed: on the bounded `randomFlowIncompressible` at
-        # nx=128, applying the shift anyway (with the boundary rows translated
-        # along with the fluid *or* left in place -- both were tried, and they
-        # fail identically at the same step) diverges at t=0.69, against t=5.5
-        # for the clamp. So fall back to the clamp instead of corrupting the
-        # solve; the drift it fails to defend against is a property of the
-        # pure-Neumann case, which by construction is not this one.
+        # mode is genuinely forceless: where the kernel support is truncated
+        # the gradients no longer sum to zero, a *constant* pressure exerts a
+        # large real force, and the offset stops being a gauge choice and
+        # becomes a background pressure blowing the truncated particles
+        # outward. **Free surfaces are truncated; this codebase's walls are
+        # not** (`probe_wallSupportCompleteness.py`: Shepard ~1.00 and
+        # `|A.1|/|A.rand|` 0.19 in the wall-adjacent bin against 0.17 in the
+        # bulk, because `BOUNDED_BAND = 5` samples a solid band wider than the
+        # kernel). So this guard tests for a free surface, and nothing else.
+        #
+        # It used to also downgrade whenever *any* pressure row was pinned
+        # (`kind != 0`), on the argument that Dirichlet data already fixes the
+        # constant so there is no null space left to gauge. That argument was
+        # measured wrong, twice over. Part 4's evidence for it -- `minShift`
+        # diverging at t=0.69 on the bounded case -- was taken at 3x [BK]'s
+        # CFL, and at the published CFL the same configuration does not
+        # diverge at all. And Part 13's factorial found the gauge and the
+        # static-boundary operator are one fix applied at two points: together
+        # they hold the bounded case's density band at 4.48e-3 against the old
+        # default's 1.78e-1, 40x, and 5.4x better than the two composing
+        # independently. Boundary rows are not really Dirichlet data here
+        # either -- they are pinned at an mDBC extrapolation that moves with
+        # the fluid field, not at a fixed level that anchors the constant.
+        #
+        # `forceShiftPressureGauge` now bypasses only the free-surface half.
         if gauge is ShiftPressureGauge.minShift and not getattr(
                         schemeConfig.solverConfig, 'forceShiftPressureGauge', False):
-                gaugeable = bool(fluidMask.all())
                 surface = getattr(particles, 'surfaceIndicators', None)
                 if surface is not None and bool((surface > 0.5).any()):
-                        gaugeable = False
-                if not gaugeable:
                         gauge = ShiftPressureGauge.nonNegativeClamp
 
         pressureA = particles.pressures.clone() * 0.

@@ -35,7 +35,7 @@ from ..shifting.gmres import gmresSolve
 from ..shifting.cg import cgSolve
 from ..shifting.bicg import bicgSolve
 from ..shifting.minres import minresSolve
-from ...configurations import PressureSolverType, BoundaryOperatorTerms
+from ...configurations import PressureSolverType, BoundaryOperatorTerms, resolveBoundaryOperatorTerms
 
 __all__ = [
     'buildIISPHMatvec',
@@ -46,7 +46,8 @@ __all__ = [
 
 
 def buildIISPHMatvec(state, config, schemeConfig, adjacency, dt_scale,
-                     supportScheme=SupportScheme.Scatter) -> Callable[[torch.Tensor], torch.Tensor]:
+                     supportScheme=SupportScheme.Scatter,
+                     boundaryTerms=None) -> Callable[[torch.Tensor], torch.Tensor]:
     """Return the matrix-free pressure operator ``A(p) = dt_scale * shift(accel(p))``.
 
     This is exactly the inner iteration of the relaxed-Jacobi pressure solve
@@ -58,9 +59,13 @@ def buildIISPHMatvec(state, config, schemeConfig, adjacency, dt_scale,
     # Static (`kind != 0`) neighbours contribute no pressure displacement of
     # their own under `BoundaryOperatorTerms.staticBoundary`; the Krylov path
     # builds the same operator as the Jacobi one, so it reads the same setting.
+    # The setting is per-solver (Part 14) and this builder does not know which
+    # solver it is serving, so `solvePressureKrylov` passes the resolved value
+    # in; the fallback is the bundle-level override, then `full`.
     # See `BoundaryOperatorTerms`.
-    boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
-                            BoundaryOperatorTerms.full)
+    if boundaryTerms is None:
+        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                                None) or BoundaryOperatorTerms.full
     fluidMask = None if boundaryTerms.operatorMovesBoundary else (state.kinds == 0).unsqueeze(-1)
 
     def matvec(p):
@@ -76,7 +81,8 @@ def buildIISPHMatvec(state, config, schemeConfig, adjacency, dt_scale,
 
 
 def buildIISPHMatvecT(state, config, schemeConfig, adjacency, dt_scale,
-                      supportScheme=SupportScheme.Scatter) -> Callable[[torch.Tensor], torch.Tensor]:
+                      supportScheme=SupportScheme.Scatter,
+                      boundaryTerms=None) -> Callable[[torch.Tensor], torch.Tensor]:
     """Return the adjoint (transpose) pressure operator ``A^T``.
 
     Needed only by BiCG. ``warpSPHCore`` does not expose a ready adjoint of the
@@ -88,11 +94,12 @@ def buildIISPHMatvecT(state, config, schemeConfig, adjacency, dt_scale,
     """
     # Phase-0 stub: assume A is (approximately) symmetric -> A^T ~= A.
     return buildIISPHMatvec(state, config, schemeConfig, adjacency, dt_scale,
-                            supportScheme=supportScheme)
+                            supportScheme=supportScheme, boundaryTerms=boundaryTerms)
 
 
 def buildIISPHPrecond(state, config, schemeConfig, adjacency, dt_scale,
-                      supportScheme=SupportScheme.Scatter) -> torch.Tensor:
+                      supportScheme=SupportScheme.Scatter,
+                      boundaryTerms=None) -> torch.Tensor:
     """Return the IISPH Jacobi preconditioner ``1/D`` as a flat vector.
 
     ``D = dt_scale * computeAlpha(...)`` is the IISPH diagonal (negated, hence
@@ -101,8 +108,9 @@ def buildIISPHPrecond(state, config, schemeConfig, adjacency, dt_scale,
     (``Mx = precond * x``), so we return the reciprocal ``1/D``, not ``D``.
     """
     apparentArea = state.masses / state.densities
-    boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
-                            BoundaryOperatorTerms.full)
+    if boundaryTerms is None:
+        boundaryTerms = getattr(schemeConfig.solverConfig, 'boundaryOperatorTerms',
+                                None) or BoundaryOperatorTerms.full
     alphas = dt_scale * computeAlpha(
         currentState=state, config=config, schemeConfig=schemeConfig,
         adjacency=adjacency, apparentVolumes=apparentArea,
@@ -167,7 +175,11 @@ def solvePressureKrylov(
     # all-0).
     fluidMask = particles.kinds == 0
     boundaryPressure = particles.pressures.clone()
-    _rawMatvec = buildIISPHMatvec(particles, config, schemeConfig, adjacency, dt_scale)
+    # The static-neighbour operator terms are configured per solver (Part 14),
+    # and `solverCfg` is the one this call is solving for.
+    boundaryTerms = resolveBoundaryOperatorTerms(schemeConfig.solverConfig, solverCfg)
+    _rawMatvec = buildIISPHMatvec(particles, config, schemeConfig, adjacency, dt_scale,
+                                  boundaryTerms=boundaryTerms)
 
     def matvec(p):
         p = torch.where(fluidMask, p, torch.zeros_like(p))
@@ -177,7 +189,8 @@ def solvePressureKrylov(
     boundaryOnly = torch.where(fluidMask, torch.zeros_like(boundaryPressure), boundaryPressure)
     boundaryCorrection = _rawMatvec(boundaryOnly)
     b = torch.where(fluidMask, sourceTerm - boundaryCorrection, torch.zeros_like(sourceTerm))
-    precond = buildIISPHPrecond(particles, config, schemeConfig, adjacency, dt_scale)
+    precond = buildIISPHPrecond(particles, config, schemeConfig, adjacency, dt_scale,
+                                boundaryTerms=boundaryTerms)
     if x0 is None:
         x0 = particles.pressures.clone() if particles.pressures is not None else None
     if x0 is not None:
@@ -225,7 +238,8 @@ def solvePressureKrylov(
                                   maxiter=maxiter, precond=precond, dim=1,
                                   verbose=verbose)
     elif solverType == PressureSolverType.bicg:
-        _rawMatvecT = buildIISPHMatvecT(particles, config, schemeConfig, adjacency, dt_scale)
+        _rawMatvecT = buildIISPHMatvecT(particles, config, schemeConfig, adjacency, dt_scale,
+                                        boundaryTerms=boundaryTerms)
 
         def matvecT(p):
             p = torch.where(fluidMask, p, torch.zeros_like(p))

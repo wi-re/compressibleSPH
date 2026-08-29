@@ -143,6 +143,7 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'atol': config.solverConfig.pressureSolver.atol,
                 'restart': config.solverConfig.pressureSolver.restart,
                 'krylovFp64': config.solverConfig.pressureSolver.krylovFp64,
+                'boundaryOperatorTerms': config.solverConfig.pressureSolver.boundaryOperatorTerms.name,
             },
             'divergenceFreeSolver': {
                 'minIterations': config.solverConfig.divergenceFreeSolver.minIterations,
@@ -155,10 +156,13 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
                 'atol': config.solverConfig.divergenceFreeSolver.atol,
                 'restart': config.solverConfig.divergenceFreeSolver.restart,
                 'krylovFp64': config.solverConfig.divergenceFreeSolver.krylovFp64,
+                'boundaryOperatorTerms': config.solverConfig.divergenceFreeSolver.boundaryOperatorTerms.name,
             },
             'integrateRho': config.solverConfig.integrateRho,
             'densityEvolution': config.solverConfig.densityEvolution.name,
-            'boundaryOperatorTerms': config.solverConfig.boundaryOperatorTerms.name,
+            # None = no bundle-level override; each solver's own setting stands.
+            'boundaryOperatorTerms': (config.solverConfig.boundaryOperatorTerms.name
+                                     if config.solverConfig.boundaryOperatorTerms is not None else None),
             'forceShiftPressureGauge': config.solverConfig.forceShiftPressureGauge,
             'boundaryPressureMode': config.solverConfig.boundaryPressureMode.name,
             'mdbcPressureRelaxation': config.solverConfig.mdbcPressureRelaxation,
@@ -244,9 +248,8 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
                   buildDefaultIncompressibleSolverConfig().densityEvolution)
         return DensityEvolution[v] if isinstance(v, str) else v
 
-    def _boundaryOperatorTerms(d):
-        v = d.get('boundaryOperatorTerms',
-                  buildDefaultIncompressibleSolverConfig().boundaryOperatorTerms)
+    def _boundaryOperatorTerms(d, default):
+        v = d.get('boundaryOperatorTerms', default)
         return BoundaryOperatorTerms[v] if isinstance(v, str) else v
 
     def _shiftPressureGauge(d):
@@ -266,6 +269,7 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             atol=psDict.get('atol', buildDefaultPSConfig().atol),
             restart=psDict.get('restart', buildDefaultPSConfig().restart),
             krylovFp64=psDict.get('krylovFp64', buildDefaultPSConfig().krylovFp64),
+            boundaryOperatorTerms=_boundaryOperatorTerms(psDict, buildDefaultPSConfig().boundaryOperatorTerms),
         ),
         divergenceFreeSolver=RelaxedJacobiSolverConfig(
             minIterations=dfDict.get('minIterations', buildDefaultDFConfig().minIterations),
@@ -278,10 +282,12 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             atol=dfDict.get('atol', buildDefaultDFConfig().atol),
             restart=dfDict.get('restart', buildDefaultDFConfig().restart),
             krylovFp64=dfDict.get('krylovFp64', buildDefaultDFConfig().krylovFp64),
+            boundaryOperatorTerms=_boundaryOperatorTerms(dfDict, buildDefaultDFConfig().boundaryOperatorTerms),
         ),
         integrateRho=solverConfigDict.get('integrateRho', buildDefaultIncompressibleSolverConfig().integrateRho),
         densityEvolution=_densityEvolution(solverConfigDict),
-        boundaryOperatorTerms=_boundaryOperatorTerms(solverConfigDict),
+        boundaryOperatorTerms=_boundaryOperatorTerms(
+            solverConfigDict, buildDefaultIncompressibleSolverConfig().boundaryOperatorTerms),
         forceShiftPressureGauge=solverConfigDict.get(
             'forceShiftPressureGauge', buildDefaultIncompressibleSolverConfig().forceShiftPressureGauge),
         boundaryPressureMode=_boundaryPressureMode(solverConfigDict),
