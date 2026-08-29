@@ -383,11 +383,15 @@ compacting the surface layer to reach a setpoint the geometry forbids — §1.1'
 unreachable setpoint again, now at a free surface instead of in a disordered
 bulk, and the same thing §4 records it doing at the rotating patch's corners.
 
-Whether that compaction is what costs the energy is **not established**. It is
-the obvious candidate and it is testable: `divergenceFree.py` carries
-`pressureB[surfaceIndicators == 1] = 0.0` commented out for exactly this.
+Whether that compaction is what costs the energy is **now settled, and the
+answer is no**: Part 21 forced the compaction's clamp off and the run NaNs in
+4 steps (there is no dissipation left to measure), and Part 22's energy budget
+measures the wall-side shifts (no-penetration) at negligible — the channel is
+the incompressibility cycle itself (the DF projection plus the Eq. 17
+position-shift resample), with the Monaghan viscosity secondary. The compaction
+is real and the clamp that produces it is load-bearing; it is not the sink.
 
-See §4, Part 19, and `probe_dambreakIncompressible.py`.
+See §4, Part 19, Part 21, Part 22, and `probe_dambreakEnergyBudget.py`.
 
 ### 1.11 Method note: measure, do not derive from pseudocode
 
@@ -1584,6 +1588,15 @@ All in `scripts/`, all confirmed working, none require source edits to use.
   both schemes, reporting surge front, column height, kinetic energy and the
   size of the population that reads as free surface under a summation density.
   `--schemes divergenceFree` for one of them.
+- `probe_dambreakEnergyBudget.py` *(new, Part 22)* — the per-step
+  kinetic-energy budget of `dambreak --scheme divergenceFree`, closing `dKE`
+  exactly and splitting it the two ways Part 22 reports: the work form
+  (first-order works + quadratic remainder, binned in x for the *where*) and
+  the sequential form (exact KE change of adding each force in step order, for
+  the unambiguous *which channel*). The `chain` column is the completeness
+  check (captured forces vs the integrator's real update). `--tLimit/--bins/
+  --interval/--fixedDt` subset it; the dissipation window runs from the KE
+  peak to t=0.8 by default.
 - `probe_shiftApplication.py` *(new, Part 17)* — the three modes across `tgv`,
   the bounded case and `shearWave` in one table. `--nx/--tgvSteps` matter more
   than usual here: the `tgv` ratio is resolution-dependent for two of the three
@@ -1681,6 +1694,7 @@ One line each, for locating the full write-up in git history.
 | 19 | 08-29 | A dam break under `--scheme divergenceFree` (§4). It works — 3000 steps, no divergence, a recognisable collapse, the first free surface this scheme has not broken. But the run-out is half `deltaSPH`'s speed and 88% of the kinetic energy is dissipated at the moment the fall should become run-out. The free-surface density deficit (0.518 at t=0.02) disappears while the surface stays geometrically a surface. |
 | 20 | 08-29 | `dambreak`'s incompressible `timestep` hook, landed. The published CFL (0.4) diverges here, unlike every other incompressible case measured — bisected to a safe `cflFactor = 0.2`, which buys 1.7x fewer steps (not the ~5x guessed) at the cost of a worse `rho_max` (1.105 vs 1.004). First hint that the impact itself is the sharp event Part 19's dissipation traces back to. |
 | 21 | 08-29 | The free-surface clamp ruled out as the dissipation's cause. [BK]'s own text (read from the PDF, now that `literature/` exists) says clamping negative pressure at the surface *is* their published remedy, not a gap; forcing it off (`forceShiftPressureGauge`, previously untested at the free surface) NaNs `dambreak` in 4 steps rather than reducing the loss. Narrows item 1 to the impact itself. |
+| 22 | 08-29 | The energy budget ran and named the channel (§4). The per-step KE budget closes exactly (chain 3.3e-6, gap 0.0); the loss is the incompressibility cycle — the DF projection (−35.8) and the Eq. 17 resample (+27.3) net to −8.5 (85% of the loss), with Monaghan viscosity secondary (−6.4, 64%) and the no-pen shift negligible. Both channels are `divergenceFree`-only, which carries the cross-scheme gap. Item 1 now reduces to the mechanism question: an `nx` convergence of the cycle's net. |
 | 18 | 08-29 | The tail measured, and `ShiftApplication` settles (§4). At a pinned `dt`: **zero** wall penetration for all three modes, so §6's whole case for the velocity modes is void; and the velocity modes cost **2.1x** the kinetic energy of an inviscid flow for 2x lower density error. The default stays, on a measurement. Part 17's excursion claim was my own adaptive-`dt` artifact and is retracted. |
 | 17 | 08-29 | `ShiftApplication` re-measured at the current defaults (§4). The 3.2x that justified the shipped default does not reproduce — at `tgv`'s own nx=256 the three modes agree to 12%, and the ratio moves 2x with resolution, so it cannot be the resolution-independent residual §1.2 blames. `positionAndVelocity` is better on every sustained metric at equal cost; the default stays on tail behaviour and energy monotonicity. |
 | 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
@@ -2098,19 +2112,105 @@ bounded case measured) both point.
 Landed: `scripts/probe_dambreakSurfaceGauge.py`, the free-surface A/B above.
 No config or default changed — `forceShiftPressureGauge` stays `False`.
 
+### Part 22, the energy budget — the dissipation is the incompressibility cycle, not the walls or the viscosity
+
+Item 1's instrument, run. `scripts/probe_dambreakEnergyBudget.py` closes the
+kinetic-energy budget exactly, per step, and decomposes it two ways. The
+**work form** splits `dKE` into each channel's first-order work plus a
+quadratic remainder; it localizes work to an x-bin, so it answers *where*. The
+**sequential form** takes the exact KE change of adding each force to the
+running velocity, in the order the step applies them (gravity, no-penetration,
+viscosity, the projection last, then the resample); those five values telescope
+to `dKE` by construction and are unambiguous about *which step* removes KE and
+which returns it. Same run as Part 19/21: `dambreak --scheme divergenceFree`,
+nx=64, `cflFactor = 0.2`, 1327 steps to t=1.0.
+
+**The closure is exact.** The captured forces reproduce the integrator's real
+update to `max |u4 − v*| = 3.3e-6` (float32 round-off at |v|~10), the work-form
+closure to `max |dKE − ΣW| = 1.15e-7`, and the decomposition gap (the captured
+sum of the five accelerations against the integrator's) to exactly `0.0`. Every
+velocity-changing term is accounted for; nothing is lost to the probe.
+
+**The loss is the incompressibility cycle.** The dissipation window (KE peak
+t=0.444, KE=12.13, to t=0.801) loses 10.04 KE, 82.8% of the peak — the same
+event as Part 19's "88% between t=0.5 and t=0.8", measured from the peak instead
+of a fixed start. The sequential channels:
+
+| channel | KE change | share of the loss |
+|---|---|---|
+| divergence-free projection (`d_DF`) | −35.80 | 357% |
+| Eq. 17 position-shift resample (`d_resample`) | +27.30 | −272% (returns) |
+| **incompressibility cycle (the two summed)** | **−8.50** | **85%** |
+| Monaghan viscosity (`d_visc`) | −6.37 | 64% |
+| mDBC no-penetration shift (`d_nopen`) | −0.009 | 0.1% |
+| gravity (`d_grav`) | +4.84 | source, opposes the loss |
+
+The projection removes 35.8 of KE at impact and the resample gives 27.3 of it
+back; the 8.5 the cycle keeps is the dominant single contribution to the loss.
+Monaghan viscosity is the secondary channel (6.4). The no-penetration wall
+shift — the other wall-side suspect — is negligible (0.009), so Part 21's
+ruling out of the free-surface clamp is now joined by a ruling out of the
+no-pen shift: **neither wall-side treatment is the dissipator.**
+
+**The work form's `W_DF` alone overstates the projection's cost.** Its
+first-order projection work is −44.3 in [0.4,0.5] — read naively, "the
+projection dissipates 44". The sequential form shows +25.6 is returned by the
+resample in that same window, so the cycle's *net* there is +0.1, essentially
+energy-conserving. The cycle's true dissipation is front-loaded one window
+later, at [0.5,0.6] (net −3.8), and decays after:
+
+| window | `d_grav` | `d_nopen` | `d_visc` | `d_DF` | `d_resamp` | cycle net | `dKE` |
+|---|---|---|---|---|---|---|---|
+| [0.3,0.4] | +2.52 | −0.002 | −1.58 | −7.77 | +13.10 | +5.33 | +6.30 |
+| [0.4,0.5] | +2.57 | −0.002 | −3.50 | −25.50 | +25.60 | +0.10 | −0.84 |
+| [0.5,0.6] | +1.60 | −0.003 | −2.26 | −13.10 | +9.31 | −3.79 | −4.48 |
+| [0.6,0.7] | +1.05 | −0.002 | −1.23 | −4.70 | +2.95 | −1.75 | −1.93 |
+| [0.7,0.8] | +0.83 | −0.003 | −0.87 | −2.71 | +1.72 | −0.99 | −1.04 |
+
+So the loss is not one channel throughout: in [0.4,0.5] the cycle is
+net-neutral and the KE drop is viscosity (−3.5) outrunning gravity (+2.6); in
+[0.5,0.6] the cycle itself turns net-dissipative and leads. Over the whole
+window the cycle (−8.5) still outweighs viscosity (−6.4). The net is the
+residual of two large, nearly-opposing terms (−36 and +27), so the answer is a
+seesaw balance, not a single gross loss — and both terms are exact, given the
+closure.
+
+**It is where the impact is.** The per-bin table concentrates the loss in the
+left bins, x ∈ [−2.0,−1.0] — the falling column's footprint — where the jet
+strikes the floor, and the surviving KE moves right into the run-out. The
+projection's work is most negative in exactly those bins (W_DF −9.0 in
+x∈[−1.73,−1.51] at [0.4,0.5]).
+
+**Why this closes the cross-scheme gap.** Both incompressibility channels are
+specific to the `divergenceFree` scheme: the DF velocity projection and the
+Eq. 17 position-shift resample are both part of its `finalize`, and neither
+exists in the weakly-compressible `deltaSPH` control (Part 19). The Monaghan
+viscosity (−6.4) is common to both schemes. So the 88%-vs-less gap between the
+two schemes is carried by the incompressibility cycle — the thing the two
+schemes differ on. What the budget does *not* by itself settle is why the
+discrete cycle is net-dissipative at all: that −8.5 is the residual of two
+~30-magnitude terms, and whether it is a discretization error that vanishes as
+`nx` grows or a structural cost of the incompressible constraint is the natural
+next instrument (an `nx` convergence of the cycle's net on this same case).
+
+Landed: `scripts/probe_dambreakEnergyBudget.py` (the per-step / per-window /
+per-bin budget above). No config or default changed.
+
 ### What is left, in order
 
-1. **Explain the dam break's dissipation** (Part 19). It is now the largest
-   unexplained defect in the scheme, it shows up on the one scenario anyone
-   would call realistic, and Part 18 says it is not the `ShiftApplication`
-   mode. **Narrowed by Part 21**: it is not the free-surface clamp — forcing
-   it off does not slow the dissipation, it NaNs the run in 4 steps — so the
-   remaining candidate is the impact itself (the falling column striking the
-   floor), where Part 19's own timing and Part 20's CFL finding both already
-   point. No probe isolates the impact yet; a per-particle or per-region
-   energy budget around t=0.4-0.5 (when KE peaks and turns over) is the
-   natural next instrument, following this document's own method note (§1.11:
-   measure, don't derive).
+1. **Explain the dam break's dissipation** (Part 19). **The channel is
+   identified (Part 22)**: it is not the walls — Part 21 ruled out the
+   free-surface clamp and Part 22's budget measures the no-pen shift at
+   negligible — and it is not viscosity alone; it is the incompressibility
+   cycle, the DF projection plus the Eq. 17 position-shift resample, net −8.5
+   over the loss window (85% of it) against Monaghan viscosity's −6.4 (64%),
+   localized at the column's impact footprint. Both channels exist only in the
+   `divergenceFree` scheme, which is what carries the cross-scheme gap against
+   the `deltaSPH` control. **What remains is the mechanism**: that −8.5 is the
+   residual of two ~30-magnitude terms, and whether it is a discretization
+   error that vanishes as `nx` grows or a structural cost of the incompressible
+   constraint is open. An `nx` convergence of the cycle's net on this same case
+   is the natural next instrument.
 2. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
    landed as `dambreakTimestep`, active only under `--scheme divergenceFree`.
    Worth ~1.7x fewer steps at the case's own safe `cflFactor = 0.2`, not the
@@ -2126,11 +2226,12 @@ No config or default changed — `forceShiftPressureGauge` stays `False`.
 
 ### What is next, concretely
 
-Item 2 is done; item 1 is next. The scheme has been tuned against periodic and
-wall-bounded cases for nineteen sessions and it is now good on them; the dam
-break is the first time it has been asked to do something a user would
-recognise, and it loses most of the flow's energy doing it. That is a larger
-defect than anything left on the list, and it was invisible until a free
-surface was put in front of it. Part 20 adds a second reason to suspect the
-impact specifically: this is the only incompressible case measured so far that
-cannot run at the published CFL at all.
+Item 1's instrument ran (Part 22) and it names the channel: the incompressibility
+cycle, at the impact. What is left of item 1 is the mechanism question — the
+cycle's net is the residual of two ~30-magnitude terms, so the next measurement
+is an `nx` convergence of that net (does the −8.5 fall with resolution, i.e. is
+it a discretization error, or is it flat, i.e. a structural cost of the
+incompressible constraint?). That single run decides whether the fix to look for
+is a better projection/resample or an acceptance that the incompressible scheme
+dissipates impact flows and should be reserved for them accordingly. Items 3-5
+stand as ranked; the rename and the scheme split stay last.
