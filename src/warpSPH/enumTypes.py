@@ -60,6 +60,14 @@ class WeaklyCompressibleSPHScheme(Enum):
 # @torch.jit.script
 class IncompressibleSPHScheme(Enum):
     divergenceFree = 0
+    #: Reference DFSPH (Bender & Koschier 2015/2017) as implemented in
+    #: SPlisHSPlasH's `TimeStepDFSPH.cpp`: the constant-density and
+    #: divergence-free corrections are applied to the *velocity* as warm-started
+    #: pressure impulses, not as the momentum-neutral position shift the
+    #: `divergenceFree` (VD+PS) scheme uses. Exists as the ground-truth
+    #: comparison for the hydrostatic-column failure -- see
+    #: `DFSPH_IMPROVEMENT_PLAN.md` Part 23 and `schemes/dfsphReference.py`.
+    dfsphReference = 1
 
 # @torch.jit.script
 class WaveEquationScheme(Enum):

@@ -149,6 +149,26 @@ def _divergenceFree() -> SchemeBundle:
     )
 
 
+def _dfsphReference() -> SchemeBundle:
+    # Same lazy-import rationale as `_divergenceFree`. Reuses the incompressible
+    # state/config/update and their codecs -- the only thing that differs is the
+    # step function and the system's `finalize` (see
+    # `systems/incompressible.py::DFSPHReferenceSystem` and
+    # `schemes/dfsphReference.py`).
+    from .dfsphReference import dfsphReference_step
+    from ..systems.incompressible import (DFSPHReferenceSystem, IncompressibleState,
+                                          IncompressibleSystemUpdate)
+    return SchemeBundle(
+        SimulationSystem=DFSPHReferenceSystem,
+        SimulationState=IncompressibleState,
+        SimulationConfig=IncompressibleSPHConfig,
+        SimulationUpdate=IncompressibleSystemUpdate,
+        stepFunction=dfsphReference_step,
+        exportFunction=incompressibleConfigToDict,
+        importFunction=dictToIncompressibleSPHConfig,
+    )
+
+
 def _waveEquation() -> SchemeBundle:
     return SchemeBundle(
         SimulationSystem=WaveSystemv3,
@@ -168,6 +188,7 @@ _SCHEMES = {
     CompressibleSPHScheme.CRKSPH: _crkSPH,
     WeaklyCompressibleSPHScheme.deltaSPH: _deltaSPH,
     IncompressibleSPHScheme.divergenceFree: _divergenceFree,
+    IncompressibleSPHScheme.dfsphReference: _dfsphReference,
     WaveEquationScheme.waveEquation: _waveEquation,
 }
 

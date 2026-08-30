@@ -436,6 +436,8 @@ again.
 | **`forceShiftPressureGauge` at a free surface** (`dambreak`) | NaN in 4 steps. Bypassing the clamp fallback does not reduce the over-dissipation Part 19 measures — the run does not survive long enough to reach it. Rules out "relax the free-surface pressure handling" as a fix and confirms the clamp is load-bearing, not optional damping (§4, Part 21). |
 | **`dambreak`'s published CFL** (`cflFactor = 0.4`, [BK]'s constant, safe on every other incompressible case here) | NaN by step 30; even `0.3` NaNs by step 76. Unlike every wall-bounded case measured so far, this one needs `cflFactor = 0.2` (§4, Part 20) — the falling column's impact is sharper than `randomFlowIncompressible`'s bounded shear and the CFL's lagged `vMax` does not see it coming. |
 | **`dambreak --scheme divergenceFree` at the case's default `nx = 128`** | Diverges at step 88 (t ≈ 0.175, mid free-fall, before the column reaches the floor): maxDensity 1.23, maxVelocity 4.65, "NaN detected in velocities". At `nx = 64` the same case runs past t = 1.0, but the free surface and boundary show clustering and distortion artifacts — the surface is not clean at either resolution, and the coarser one is the only one that survives. Finer is worse here. Do not spend compute on a full-resolution incompressible dam break until the baseline test cases (item 2 below) pass. |
+| **`dfsphReference` free-surface `kappa^v` mask** (harden step 3) | On `hydrostaticColumn`, holding `detectFreeSurface`'s flagged rows (~27% of fluid) at `kappa^v = 0` in the divergence solve cleans the `dp/dy` fit (tracks ~1.0 vs raw -2..+3) but makes the column slump *faster* (`|v|max` 23 by step 59 vs ~2 at step 55 without). Masking the constant-density solve the same way: `rho_max` 2.5 in 20 steps. SPlisHSPlasH's `< 20`-neighbour guard never fires at `n_h = 4` (surface particles keep 53+ neighbours). Parked — the slump is a CD-solve problem (§4, Part 26). **Re-run under the Part 29 linear solve (Part 30): same sign.** The gauge (now an A/B toggle, `FREE_SURFACE_GAUGE`, default off) does not delay the late-time surface degradation (onset ~step 300-400 in both arms), degrades the surface deeper (rho_min 0.15-0.21 vs 0.25-0.38) and blocks the recovery the gauge-off survivor shows, and raises the slosh ~30-40% (|v|max 1.8-2.0 vs 1.3-1.5) over 1500-step runs. Closed as a lever for this failure mode. |
+| **`dfsphReference` linear optimal-step divergence solve** (harden step 4) | The SPD operator `A(p) = -dt·_drhodt(a_p(p))` with the exact residual-minimizing step converges the DF solve in 14–25 iters (vs a permanent 32) for ~13 steps on `hydrostaticColumn`, then regresses `staticBlob` hard (`|v|max` 19 by step 2): the optimal step needs null-mode handling, and `solveDivergenceFree`'s per-iteration mean-centre is the spurious-force move §1.5 forbids at a free surface. The re-summed fixed-`omega` form is uglier but has no such failure mode. `|kappa^v|` clamp not tried (§4, Part 26). |
 | `convergenceCriterion` (per solver) | `flooredOneSided` (PS) / `meanAbsolute` (DF) | Each solver's historical statistic, now one setting instead of two inline tests. `oneSided` is the published form. On the constant-density solve the swap is **bit-identical** (its criterion never fires); on the divergence-free solve it collapses the solve to 3.0 iterations for 1.53x the density error (§1.7). | 3% better for 23% more time on the bounded case, against 115% better on the periodic one. At a wall the error is set by the boundary treatment, not by how well the PPE is solved. |
 
 ---
@@ -1701,6 +1703,14 @@ One line each, for locating the full write-up in git history.
 | 16 | 08-29 | [C]'s shear-wave case ported (§4). An exact solution with a constant pressure, so dissipation and volume error separate. Confirms `tgv`'s half-viscosity at 0.49x independently; the volume error is resolution-independent (§1.1 from a new direction); the three `ShiftApplication` modes dissipate identically, which narrows §1.2. |
 | 15 | 08-29 | The stopping criterion (§1.7). It was the wrong suspect: the periodic cases terminate in 3 iterations, the floor changes nothing, and the constant-density solve does not converge in any norm — it integrates, so `maxIterations` is a gain. The criterion is now one configurable setting across all three loops; no default changed. |
 | 14 | 08-29 | The landing (§4). `boundaryOperatorTerms` moved per-solver; the two solvers crossed under `minShift` says **both**, not the PS-only split Part 9 implied. `minShift` on bounded and `staticBoundary` on both are now the defaults, and the bounded case ships at 4.48e-3. The half-state's divergence turns out to belong to the clamp. Three prior rows reproduced exactly. |
+| 23 | 08-30 | The three baseline cases landed (`staticBlob`, `impact`, `hydrostaticColumn`). Free space and the collision hold; the quiescent hydrostatic column diverges — the DF projection's source is exactly 0 for a uniform body force, and the position-shift support cycle that is left is an amplifier. Also lands the `relaxLattice` free-surface guard. |
+| 24 | 08-30 | The hydrostatic-column failure root-caused (position shift can't sustain a body force) and a reference DFSPH scheme built (`dfsphReference`) that applies both corrections to the velocity: it holds the *exact* hydrostatic gradient for ~15 steps where `divergenceFree` NaNs by 6, confirming the mechanism. Not yet stable — the composed pressure primitives lack a faithful wall force / free-surface gauge. Warm-starting `solveIncompressible` and cold `inStepVelocity` both measured negative. Left as a five-step hardening track under item 3. |
+| 25 | 08-30 | Harden-track step 1: the wall-adjacent `kappa` runaway on `hydrostaticColumn` removed. Not a kernel and not the Akinci volume the plan named — on the five-layer band `akinciBoundaryMass` returns the nominal volume, so the correction is inert here. The boundary term in `A p` is simply carried at ~half the weight it needs; a 2x `akinciBoundaryVolumeScale` (new config, default 1.0 = no-op, set to 2.0 by `dfsphReference` only) bounds `kappa_max` at 6.81 and holds `|v|max` < 1 for 25+ steps. The `dp/dy` target is half-met: steps 3 (free-surface gauge) and 4 (contractive divergence solve) are now the co-blockers — the DF solve does not converge and the surface compacts by ~step 40. |
+| 26 | 08-30 | Harden-track steps 3 and 4 explored, nothing landed. Free-surface `kappa^v` mask: cleans the `dp/dy` fit but makes the slump faster — a bad trade. Linear optimal-step divergence solve: converges the DF solve for ~13 steps but regresses `staticBlob` hard (needs null-mode handling that §1.5 forbids at a free surface). The finding that redirects the track: the residual slump is driven by the *constant-density* solve's locally lumpy `a_p` (`|a_p|max` 17–45 vs `g ≈ 9.81`), not the divergence solve, so step 2 (faithful DFSPH factor / Akinci boundary force kernel) comes before steps 3–4. Two negative results recorded so they are not re-run. |
+| 27 | 08-30 | Harden-track step 2 landed: the faithful DFSPH factor (`SPlisHSPlasH/DFSPH/TimeStepDFSPH.cpp::computeDFSPHFactor` — bare-mass `|Σ V_j ∇W|²` over fluid + `|Σ_fluid V_j ∇W + Σ_boundary V_k ∇W|²`, boundary in the vector term only, ghosts excluded) is now its own kernel (`wp_dfsph_factor.py`) and wired into `dfsphReference._factor`, replacing the IISPH `computeAlpha` diagonal. Verified two ways: it is `computeAlpha`'s diagonal / `ρᵢ` exactly (bulk ratio 1.049, wall 1.047 — the expected `1/ρ̄`), and the composed `a_p` is checked against a direct O(N²) torch reference of the standard SPH pressure acceleration to ~5e-7, so `a_p` was already faithful and needed no change. The `hydrostaticColumn` slump **survives** (modest gain: `|v|max` ~1.25→1.17, `rho_min` ~0.68→0.70 over 30 steps; DE still 2 iters, DI still the 32-iter cap). But the faithful factor — correct for SPlisHSPlasH's *linear* Jacobi — **regresses `staticBlob` harder** (`|v|max` 70.9→inf, 20 steps): `dfsphReference`'s *nonlinear* re-summed solve is far more step-size-sensitive, and the ~1/ρ larger step pushes the already-marginal blob over. The blocker moves from step 2 to step 4 (the solve structure). |
+| 28 | 08-30 | Harden-track step 4, the linear solve, implemented in `dfsphReference._jacobiSolve` (fixed source from `vEnter` + `aij_pj = Drho/Dt(a_p)` recomputed each iteration + 0.5 relaxation + `max(p,0)`, replacing the nonlinear re-summed fixed point). The first draft **diverged** (DF pressure doubling per iteration, 2e-3→8e9 in 32 iters) and the root cause was a **sign-convention bug, fixed and verified against the reference source, not derived**: SPlisHSPlasH's `delta` operator (difference-form `V_i Σ (v_i−v_j)·∇W`) is the *negative* of the continuum divergence, this codebase's scatter Divergence (inside `_drhodt`) *is* the continuum one (probed: a `div=+1` field gives `_drhodt≈−1.0` in the bulk), their `factor = 1/(Σ|∇W|²·h^k) > 0`, and both solves iterate `p −= 0.5(s−aij_pj)·factor`. With all three signs (source, `aij_pj`, step) corrected to the reference convention, the **physics is now right** (under-compressed column → p=0; over-compressed particles → positive p; compressing flow → positive p) but the Jacobi **does not converge inside its budget**: CD oscillates at the 64-iter cap (err ~0.1), DF diverges by step 2, NaN at step 6. Also found: their convergence metric is one-sided (compression-only `min(s−aij,0)`, with a `<20`-neighbour guard), not the two-sided `mean|resid|` used here — on an under-compressed state the two-sided metric can never reach `tol`, so both solves run to their caps regardless. Blocker: iteration contraction, next is the one-sided metric + a spectral-radius study (omega sweep / iteration budget). |
+| 29 | 08-30 | **Step 4 closed: the linear Jacobi now contracts.** Adopted the reference's one-sided compression-only convergence metric (`residuum = min(s−aij_pj, 0)`, `err = rho0·mean(−residuum)` over the fluid; the 2D <7-neighbour deficiency guard zeroes the DF source, warm start, and residuum — the CD solve has no guard; Part 28's "3D-only" note is corrected: the guard is two-sided in the reference, `<7` in 2D, on both the setup and the metric side of the DF solve) — the CD solve now exits in 2 iterations on the under-compressed step 1 instead of running to the 64-iter cap. Contraction study (`probe_dfsphReferenceContraction.py`, omega sweep × 256 iters, what-if trajectories re-driven from the exact production inputs inside the same coupling context): the reference's **omega = 0.5 is OUTSIDE this composed operator's Jacobi window** — step-1 DF grows ~1.2×/iteration asymptotically (→4e14 at 256 iters), step-2 DF →2.7e18; 0.4 is marginal (step-1 DF still grows, p→187); **omega = 0.3 decays in all four (step, mode) states** (step-1 DF 2.5e-2→6.4e-5, step-2 CD →2.4e-6, step-2 DF 42→1.1e-3); 0.1/0.05 decay first then **regrow late** (the clamp-limited fixed point / a weak mode). Window ≈ [0.2, 0.35] → it is a **matrix problem (the window), not a budget problem** — a bigger budget at 0.5 only grows more. Landed: omega = 0.3, both budgets → the reference's 100 (local override in `dfsphReference_step`, the `akinciBoundaryVolumeScale` pattern). Validated: `hydrostaticColumn` (nx=32) — the ratchet is gone; every solve converges (2-100 iters), pressures bounded (CD ≤ ~11, DF ≤ ~10), |v|max 0.01→1.3-1.7 bounded post-slump slosh over hundreds-to-~1100 steps; `staticBlob` A/B (nx=128, 30 steps) — **Part 27's regression is fixed**: max |v| 70.9/inf → 1.15 (alpha) / 1.28 (dfsph factor), centroidDrift ~1e-9 (the residual |v|~1.1 blob slosh is pre-existing — it was 70.9 before the factor change). 20/20 tests pass. Residual: a **late-time free-surface degradation** at t ≈ 1.1 s (step ~1150): 2 of 3 1500-step runs fail there (one degrades surface rho_min 0.6→0.31→0.21→0.14 over ~100 steps then blows up p→1.8e6, NaN at step 1160; the other collapses into a uniform rho-0.139 soup with inf velocities that the runner's NaN-based divergence check does not catch), 1 of 3 completes 1500 steps bounded — same code, same seed, so the failure details are GPU-non-deterministic. That failure mode is step 3's (free-surface gauge) territory — parked in Part 26 under the old nonlinear solver, now testable. |
+| 30 | 08-30 | **Step 3 re-run under the linear solve: the free-surface gauge is a measured negative.** Part 26's gauge implemented under the Part 29 linear Jacobi: the divergence solve holds `kappa^v` = 0 on the rows the case's own (dilated) `detectFreeSurface` flags (124–177 of 465 fluid rows, 27–38%, matching Part 26's ~27%) — the gauge rows join the reference-deficient rows in the source / warm-start / metric-residuum zeroing, and the pressure is **pinned to 0 at every iteration** so the carried field (and the next warm start) is 0 there and the final acceleration sees no surface-row pressure; DF solve only, module flag `FREE_SURFACE_GAUGE` (default off = the Part 29 baseline), `--gauge` in both probes. Also landed the one-line runner fix: the divergence check is `~isfinite` instead of `isnan` (`runner/runner.py`), so Part 29's inf-velocity soup now reports `diverged=True` — verified: one soup run stops at step 1279 with `non-finite velocities detected`. A/B (`hydrostaticColumn` nx=32, 1500 steps, 2 runs per arm, sequential and uncontended): the degradation's **onset is the same in all four runs** (~step 300–400) — the gauge does not delay or prevent the late-time failure; the gauge-on surface degrades **deeper and never recovers** (rho_min 0.15–0.21 persistent, runs end 0.23–0.24) while the gauge-off survivor recovers (0.25 at step 600 → 0.49 at 1500), and the gauge raises the bounded slosh ~30–40% (|v|max 1.8–2.0 vs 1.3–1.5). Blow-up count 1/2 (off) vs 0/2 (on) is inconclusive at n=2 against Part 29's 2/3 baseline. `staticBlob` unaffected (1.12 on / 1.16 off vs 1.28 baseline); 20/20 tests pass. The sign reproduces Part 26 (worse slump): with the surface rows out of the unknowns the sub-surface layer loses the support even a noisy `kappa^v` was providing. The gauge stays in the tree as an A/B toggle, default off; the recorded next lever is the reference's damped warm start against the full-`kappa` carry. |
 
 ---
 
@@ -2342,9 +2352,727 @@ failing baseline), and the `relaxLattice` free-surface guard in
    (a DF Jacobi boundary-layer mode invisible to the mean residual, plus
    `nonNegativeClamp` gauge drift and free-surface compaction). The
    `inStepVelocity` / `forceGauge` / zero-IC A/Bs confirm it is a scheme
-   limitation, not a config or IC artifact. Open: whether any configuration of
-   the two-solve structure holds this state, or whether the scheme needs a
-   change before a quiescent hydrostatic case is a usable baseline.
+   limitation, not a config or IC artifact. **Answered by Part 24 (below):** no
+   configuration of the two-solve structure holds it; a DFSPH-proper scheme
+   does hold the gradient but needs faithful boundary/gauge kernels to be
+   stable. Part 24 lists that as a five-step track.
+
+   **Part 24 (unlanded, mostly negative).** The root cause is confirmed: the
+   VD+PS density-invariance correction is a momentum-neutral *position shift*
+   (§1.2/§1.3), which cannot sustain a body force. Three things were built and
+   measured:
+
+   1. **A reference DFSPH scheme** (`schemes/dfsphReference.py`,
+      `IncompressibleSPHScheme.dfsphReference`, composed from the existing warp
+      operators; `DFSPHReferenceSystem` in `systems/incompressible.py`) that
+      applies *both* corrections to the velocity as warm-started pressure
+      impulses, SPlisHSPlasH-`TimeStepDFSPH` order, one-sided constant-density
+      solve with a per-iteration re-summed `Drho/Dt`, Akinci `rho0` boundary
+      volumes. At nx=32 it holds the **exact** hydrostatic gradient (`dp/dy`
+      ratio ~ 1.0, `|v| < 1`, constant-density solve converging in 2
+      iterations) for the first ~10-15 steps, where `divergenceFree` NaNs by
+      step 6 — so velocity coupling + warmstart **is** the mechanism this
+      state needs. But it is **not a stable general scheme**: the composed
+      pressure primitives do not reproduce SPlisHSPlasH's Akinci boundary
+      pressure loop or a free-surface gauge, so wall-adjacent `kappa` still
+      grows without bound (the §1.7 boundary-layer mode) and the free-surface
+      baselines `staticBlob` / `impact` are unstable under it. Landing it
+      needs dedicated `@wp.kernel`s for the boundary force/factor plus a
+      free-surface gauge — the same order of work `divergenceFree` itself
+      took.
+
+   2. **Warm-starting `solveIncompressible`** (new `warmStartPressure` param;
+      `warmStartConstantDensity` flag, `inStepVelocity` only, carrier =
+      `soundspeeds`). **NaNs by step 13** on `hydrostaticColumn`: a warm start
+      on the solver *as it stands* — two-sided source, 0.9 `rhoStar` clamp,
+      linear operator, `nonNegativeClamp` gauge — feeds the linear operator's
+      wall-truncation `kappa` inflation. Only helps paired with the one-sided /
+      re-summed inner loop of (1). Kept as an off-by-default hook.
+
+   3. **Cold `inStepVelocity` on `divergenceFree`** looked promising at nx=32
+      (`pressureSlopeRatio` 0.41 vs `positionShift`'s -300, `|v|` recovering to
+      ~2) but that was the chaotic non-determinism: at **nx=64 it diverges**
+      (vMax 3e7), and it **regresses `staticBlob`** (a quiescent free-space
+      case `positionShift` passes with `|v| = 0` exactly) to a step-40 blow-up.
+      Part 23's assessment stands.
+
+   So: nothing in the existing two-solve structure holds this state, and
+   retrofitting velocity coupling onto `solveIncompressible` breaks free-space
+   cases. **The reference DFSPH scheme is the vehicle.** Every remaining
+   failure traces to a composed-primitive limitation, so the next steps are to
+   replace those primitives with faithful `@wp.kernel`s, in this order (each is
+   gradcheck territory — see `.claude/skills/gradcheck`):
+
+   1. **Akinci boundary pressure force kernel.** `a^p_i` currently comes from
+      `computePressureAccelIISPH`'s symmetric SPH gradient, which truncates at
+      a wall: the boundary contribution `sum_bk (p_i/rho_i^2) psi_bk gradW_ik`
+      is under-resolved, so `A p` under-estimates the relief a standing `kappa`
+      provides and the one-sided constant-density drive never releases —
+      wall-adjacent `kappa` inflates without bound (the §1.7 boundary-layer
+      mode, measured here as `kappa_max` 5 -> 40 -> 400 -> 2000 over ~15 steps
+      on `hydrostaticColumn`). Write the boundary loop the way
+      `SPlisHSPlasH/TimeStepDFSPH.cpp::computePressureAccel` does: an explicit
+      sum over **`kind == 1` (Boundary)** neighbours only, with Akinci volumes
+      `psi_bk = rho0 / sum_l W_bl` (`akinciBoundaryMass` already computes this)
+      and the `p_i` self-term only (no boundary pressure value, no reaction —
+      [BWJ23] Eq. 33 / `staticBoundary`).
+
+      **`kind == 1`, NOT `kind != 0`.** `ParticleType` is Fluid=0, Boundary=1,
+      **Ghost=2**, and this case genuinely has ghosts (`hydrostaticColumn` at
+      nx=32: 465 fluid / 720 boundary / **720 ghost**). Ghost particles are
+      mDBC *evaluation points* — an MLS density/pressure fit is run at each
+      ghost position and written back to its owning `kind == 1` boundary
+      particle via `ghostIndices` (`modules/mdbc/density2025.py`) — they are
+      **not** interacting particles and must never enter a fluid or boundary
+      neighbour sum. The existing operators are safe today only because every
+      `warpSPHCore` gradient/divergence/density kernel skips `kind == 2`
+      neighbours under any `operationMode != TrueAllToToAll`, and the
+      incompressible path runs the default `OperationDirection.AllToAll`
+      (`checkDirectionality_j(kind, 9) == (kind != 2)`;
+      `warpSPHCore/util/directionality.py`). A hand-written boundary loop that
+      filters on `referenceKind != 0` would pull those 720 ghosts into every
+      near-wall fluid particle's pressure sum and destabilise the fluid-wall
+      interface exactly as feared. Filter on `referenceKind == 1`, or route the
+      sum through `OperationDirection.FluidToBoundary` / `checkDirectionality`.
+      (The "`kind != 0`" phrasing in Parts 9/13/14 is always about which
+      particles are *pressure unknowns* / take reaction forces — a property of
+      `i`, where excluding ghosts too is correct — not about which neighbours
+      `j` to sum over.)
+
+      Validate against `hydrostaticColumn`: `dp/dy` ratio must stay ~1.0 past
+      the ~15-step mark it currently breaks at.
+
+      **Done, in part (Part 25).** The mechanism is confirmed and the wall
+      runaway is removed, but *not* by a new kernel and *not* by the Akinci
+      volume the bullet names. On this codebase's five-layer `BOUNDED_BAND` the
+      Akinci `psi_bk = rho0 / sum_l W_kl` comes out **numerically equal to the
+      nominal particle volume** (measured, `hydrostaticColumn` nx=32:
+      `akinciBoundaryMass` returns `m_k` to 4 digits), so the paper's
+      correction is inert here and "write the boundary loop with Akinci
+      volumes" would change nothing. What is actually short is the *weight* the
+      boundary term is carried at: at 1x it under-resolves the wall by ~2x, the
+      constant-density solve exits clean on the mean residual (2 iterations)
+      while a few wall particles ratchet `kappa` up every step
+      (`kappa_max` 5 -> 130 -> runaway), and `|v|max` reaches ~100 by step 25.
+      Carrying the boundary apparent volume at **2x** (new
+      `IncompressibleSolverConfig.akinciBoundaryVolumeScale`, default 1.0 =
+      strict no-op, set to 2.0 by `dfsphReference` only) bounds it: `kappa_max`
+      saturates at 6.81 (against a true floor value ~4.55), `|v|max` holds
+      < 1 through 25+ steps, `rho_min` (free surface) holds ~0.7. A sweep
+      (`scripts/probe_dfsphReferenceColumn.py --sweep`) puts the usable range
+      at 1.5–3x; below 1.5 the runaway returns, above 3 the surface compacts
+      faster. **The `dp/dy` ~1.0 target is only partly met**: the wall is
+      controlled but the divergence solve still does not converge (32
+      iterations, err ~5e-3) so the fitted slope is noisy, and by ~step 40 the
+      free surface begins to compact (`rho_min` 0.7 -> 0.24 by step 55). Those
+      are steps 3 and 4 below, now the co-blockers. A faithful *single-layer*
+      Akinci sampling would presumably not need the 2x, but that needs the
+      oversized domain the module docstring notes.
+   2. **DFSPH-factor kernel.** `computeAlpha` returns the IISPH `a_ii` with
+      apparent-volume (`m_j/rho_j`) weights; DFSPH's `alpha_i = 1 / (|sum_j m_j
+      gradW_ij|^2 + sum_j |m_j gradW_ij|^2)` uses bare masses and puts the
+      boundary (`kind == 1`) in the *first* sum only ([BWJ23] Eq. 32). §2
+      measured `diag(A)/alphas ~ 1.0001`, so the two agree in the bulk — but at
+      a wall, with Akinci `psi_bk` in the mix, they diverge, and the factor is
+      the Jacobi step size. Match `computeDFSPHFactor` exactly. Same
+      ghost caveat as item 1: `computeAlpha` today excludes `kind == 2` from
+      both sums (first via `AllToAll`, second via its explicit `kj == 0`
+      guard); a replacement kernel must keep both exclusions.
+
+      **Done (Part 27).** Landed as its own kernel
+      (`modules/incompressible/wp_dfsph_factor.py`) mirroring
+      `SPlisHSPlasH/DFSPH/TimeStepDFSPH.cpp::computeDFSPHFactor` exactly: the
+      `|V_j ∇W_ij|²` sum runs over fluid neighbours only, the boundary
+      (`kind == 1`) enters only the `|Σ V ∇W|²` vector term, ghosts (`kind == 2`)
+      are excluded from both, and the apparent volumes (`m_j/rho_j`) carry the
+      Akinci boundary volume from the `applyConsistentCoupling` context.
+      `dfsphReference._factor` now returns its negation (the `<= 0` convention
+      the solvers iterate against), replacing `computeAlpha`. Verified it is
+      `computeAlpha`'s diagonal / `ρᵢ` exactly — the `1/ρ̄` the algebra predicts
+      (bulk 1.049, wall 1.047, `scripts/probe_dfsphFactorCheck.py`) — so the
+      step size changes by ~1/ρ everywhere, not just at the wall. The composed
+      `a_p` was checked against a direct O(N²) torch reference of the standard
+      SPH pressure acceleration (`computePressureAccelIISPH` =
+      `-Σ_j m_j (κ_i/ρ_i² + κ_j/ρ_j²) ∇W_ij`, ghosts excluded) to ~5e-7:
+      `a_p` was already faithful and needed no change, so step 2's "and/or the
+      Akinci boundary force as its own kernel" resolves to *no new force kernel*
+      — the standard acceleration already is SPlisHSPlasH's physical `a_p`.
+   3. **Free-surface gauge / mask.** The gauge-free divergence solve
+      accumulates `kappa^v` on sampling noise where support is truncated, so a
+      jittered quiescent `staticBlob` blows up (the constant mode is not null
+      at a free surface, §1.5 — the same reason `solveIncompressible` downgrades
+      `minShift` to a clamp there). Either detect free-surface particles and
+      hold their `kappa`/`kappa^v` at 0 (SPlisHSPlasH's few-neighbours guard in
+      `divergenceSolveIteration`), or gate the solve on a surface mask.
+
+      **Tried, deferred (Part 26).** `detectFreeSurface` (the scheme's own
+      dilated detector) flags ~27% of the column's fluid rows; holding their
+      `kappa^v` at 0 in the divergence solve **cleans the `dp/dy` fit** — it
+      tracks ~1.0 through step 40 instead of the raw -2..+3 the unmasked solve
+      leaks into the bulk pressure — but makes the column **slump faster**
+      (`|v|max` 23 by step 59 against Part 25's ~2 at step 55). Masking the
+      *constant-density* solve's `kappa` the same way is much worse: `rho_max`
+      2.5 in 20 steps, the sub-surface layer over-compresses without the
+      surface rows as unknowns. So the mask is not free, and its benefit
+      (fit legibility) is not the metric that matters (stability).
+      SPlisHSPlasH's `< 20`-neighbour guard is inapplicable here regardless —
+      at `n_h = 4` even a flat-surface particle keeps 53+ neighbours.
+
+      **Re-run under the Part 29 linear solve (Part 30) — negative.** The
+      gauge is implemented in `_jacobiSolve` (`surfaceMask`; the module flag
+      `FREE_SURFACE_GAUGE` toggles it, `--gauge` in both probes): the
+      flagged rows' DF source / warm start / metric residuum are zeroed and
+      their pressure is pinned to 0 at every iteration, so the carried
+      `kappa^v` (and the next warm start) is 0 there. Sequential 1500-step
+      A/B (2 runs per arm, nx=32): the late-time surface degradation's
+      **onset is the same in all four runs** (~step 300-400) — the gauge does
+      not delay or prevent it; the gauge-on surface degrades **deeper and
+      never recovers** (rho_min 0.15-0.21 persistent, runs end 0.23-0.24)
+      while the gauge-off survivor recovers (0.25 at step 600 → 0.49 at
+      1500); the gauge also raises the bounded slosh ~30-40% (|v|max
+      1.8-2.0 vs 1.3-1.5). Blow-up count 1/2 (off) vs 0/2 (on) is
+      inconclusive at n=2 against Part 29's 2/3 baseline. The sign
+      reproduces Part 26 under the linear solve: the mask's cost (surface
+      rows out of the unknowns → the sub-surface layer loses the support
+      even a noisy `kappa^v` was providing) exceeds its benefit. Left as an
+      A/B toggle, default off.
+   4. **Contractive divergence solve.** Even masked, the per-iteration
+      re-summed `Drho/Dt` form has no contraction guarantee. Use the linear
+      `A p = dt * shift(accel(p))` operator with an in-window `omega`
+      (`solveDivergenceFree`'s form, `omega < 0.355`, §divergenceFree.py
+      docstring) for the divergence half, or clamp `|kappa^v|`.
+
+      **Done (Part 29).** Both solves use the reference's fixed-source
+      linear form (source from `vEnter` once, `aij_pj = Drho/Dt(a_p)/rho0 *
+      opDt` recomputed per iteration, `max(p,0)`), with Part 28's corrected
+      sign conventions, the reference's one-sided compression-only
+      convergence metric + 2D <7-neighbour deficiency guard, and a
+      measured-stable relaxation: the omega sweep showed the reference's
+      0.5 is outside this composed operator's Jacobi window (~[0.2, 0.35])
+      and omega = 0.3 decays in every (step, mode) state, so it is set to
+      0.3 and both budgets carry the reference's 100. The ratchet is gone:
+      `hydrostaticColumn` (nx=32) runs hundreds-to-~1100 steps with every
+      solve converging (2-100 iters), pressures bounded (CD ≤ ~11, DF ≤
+      ~10), and a bounded post-slump slosh (|v|max ~1.3-1.7); the
+      `staticBlob` A/B (Part 27's regression) recovered (70.9/inf →
+      1.15/1.28 max |v|). Residual, step 3's territory: a late-time
+      free-surface degradation at step ~1150 (surface rho_min → 0.14, then
+      blowup or a uniform rho-0.139 soup with inf velocities; 2 of 3
+      1500-step runs fail there).
+
+      **Earlier attempt, deferred (Part 26).** The linear SPD operator
+      `A(p) = -dt·_drhodt(a_p(p))` with the exact residual-minimizing step
+      (`solveDivergenceFree`'s `optimal` device) converges the divergence solve
+      in 14–25 iterations for the first ~13 steps on `hydrostaticColumn` —
+      against the re-summed form's permanent 32 — but **regresses `staticBlob`
+      hard** (`|v|max` 19 by step 2): `solveDivergenceFree`'s version pairs the
+      optimal step with per-iteration gauge re-centering to kill the constant
+      null mode, which §1.5 forbids at a free surface, and without *some*
+      null-mode handling `omega_k` blows up along the near-null directions a
+      free surface creates. The re-summed form's fixed `omega` is ugly but
+      does not have that failure mode. A `|kappa^v|` clamp (the bullet's
+      fallback) was not tried. Neither path addresses the actual driver of the
+      column slump, which is the constant-density solve (see below), so this is
+      parked until step 5 clarifies whether the DF solve needs to be good at
+      all on this state.
+   5. **Then the DFSPH validation ladder** — `hydrostaticColumn` clean to
+      `tLimit`, then a `dambreak` A/B against `divergenceFree` and `deltaSPH`
+      (this also gives item 1 a second data point on the incompressibility
+      cycle: a genuine DFSPH has no Eq. 17 resample, so the cycle's dissipation
+      channel is structurally different).
+
+   The `dfsphReference` scaffold (step, system, warm-start carriers on
+   `pressures`/`soundspeeds`, Akinci coupling, no-op integrator wiring) is in
+   place; items 1-4 are edits to `_jacobiSolve` / `_factor` / `_pressureAccel`
+   and one or two new kernels. This is the same order of effort
+   `divergenceFree` itself represents (~20 sessions), so it is a track of its
+   own, not a one-session fix.
+
+   **Part 25 — step 1's wall runaway removed, and it was a weight not a
+   kernel.** The `hydrostaticColumn` failure at nx=32 has two coupled
+   mechanisms (Part 23): the DF projection cannot balance a body force, and
+   the constant-density support cycle is unstable at the wall. Part 25
+   addresses the second. `dfsphReference` holds the exact gradient for ~7
+   steps and then wall-adjacent `kappa` runs away — the constant-density
+   solve exits at 2 iterations on a converged *mean* residual while a handful
+   of wall particles ratchet their pressure up every step (`kappa_max`
+   5 -> 130 -> clamp, `|v|max` ~100 by step 25). The cause is the boundary
+   term in `A p`: it is the feedback that tells the one-sided drive a
+   standing `kappa` is already relieving the compression, and at this
+   codebase's five-layer `BOUNDED_BAND` it is carried at roughly half the
+   weight it needs.
+
+   The bullet above expected the fix to be Akinci volumes `psi_bk =
+   rho0 / sum_l W_kl` in an explicit `kind == 1` loop. Measured, that is a
+   near-no-op: on the band `sum_l W_kl` is large enough that
+   `akinciBoundaryMass` returns the nominal particle volume `m_k` to four
+   digits, so the paper's single-layer correction has nothing to correct
+   here. What works is carrying the boundary apparent volume the pressure
+   solve sees at **2x** — `IncompressibleSolverConfig.
+   akinciBoundaryVolumeScale`, default `1.0` (a strict no-op; every A/B on
+   file keeps its meaning and `divergenceFree` at shipped defaults never
+   reads it — its bounded case runs `mdbcDensity`, not `consistent`), set to
+   `2.0` by `dfsphReference` only. With it: `kappa_max` saturates at 6.81
+   (true floor value ~4.55), `|v|max` holds < 1 through 25+ steps, the free
+   surface holds `rho_min` ~0.7. A sweep
+   (`scripts/probe_dfsphReferenceColumn.py --sweep`) puts the usable band at
+   1.5–3x; below 1.5 the runaway returns, above 3 the surface compacts
+   faster.
+
+   **What this does not fix.** The DF solve still does not converge (32
+   iterations, err ~5e-3 — gauge-free, accumulating on free-surface noise:
+   steps 3/4), so the fitted `dp/dy` slope stays noisy even though the wall
+   is controlled, and by ~step 40 the free surface begins to compact
+   (`rho_min` 0.7 -> 0.24 by step 55) and the column slowly slumps
+   (`dispMax` -> 0.46). So step 1's own validation target ("`dp/dy` ~1.0 past
+   15 steps") is only half met: the wall mechanism is closed, the
+   free-surface mechanism (step 3) and the non-contractive divergence solve
+   (step 4) are now what remains. Landed: the config field + round-trip, the
+   `akinciBoundaryVolumeScale` plumbing through `applyConsistentCoupling` /
+   `akinciBoundaryMass`, `scripts/probe_dfsphReferenceColumn.py`. No
+   `divergenceFree` default changed; 25 incompressible tests pass.
+
+   **Part 26 — steps 3 and 4 explored, nothing landed, and the blocker moved.**
+   With the wall runaway gone (Part 25), the residual `hydrostaticColumn`
+   failure is a slow slump: `|v|max` creeps ~0.05/step from step 0 and the
+   column visibly falls from ~step 15. Steps 3 (free-surface `kappa^v` mask)
+   and 4 (contractive divergence solve) were both built and measured; details
+   in the step bullets above. Neither lands:
+
+   - The **surface mask** trades a cleaner `dp/dy` fit (it tracks ~1.0 instead
+     of the raw -2..+3 the unmasked `kappa^v` noise leaks into the bulk) for a
+     *faster* slump — a bad trade, since legibility of the fit is not what is
+     failing. Applied to the constant-density solve instead it is much worse
+     (`rho_max` 2.5 in 20 steps).
+   - The **linear optimal-step divergence solve** converges the DF solve
+     (14–25 iters vs a permanent 32) for ~13 steps but regresses `staticBlob`
+     hard: the optimal step needs null-mode handling, and the only one
+     available (`solveDivergenceFree`'s per-iteration mean-centre) is the
+     spurious-force move §1.5 forbids at a free surface.
+
+   **The slump's driver is the constant-density solve, not the DF solve.**
+   `|v|max` climbs from step 0 while the DF solve is masked out entirely, and
+   the CD solve — which *does* converge (`err` ~1e-4, `kappa_max` bounded at
+   6.85) and holds `dp/dy` ~1 on the *mean* — carries `|a_p|max` ~17–45, far
+   above `g ≈ 9.81`. It is globally balanced and locally lumpy: a few
+   particles per step get a push several times gravity, and that velocity
+   noise accumulates into the slump. This is Part 23's mechanism 1 (the DF
+   projection's source is identically 0 for a uniform body force, so the CD
+   fall-and-pushback cycle must carry the entire hydrostatic load) showing up
+   as a discretisation-quality problem in the CD solve rather than an
+   instability. That is step 5's territory — a faithful DFSPH factor (step 2)
+   and/or the Akinci boundary *force* written as its own kernel so the CD
+   `a_p` is not the symmetric-gradient approximation it is now. Steps 3–4 are
+   parked behind it: there is no point converging a divergence solve on a
+   state whose real error is upstream of it.
+
+   Landed by Part 26: nothing in `src/`. The step bullets and this narrative
+   record the two negative results so the next session does not re-run them.
+
+   **Part 27 — step 2 landed: the faithful DFSPH factor, and the blocker moves
+   to the solve.** Step 2 (the harden track's "faithful DFSPH factor and/or the
+   Akinci boundary force as its own kernel") is done. The factor is now its own
+   kernel, `modules/incompressible/wp_dfsph_factor.py::computeDFSPHFactor`,
+   mirroring `SPlisHSPlasH/DFSPH/TimeStepDFSPH.cpp::computeDFSPHFactor` line for
+   line: the `|V_j ∇W_ij|²` sum runs over **fluid** neighbours only, the
+   boundary (`kind == 1`) enters only the `|Σ_fluid V_j ∇W_ij + Σ_boundary V_k
+   ∇W_ik|²` vector term (a static boundary takes no reaction, [BWJ23] Eq. 32),
+   and ghosts (`kind == 2`) are excluded from both via the `AllToAll`
+   directionality plus the explicit `kj == 0` guard. The apparent volumes
+   `V_j = m_j/ρ_j` carry the Akinci boundary volume, so the kernel reads the
+   `applyConsistentCoupling`-modified `state.masses`. `dfsphReference._factor`
+   now returns its negation (the `<= 0` convention both solvers iterate
+   against), replacing the IISPH `computeAlpha` diagonal.
+
+   **Two checks, both in `scripts/probe_dfsphFactorCheck.py`.** (1) The factor
+   is `computeAlpha`'s diagonal **/ `ρᵢ` exactly** — the algebra says
+   `alpha_IISPH = (V_i/m_i)|Σ V_j ∇W|² + …` collapses to `diag_DFSPH/ρᵢ` when the
+   neighbour set is all fluid, so the two must agree in the bulk and diverge by
+   `1/ρᵢ` wherever `ρᵢ ≠ 1`. Measured: bulk ratio 1.049, wall 1.047 — a uniform
+   `1/ρ̄` (bulk `ρ̄ ≈ 0.95`), confirming the DFSPH formula rather than a bug, and
+   showing the step size changes by ~1/ρ **everywhere**, not just at the wall.
+   (2) The composed `a_p` is the standard SPH pressure acceleration:
+   `computePressureAccelIISPH` (`-warpOperation(Symmetric gradient)/ρ`) is
+   checked against a direct O(N²) torch double-loop
+   (`-Σ_j m_j (κ_i/ρ_i² + κ_j/ρ_j²) ∇W_ij`, Wendland2 2D, `Scatter` support,
+   ghosts excluded) and agrees to ~5e-7 (float32). So `a_p` was **already**
+   faithful to SPlisHSPlasH's physical `a_p` — its `p/ρ²` (`p_rho2`) is an
+   internally-scaled variable, the physical acceleration is the same — and
+   step 2's "Akinci boundary force as its own kernel" resolves to **no new
+   force kernel**: the standard acceleration already is the faithful `a_p`.
+
+   **The `hydrostaticColumn` slump survives** (the re-check step 2 asked for).
+   nx=32 × 30 steps, `scripts/probe_dfsphReferenceColumn.py`: `|v|max` climbs
+   0.04 → a step-26 peak of 1.33 → 1.17 at step 30; `rho_min` 0.62 → 0.70
+   (recovering); `rho_max` ~1.0; the CD solve stays at 2 iterations and the DF
+   solve still hits the 32-iter cap (err ~2e-3 → 3e-2). Against the Part 25
+   baseline (old `computeAlpha` factor: `|v|max` ~1.25, `rho_min` ~0.68) this is
+   a **modest, consistent gain** — the faithful factor is a small improvement,
+   not a fix. The slump is Part 23's mechanism 1 (the CD solve carrying the
+   entire hydrostatic load as a fall-and-pushback cycle), now a
+   discretisation-quality limit of the *solve*, not a formula-fidelity gap: the
+   two composed pressure primitives (factor and `a_p`) are both faithful, and
+   the lumpiness remains.
+
+   **The regression that redirects the track.** `staticBlob` under
+   `dfsphReference` (nx=128, 20 steps, `--factor` A/B in
+   `scripts/probe_dfsphReferenceStaticBlob.py`): the **baseline** `computeAlpha`
+   factor already regresses it hard (Part 26's known failure) but stays finite
+   (`|v|max` 70.9, KE 0.243, `centroidDrift` ~2e-9); the **faithful** factor
+   diverges it outright (`|v|max` → inf, `rho_max` → 569, KE → inf). The
+   faithful factor is *correct* for SPlisHSPlasH — whose solve is a **linear**
+   Jacobi (fixed source `1 − ρ_adv`, 0.5 relaxation, the factor scaled by
+   1/h²) — but `dfsphReference._jacobiSolve` is a **nonlinear re-summed fixed
+   point** (`v* = vEnter + dt·a_p`, `Drho/Dt*` re-summed each iteration). That
+   structure is far more step-size-sensitive, and the faithful factor's ~1/ρ
+   larger step pushes the already-marginal blob over the edge. So step 2 is
+   done and correct, and it **moves the blocker to step 4**: until the
+   divergence/constant-density solve is the linear form SPlisHSPlasH uses (or
+   has a step-size that does not depend on this sensitivity), the faithful
+   factor cannot be adopted on the nonlinear solve. Two negative results
+   recorded (the `a_p` is already faithful; the faithful factor regresses
+   `staticBlob`) so they are not re-run.
+
+   Landed by Part 27: `src/warpSPH/modules/incompressible/wp_dfsph_factor.py`
+   (new kernel) and the `_factor` rewiring in `src/warpSPH/schemes/dfsphReference.py`;
+   two probes, `scripts/probe_dfsphFactorCheck.py` and
+   `scripts/probe_dfsphReferenceStaticBlob.py`. The 20 incompressible tests
+   (`tests/test_incompressibleKrylov.py`) still pass — `divergenceFree` is
+   untouched, the new kernel is imported only by `dfsphReference`.
+
+   **Part 28 — step 4, the linear solve, and the sign conventions hiding in
+   it.** Step 4 (the harden track's "contractive divergence solve") is now
+   implemented as SPlisHSPlasH's **linear** Jacobi in
+   `dfsphReference._jacobiSolve`, replacing the nonlinear re-summed fixed
+   point that Part 27 found step-size-sensitive. Both solves (constant-density
+   and divergence) now use the reference's fixed-source form: the source `s`
+   is computed **once** from `vEnter` (the post-non-pressure velocity, not
+   re-summed each iteration), `aij_pj = Drho/Dt(a_p)/rho0 * opDt` (the density
+   change the *current* pressure would cause, recomputed per iteration from
+   the acceleration field, `opDt = dt²` CD / `dt` DF matching their
+   `aij_pj *= h²` / `*= h`), the relaxation is their fixed 0.5, and the
+   one-sidedness is the `max(p, 0)` clamp (their source is two-sided). The
+   diagonal `invDiag = 1/(opDt * sum_grad_p_k)` is their `factor =
+   (1/sum_grad_p_k) * invH^k` exactly (`sum_grad_p_k` is the Part 27 faithful
+   factor, a sum of squared kernel-gradient norms; their source stores
+   `factor = 1/sum_grad_p_k` then `*= invH²`/`*= invH`).
+
+   **The first draft diverged, and the root cause was sign, not
+   structure.** The initial implementation (source `1 - rho/rho0 +
+   dt*Drho/Dt/rho0` and `aij_pj = -Drho/Dt(a_p)/rho0 * opDt`, both read
+   straight off `_drhodt = -rho0 * div`) ran the DF pressure up by ~2x
+   *every* iteration (2e-3 → 8e9 in 32 iters, NaN by step 2). Measuring, not
+   deriving, against `TimeStepDFSPH.cpp` pinned three sign facts:
+   (1) SPlisHSPlasH's `delta` operator — the difference-form `V_i
+   Σ (v_i − v_j)·∇W` used by `computeDensityAdv` / `computeDensityChange` /
+   `compute_aij_pj` — is the **negative** of the continuum divergence
+   (the difference form `Σ (q_i − q_j)∇W` negates the continuum gradient);
+   (2) this codebase's scatter Divergence (inside `_drhodt`) **is** the
+   continuum one — probed by running a `div = +1` field through
+   `computeMomentumIncompressible`: `_drhodt ≈ −1.0` in the bulk (the
+   positive max is the known free-surface truncation bias); (3) their
+   `factor > 0` and **both** solves iterate `p −= 0.5(s − aij_pj)·factor`
+   (their comment: `alpha_i = −1/(a_ii ρ_i²)`, `a_ii = −ρ_i²/Σ|∇W|² < 0`,
+   so the matrix is negative in their convention: positive p →
+   `aij_pj < 0`). With (1)+(2), the first draft's source *and* `aij_pj`
+   were each sign-flipped relative to the reference, so the residual was
+   sign-flipped and the `p −=` step was the diverging direction (spectral
+   radius > 1). An intermediate attempt (flip only the step sign to `p +=`)
+   fixed the DF solve and broke the CD solve (p → 1e25) — the diagnostic
+   that the source and `aij_pj` must flip *together*: the corrected, unified
+   form is the reference convention for source (`density: 1 − rho/rho0 −
+   dt*Drho/Dt/rho0`, `divergence: −Drho/Dt/rho0`) and `aij_pj`
+   (`+Drho/Dt(a_p)/rho0 * opDt`), with the same `p −= 0.5(s − aij_pj)·invDiag`
+   for both modes.
+
+   **With the signs right, the physics is right.** Measured on
+   `hydrostaticColumn` nx=32 (`scripts/probe_dfsphReferenceColumn.py`):
+   step-1 CD — the initial column is under-compressed (source
+   [+1.8e-2, +3.7e-1]) and the pressure stays exactly 0 (no tensile
+   pressure, correct); step-1 DF — the post-gravity source is compressive
+   (source min −0.275, `O(dt·g/h)`) and the pressure grows positive (correct);
+   step-2 CD — the first over-compressed particles appear (`rho_max` 1.31)
+   and get positive pressure (correct). The pressure now lands where the
+   physics says it should, in all three regimes.
+
+   **But the iteration does not contract inside its budget.** Step-1 CD runs
+   to the 64-iter cap (err 7e-2 — see the metric note below); step-1 DF runs
+   to the 32-iter cap (p max 124, err 6.9); by step 2 the CD pressure
+   oscillates without settling (p max 12.9 → 7.5 → 11.9 → 10.1 → 12.6 →
+   11.1 → 13.0 → 11.8, cap at 25.9) and the DF solve is actively diverging
+   (p max 186 → 150 → 266 → 191 → 364 → 257 → 489 → 353, cap at 1.8e4). The
+   ratchet compounds: `|v|max` 0.01 → 1.76 → 1732 → 8.9e4, `rho_max` 1.31 →
+   1.66 → 2.01, NaN at step 6. The CD "non-convergence" at step 1 is partly
+   a **metric artifact** — see next — but the step-2+ oscillation and the DF
+   divergence are real.
+
+   **The convergence-metric finding (from the reference source).**
+   SPlisHSPlasH's stopping metric is **one-sided**: the CD solve accumulates
+   `density_error −= rho0 * min(s_i − aij_pj, 0)` (only the *compression*
+   part of the residual counts, averaged over all particles) and the DF
+   solve uses the same `min(s − aij_pj, 0)` with a **particle-deficiency
+   guard** (`< 20` neighbours in 3D / `< 7` in 2D → that particle's
+   residuum is excluded; it does not skip the pressure update). The local
+   metric here is the two-sided `mean|resid|`, which on an under-compressed
+   state can *never* reach `tol` (the clamp holds p=0 while `resid = source
+   > 0`), so both solves run to their caps regardless of the physics.
+   Adopting the one-sided metric + guard is the first concrete next step:
+   faithful, cheap, and it restores the early exit on clamped states — but
+   it does not by itself fix the step-2+ oscillation (the over-compressed
+   subset's residual genuinely does not settle).
+
+   **Known remaining differences from the reference (the contraction
+   study's levers).** (a) *Warm start*: this scheme carries the full
+   previous-step `κ`; SPlisHSPlasH's `USE_WARMSTART` branch uses
+   `0.5 * min(κ, 2.5e-4) * invH²` gated on `densityAdv > 1` (else 0), and
+   the no-warm-start branch is the one-sided guess `max(0, −s * factor)` —
+   a damped/capped warm start is a direct candidate for the ratchet.
+   (b) *Budget*: CD 64 iters / tol 5e-4, DF 32 iters / tol 2.5e-3; the
+   composed operator on this state may simply need more iterations, or a
+   smaller `omega` (0.5 is their value, not a law). (c) *Operator
+   conditioning*: the composed `aij_pj` (scatter Divergence of
+   `computePressureAccelIISPH`) may lose diagonal dominance at the free
+   surface and on the five-layer `BOUNDED_BAND` in a way the reference's
+   dedicated kernels do not.
+
+   **Next, concretely.** (1) Adopt the one-sided `min(s − aij_pj, 0)`
+   metric + the neighbour-deficiency guard (faithful, and it changes the
+   early-exit behaviour on clamped states). (2) A contraction study: sweep
+   `omega` {0.5, 0.3, 0.1} and the iteration budget (128/256) and classify,
+   per mode, whether the residual decays (slow — a budget problem) or grows
+   (diverging — a matrix problem). (3) If diverging: inspect the composed
+   operator's diagonal dominance at the free surface / five-layer band and
+   try the reference's damped warm start. (4) Only then re-run the
+   `staticBlob` A/B — the whole point of step 4 is to fix the Part 27
+   regression, and that is untestable until the column is stable.
+
+   Landed by Part 28: the linear `_jacobiSolve` in
+   `src/warpSPH/schemes/dfsphReference.py` (sign notes in its docstring),
+   and `scripts/probe_dfsphReferenceColumn.py` now prints `n_fluid` and
+   handles an empty wall band. The 20 incompressible tests
+   (`tests/test_incompressibleKrylov.py`) still pass — `divergenceFree` is
+   untouched, the change is inside `dfsphReference` only. The scheme is a
+   troubleshooting artifact (not a landed solver) and is **diverging on
+   `hydrostaticColumn`** at the end of this part — do not treat it as
+   usable until the contraction study above lands.
+
+   **Part 29 — step 4 closed: the one-sided metric, the contraction window,
+   and omega = 0.3.**
+
+   **What landed.** Three edits in `dfsphReference`, all measured, all
+   against the reference source:
+   1. *The one-sided convergence metric* (Part 28's recorded next step).
+      `residuum = min(resid, 0)` per particle, `err = rho0·mean(−residuum)`
+      over the fluid — SPlisHSPlasH's `density_error −= rho0·min(s−aij_pj,0)`
+      averaged over active particles. The two-sided `mean|resid|` is gone; on
+      an under-compressed state the new metric reads 0 and the solve exits
+      early (step-1 CD: 64-iter cap → 2 iters, err = 0 — the clamp holds
+      p = 0 and there is nothing to correct, which is the physics).
+   2. *The 2D <7-neighbour deficiency guard*, faithful on all three of its
+      reference sites: the DF **setup** zeroes the source of deficient
+      particles (`densityAdv = 0`, so both warm-start and guess branches
+      start them from p = 0), the DF **metric** zeroes their residuum, and
+      the **pressure update still runs** for them (their `aij_pj` relaxes
+      toward 0, not their source). The CD solve has **no** guard in the
+      reference — none here. Correction to Part 28's note: the guard is not
+      3D-only; the DF kernel's metric guard is `<7` in 2D / `<20` in 3D, and
+      the setup-side guard is the same two-sided split. The count is the
+      fluid+boundary neighbour count (`countNeighbors` with `AllToAll`
+      excludes ghost references, matching their per-point-set sum — ours
+      re-evaluates `w > 0` while theirs reads the Verlet-list length, so
+      ours is ≤ theirs); it is evaluated once per solve (the Verlet list and
+      positions are fixed during the solve).
+   3. *The relaxation and the budget.* omega = 0.5 → **0.3**; both
+      maxIterations → **100** (the reference's value for both solves; the
+      config ships 64/32 — local override in `dfsphReference_step`, the
+      `akinciBoundaryVolumeScale` pattern). The minIterations floors already
+      matched (2 CD / 1 DF).
+
+   **Why omega 0.3 (the contraction study).**
+   `scripts/probe_dfsphReferenceContraction.py` re-drives the production
+   loop — same state, source, warm start, factor, same
+   `applyConsistentCoupling` context — with a swept omega and a fixed
+   256-iteration budget and no early exit, at each production solve call,
+   so every trajectory is a what-if on identical inputs (the production
+   solve still runs omega 0.5, so the step-2 states are the production
+   ratchet's). Result (one-sided metric, `rho0·mean(max(0, aij_pj−s))`):
+
+   | omega | step-1 DF | step-2 CD | step-2 DF |
+   |---|---|---|---|
+   | 0.5 (prod) | **GROW** 2.5e-2 → 4.4e+14 | GROW (plateaus 1.2e-2, p → 27) | **GROW** 45 → 2.7e+18 |
+   | 0.4 | GROW (slow, p → 187) | DECAY → 2.3e-6 | STAGNANT (slow growth) |
+   | **0.3** | **DECAY** → 6.4e-5 | **DECAY** → 2.4e-6 | **DECAY** 42 → 1.1e-3 |
+   | 0.1 | DECAY (slow) | DECAY → 1.6e-5 | GROW (decays to 8e-3, regrows) |
+   | 0.05 | STAGNANT | DECAY → 3.2e-5 | GROW (decays to 1.2e-3, regrows) |
+
+   (step-1 CD is trivially FLAT0 in every run — under-compressed, p = 0.)
+   The window is ≈ **[0.2, 0.35]**: 0.5 has spectral radius > 1 (≈1.2×/iter
+   asymptotic on step-1 DF), 0.3 contracts in every state, and the low
+   omegas decay first then **regrow late** (p stays small — a clamp-limited
+   fixed point and/or a weak mode, not a blowup). It is a **matrix
+   problem, not a budget problem**: at 0.5 a bigger budget only grows more,
+   and 0.3 reaches the tolerances inside 100 iters in every state (step-1
+   DF at ~iter 90-100, step-2 DF at ~iter 16). The reference runs 0.5 in
+   3D, where the composed operator is better conditioned; the window
+   narrowing here is consistent with the free-surface / five-layer-band
+   conditioning hypothesis (Part 28, lever c) — now a note, not the
+   blocker.
+
+   **Validation (measured).**
+   - `hydrostaticColumn` (nx=32), 300 steps: `diverged=False`; every solve
+     converges (CD 2-8 iters, DF 4-74, err at the ~2.5e-3 tol); CD p ≤
+     11.5, DF p ≤ 8.4, |a_p|max 12-75 (O(g), not the old 1e5-1e18);
+     |v|max 0.01 → 1.29 (the slump) → bounded slosh 1.4-1.6; rho max
+     1.02-1.07, min 0.61-0.78. The ratchet (|v|max 0.01→1.76→1732→NaN at
+     step 6) is gone.
+   - 1500 steps × 3 runs (same code, same seed): **run 1 completes
+     bounded** (`diverged=False`, CD p 7-10, |a_p|max ≤ 47 at the tail).
+     **Run 2: NaN at step 1160** — preceded by ~100 steps of free-surface
+     degradation (rho_min 0.61 → 0.31 → 0.21 → 0.14, the surface layer
+     diluting), then p → 1.8e6, |v|max → 5072. **Run 3: the same late-time
+     failure, a different face** — the column collapses around step ~1150
+     into a uniform rho-0.139 soup (rho min == max), |v|max → **inf**, both
+     solves trivially "converge" (it=2, err=0, p=0) and the run continues
+     degenerate — and the runner's **NaN-based divergence check does not
+     catch it** (`diverged=False` with inf velocities; the tells are
+     rho min == max and `pWall[empty]`). So the long-time behaviour is:
+     stable to t ≈ 1.1 s (step ~1100-1150), then a free-surface degradation
+     mechanism that in **2 of 3 runs** progresses to full failure; the
+     details (NaN vs. inf-soup, exact step) are GPU-non-deterministic.
+   - `staticBlob` (nx=128, 30 steps) A/B — the goal that unblocks Part 27:
+     max |v| over the run **1.15 (alpha factor) / 1.28 (dfsph faithful
+     factor)**, both `diverged=False`, centroidDrift ~1e-9, KE ~0.033.
+     Before (Part 27, the nonlinear solve): **70.9 / inf**. The factor
+     delta is gone — the regression was the nonlinear re-summed solve,
+     exactly as Part 27's blocker analysis predicted. The residual |v|~1.1
+     blob slosh is **pre-existing** (it was 70.9 before the factor change;
+     the blob's initial state, like the column's, has no standing
+     over-compression for the one-sided pressure to hold) — a separate,
+     smaller limitation.
+   - 20/20 incompressible tests (`tests/test_incompressibleKrylov.py`) pass;
+     the change is inside `dfsphReference` only.
+
+   **What remains (both are step 3 / step 5 territory, not step 4).**
+   (a) The late-time free-surface degradation (t ≈ 1.1 s, step ~1150; 2 of
+   3 long runs): surface particles dilute to rho_min ~0.14 and the column
+   loses integrity (blowup, or the uniform-soup collapse with inf
+   velocities). Part 26's gauge experiment (`kappa^v` held at 0 on
+   free-surface particles) was run under the old nonlinear solver and made
+   the slump faster — it is now **re-testable** under the linear solve, and
+   the reference's own guard (<7 neighbours) already removes the most
+   extreme surface rows from the DF source. A divergence check that also
+   catches the inf-velocity soup (e.g. on the trajectory's `maxVelocity` or
+   a rho min==max tell) is a one-line probe fix worth landing with it.
+   (b) The bounded but non-zero slosh in both the column (|v|max ~1.3-1.7)
+   and the blob (~1.1): the initial
+   states are not hydrostatic rest for a one-sided pressure, and nothing in
+   the scheme damps the slosh (no physical viscosity in the test config).
+   Neither is a solve-contraction failure — every solve in every sampled
+   step converged inside its budget.
+   Tolerance calibration note (deferred): the reference's eta is
+   percent-of-rho0 (1e-4·rho0 CD; 1e-3/h·rho0 DF) against the config's
+   dimensionless 5e-4/2.5e-3; the DF solve sits right at its tol
+   (err ~2.4-2.5e-3) — fine at this tol, but re-tune before tightening.
+
+   Landed by Part 29: the one-sided metric + 2D <7 guard (source, warm
+   start, metric) in `dfsphReference._jacobiSolve`, omega = 0.3, the
+   100-iteration budget override in `dfsphReference_step`, the module
+   docstrings, and the new probe
+   `scripts/probe_dfsphReferenceContraction.py`. The scheme is a
+   troubleshooting artifact (not a landed solver): `hydrostaticColumn`
+   is now stable for hundreds-to-~1100 steps instead of NaN at step 6, and
+   the Part 27 `staticBlob` regression is fixed — the next experiments are
+   the step-3 free-surface gauge under the linear solve and (if the slosh
+   matters) a damped warm start.
+
+   **Part 30 — step 3 re-run under the linear solve: the free-surface gauge
+   is a measured negative, and the runner now catches the inf-soup.**
+
+   **What landed.** (1) The Part 26 gauge, implemented in
+   `dfsphReference._jacobiSolve` under the Part 29 linear Jacobi: the
+   divergence solve holds `kappa^v` = 0 on the rows the case's own
+   (dilated) `detectFreeSurface` flags (124-177 of 465 fluid rows, 27-38%,
+   matching Part 26's ~27%). Mechanically the gauge rows join the
+   reference-deficient rows — their DF source, warm start, and metric
+   residuum are zeroed — and the pressure is additionally **pinned to 0 at
+   every iteration**, so the returned field (and the warm start it carries
+   into the next step) is 0 on those rows and the final acceleration sees
+   no surface-row pressure. DF solve only — Part 26 measured that masking
+   the constant-density solve over-compresses the sub-surface layer. The
+   module flag `FREE_SURFACE_GAUGE` (default False = the Part 29 baseline)
+   and `--gauge` in both `dfsphReference` probes toggle the A/B. (2) The
+   one-line runner fix recorded in Part 29: the divergence check is
+   `~isfinite` instead of `isnan` (`runner/runner.py`), so a degenerate
+   uniform-density collapse with inf velocities is reported
+   `diverged=True` instead of running on degenerate.
+
+   **Why the pin, and what it costs.** Pinning inside the solve (not just
+   zeroing the final field) makes the interior iterate against a zero
+   Dirichlet row set — the surface rows are genuinely not unknowns — and
+   the metric zeroing keeps the pinned rows from holding the one-sided err
+   above tolerance (which would cost the solve its early exit and push it
+   to the 100-iter cap). The per-step `detectFreeSurface` cost (Barecasco
+   detection + LambdaGrad normals + 1 dilation) is what `deltaSPH` /
+   `divergenceFree` already pay every step; the 1500-step runs completed in
+   comparable wall time with the gauge on.
+
+   **A/B (measured).** `hydrostaticColumn` (nx=32), 1500 steps, 2 runs per
+   arm, sequential and uncontended (a paired 300-step pre-run was
+   concurrent and is not used for the conclusion):
+
+   | run | gauge | outcome | \|v\|max (slosh) | rho_min 201 -> 1500 |
+   |---|---|---|---|---|
+   | 1 | off | **diverged @ step 1279** — the inf-velocity soup (uniform rho 0.139), now caught by the `~isfinite` check (Part 29's run 3 reported this same face `diverged=False`) | 1.26-1.41 | 0.62 -> 0.38 -> soup 0.14 |
+   | 2 | on | completed 1500 | 1.79-2.04 | 0.60 -> 0.21 -> 0.24 |
+   | 3 | off | completed 1500 | 1.29-1.53 | 0.68 -> 0.25 (step 600) -> **recovers to 0.49** |
+   | 4 | on | completed 1500 | 1.77-2.06 | 0.51 -> 0.16 (step 800) -> 0.23 |
+
+   Read: the degradation's **onset is the same in all four runs** (~step
+   300-400) — the gauge does not delay or prevent the late-time surface
+   failure. What it does: degrade the surface **deeper** (rho_min 0.15-0.21
+   vs 0.25-0.38) and **block recovery** (gauge-on runs end 0.23-0.24; the
+   gauge-off survivor recovers to 0.49), and raise the bounded slosh
+   ~30-40%. The blow-up count (1/2 off vs 0/2 on) is inconclusive at n=2
+   against Part 29's documented 2/3 baseline and its GPU
+   non-determinism; the surface-integrity and slosh metrics, which compare
+   cleanly, consistently favour the gauge off.
+
+   **Why it is negative (the Part 26 mechanism, confirmed).** The mask's
+   benefit (keeping sampling noise out of `kappa^v`) is real but small; its
+   cost is structural — with the surface rows removed from the solve's
+   unknowns, the sub-surface layer loses the pressure support that even a
+   noisy `kappa^v` was providing, so the surface dilutes faster and never
+   heals. Part 26 saw the same sign under the nonlinear solve (faster
+   slump); Part 30 sees it under the linear solve (deeper, unrecovered
+   surface + higher slosh). The gauge is not the lever for this failure
+   mode.
+
+   **Also measured.** `staticBlob` (nx=128, 30 steps, faithful factor):
+   max |v| 1.12 (gauge on) / 1.16 (gauge off) against Part 29's 1.28 — the
+   gauge does not regress the blob (its original motivation, Part 26's
+   "jittered quiescent blob blows up", was already fixed by the linear
+   solve). 20/20 incompressible tests pass. Step-to-time mapping at nx=32
+   (for the record): dt is pinned at `maxDt = 1e-2` to ~step 30, then
+   ~0.007, so 300 steps ≈ 2.3 s and 1500 steps ≈ 10 s — Part 29's "t ≈ 1.1
+   s at step ~1150" was an estimate from the degraded-dt regime, not a
+   step-to-time contradiction.
+
+   **What remains / next.** The late-time surface degradation stands as the
+   live blocker, now with a second negative (Part 26 nonlinear, Part 30
+   linear) on the surface-mask lever. The recorded next lever is the
+   reference's **damped warm start** against the current full-`kappa`
+   carry: SPlisHSPlasH warm-starts `0.5·min(κ, cap)·scale` gated on
+   `densityAdv` instead of carrying the full field (CD cap 2.5e-4·invH², DF
+   cap 0.5·invH — exact constants to be re-verified against the source),
+   which may cap the surface accumulation both mask experiments showed is
+   the live driver.
+
+   Landed by Part 30: `FREE_SURFACE_GAUGE` + the `surfaceMask` pin in
+   `dfsphReference._jacobiSolve`, `--gauge` in `probe_dfsphReferenceColumn.py`
+   and `probe_dfsphReferenceStaticBlob.py`, the `fsGauge` count in the
+   probe DI line, the `~isfinite` divergence check in `runner/runner.py`,
+   and this record. The gauge is left in the tree (default off) so the A/B
+   can be re-run cheaply; it is not on by default.
 4. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
    landed as `dambreakTimestep`, active only under `--scheme divergenceFree`.
    Worth ~1.7x fewer steps at the case's own safe `cflFactor = 0.2`, not the
@@ -2360,15 +3088,62 @@ failing baseline), and the `relaxLattice` free-surface guard in
 
 ### What is next, concretely
 
-Item 2 is done (Part 23): `staticBlob` and `impact` pass, and
-`hydrostaticColumn` fails — the scheme cannot hold a quiescent wall-bounded
-column under gravity (the DF projection can't balance a body force and the
-constant-density support cycle is unstable there). That failure is the new
-item 3, a scheme-limitation question in its own right. With the baselines in,
-the immediate next step is **item 1: the dam-break dissipation mechanism** —
+Item 2 is done (Part 23) and item 3 is scoped (Part 24), started (Part 25),
+its divergence-solve half explored and parked (Part 26), and its factor half
+done (Part 27). The scheme cannot hold a quiescent wall-bounded column under
+gravity — but a DFSPH-proper scheme (`dfsphReference`, scaffolded) holds the
+exact hydrostatic gradient before the composed pressure primitives lose it.
+**Step 1 is done (Part 25)**: the wall-adjacent `kappa` runaway is removed by
+carrying the boundary volume at 2x (`akinciBoundaryVolumeScale`). **Step 2 is
+done (Part 27)**: the faithful DFSPH factor (`computeDFSPHFactor`, SPlisHSPlasH
+line for line) is its own kernel and wired into `dfsphReference._factor`, and
+the composed `a_p` is verified already the standard SPH pressure acceleration
+(O(N²) check, ~5e-7) — so *both* composed pressure primitives are now faithful,
+and the "Akinci boundary force as its own kernel" resolves to no new kernel.
+The re-check: the `hydrostaticColumn` slump **survives** (a modest gain,
+`|v|max` ~1.25→1.17, `rho_min` ~0.68→0.70 over 30 steps) — confirming it is
+Part 23's mechanism 1 as a *solve*-quality limit, not a formula-fidelity gap.
+
+**Step 4 is done (Part 29).** The linear SPlisHSPlasH Jacobi (Part 28, signs
+fixed) now **contracts**: the reference's one-sided compression-only metric +
+2D <7-neighbour deficiency guard were adopted, the omega sweep
+(`probe_dfsphReferenceContraction.py`) showed the reference's 0.5 is outside
+this composed operator's Jacobi window (≈[0.2, 0.35] measured — 0.5 grows
+~1.2×/iter, 0.3 decays in every (step, mode) state, 0.1/0.05 regrow late)
+and it is set to **omega = 0.3** with both budgets at the reference's **100**.
+The ratchet is gone: `hydrostaticColumn` (nx=32) runs hundreds-to-~1100 steps
+with every solve converging (2-100 iters), pressures bounded (CD ≤ ~11, DF ≤
+~10), and a bounded post-slump slosh (|v|max ~1.3-1.7); and the `staticBlob`
+A/B — the goal that unblocked the Part 27 regression — recovered:
+70.9/inf → max |v| **1.15 (alpha) / 1.28 (dfsph factor)**. Two residuals
+remain, both outside step 4: a **late-time free-surface degradation** at
+step ~1150 (surface rho_min → 0.14, then blowup or a uniform rho-0.139 soup
+with inf velocities; 2 of 3 1500-step runs fail there) — now re-tested under
+the linear solve (Part 30, below); and the bounded non-zero slosh in the
+column and the blob (initial states with no standing over-compression for a
+one-sided pressure).
+
+**Step 3's re-run under the linear solve is done (Part 30) — a measured
+negative.** Part 26's free-surface `kappa^v` gauge (hold `kappa^v` = 0 on
+`detectFreeSurface`-flagged rows, now implemented as the `FREE_SURFACE_GAUGE`
+toggle with the pressure pinned to 0 at every iteration of the linear solve)
+does not delay or prevent the late-time surface degradation — the onset is
+the same in both arms (~step 300-400) — it degrades the surface deeper,
+blocks the recovery the gauge-off survivor shows, and raises the slosh
+~30-40%. The blow-up count (1/2 off vs 0/2 on) is inconclusive at n=2. The
+runner's `~isfinite` divergence check also landed, so the inf-velocity soup
+now reports `diverged=True`.
+
+**The immediate next step is the reference's damped warm start** against the
+current full-`kappa` carry (Part 30's recorded lever): SPlisHSPlasH
+warm-starts `0.5·min(κ, cap)·scale` gated on `densityAdv` instead of
+carrying the full field (CD cap 2.5e-4·invH², DF cap 0.5·invH — re-verify
+the constants against the source), which may cap the surface accumulation
+both mask experiments showed is the live driver of the late-time failure.
+
+The other immediate step is **item 1: the dam-break dissipation mechanism** —
 the `nx` convergence of the incompressibility-cycle net on the dam break, now
 also a stability study since the default `nx = 128` diverges and Part 23 shows
-the scheme is resolution-sensitive on quiescent states too. Item 3 (the
-quiescent-column divergence) is independent of the dam break and is the
-clearer, smaller question, so it can be pursued in parallel. Items 5-7 stand
-as ranked; the rename and the scheme split (8) stay last.
+the scheme is resolution-sensitive on quiescent states too. Items 1 and 3 are
+independent and can run in parallel. Items 5-7 stand as ranked; the rename and
+the scheme split (8) stay last.

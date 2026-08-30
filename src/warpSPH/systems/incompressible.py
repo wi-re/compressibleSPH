@@ -24,7 +24,8 @@ from ..modules.shifting.delta import computeDeltaShift
 from ..modules.shifting.wrapper import solveShifting
 from torch.profiler import profile, record_function, ProfilerActivity
 
-__all__ = ['IncompressibleState', 'IncompressibleSystemUpdate', 'IncompressibleSystem']
+__all__ = ['IncompressibleState', 'IncompressibleSystemUpdate', 'IncompressibleSystem',
+           'DFSPHReferenceSystem']
 
 
 @dataclass
@@ -398,4 +399,69 @@ class IncompressibleSystem(BaseIntegrationSystem):
         # self.state.alphas.copy_(lastState.alphas)
 
         return super().finalize(initialState, dt, returnValues, updateValues, weights, *args, **kwargs)
+
+
+@dataclass
+class DFSPHReferenceSystem(IncompressibleSystem):
+    """System for `IncompressibleSPHScheme.dfsphReference` (`schemes/
+    dfsphReference.py`).
+
+    Reference DFSPH does its whole time integration *inside* the step -- two
+    pressure solves with a position advance between them -- so this system
+    turns the integrator's own update application into a no-op and copies the
+    step-advanced fields across in `finalize`. It deliberately does **not**
+    run `IncompressibleSystem.finalize`'s VD+PS block (the constant-density
+    shift solve, the Eq.-17 resample, the shifting term): those are exactly
+    what the reference scheme replaces.
+    """
+
+    def initializeNewState(self, *args, verbose=False, **kwargs):
+        state = get_reference_state(self)
+        verbosePrint(verbose, f'Initializing new state [t={self.t}]')
+        return DFSPHReferenceSystem(state=state.initializeNewState(),
+                                    adjacency=self.adjacency, t=self.t,
+                                    domain=self.domain)
+
+    # The step already integrated x, v and rho; the integrator must not add
+    # `dt * update` on top (the update is all zeros anyway, but the
+    # semi-implicit position step would otherwise fold in `dt * v_start`).
+    def apply_position_update(self, update, spec, **kwargs):
+        return self
+
+    def apply_velocity_update(self, update, spec, **kwargs):
+        return self
+
+    def apply_quantity_update(self, update, spec, **kwargs):
+        return self
+
+    def apply_state_update(self, update, spec, **kwargs):
+        return self
+
+    def finalize(self, initialState, dt, returnValues, updateValues, weights=...,
+                 *args, **kwargs):
+        self.adjacency = returnValues[-1][0]
+        lastState = returnValues[-1][1]
+        for name in ('positions', 'velocities', 'densities', 'supports',
+                     'pressures', 'soundspeeds', 'surfaceIndicators',
+                     'surfaceNormals', 'surfaceLambdas'):
+            src = getattr(lastState, name, None)
+            if src is None:
+                continue
+            dst = getattr(self.state, name, None)
+            if dst is not None and torch.is_tensor(dst) and dst.shape == src.shape:
+                dst.copy_(src)
+            else:
+                setattr(self.state, name, src.clone() if torch.is_tensor(src) else src)
+
+        schemeConfig = kwargs.get('schemeConfig', None)
+        if schemeConfig is not None:
+            for rigidBody in schemeConfig.rigidBodies:
+                rigidBody = integrateRigidBody(rigidBody, 0, 0, dt)
+                self.state = updateBodyParticlesWCSPH(self.state, rigidBody)
+
+        # Skip IncompressibleSystem.finalize entirely -- go straight to the
+        # integrator base's no-op hook.
+        return BaseIntegrationSystem.finalize(
+            self, initialState, dt, returnValues, updateValues, weights,
+            *args, **kwargs)
     

@@ -100,6 +100,7 @@ from typing import Any, Dict
 import torch
 
 from ..configurations.moduleConfigurations.gravity import GravityType
+from ..enumTypes import IncompressibleSPHScheme
 from ..modules import shuffleParticles
 from ..runner import Case, RunContext, caseMain, registerCase
 from .kolmogorovIncompressible import kolmogorovIncompressibleTimestep
@@ -187,7 +188,17 @@ def initialConditions(ctx: RunContext, system) -> None:
     p = torch.clamp(p, min=0.0)
     if ctx.param('wallPressure') == 'zero':
         p = torch.where(fluid, p, torch.zeros_like(p))
-    particles.pressures = p - p[fluid].mean()
+    # `dfsphReference` (DFSPH proper) carries a *non-negative* pressure/kappa
+    # and warm-starts its constant-density solve from it directly, so it wants
+    # the raw hydrostatic profile (0 at the surface, rho0 g H at the floor).
+    # `divergenceFree` (VD+PS) re-centres the fluid pressure to zero mean every
+    # iteration, so it is initialised at that shifted profile instead -- a raw
+    # start would open a fluid-vs-wall jump of the mean's size. See the module
+    # docstring.
+    if ctx.scheme is IncompressibleSPHScheme.dfsphReference:
+        particles.pressures = p
+    else:
+        particles.pressures = p - p[fluid].mean()
 
     ctx.scratch['initialPositions'] = positions.clone()
 

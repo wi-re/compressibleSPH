@@ -47,14 +47,15 @@ __all__ = ['solveIncompressible']
 
 
 def _solveIncompressibleImpl(
-    
-        particles: Any, 
-        config: SimulationConfig, 
-        schemeConfig: Any, 
-        adjacency: Optional[Union[AdjacencyList, CompactHashMap]], 
+
+        particles: Any,
+        config: SimulationConfig,
+        schemeConfig: Any,
+        adjacency: Optional[Union[AdjacencyList, CompactHashMap]],
         dvdt: torch.Tensor,
         dt : float,
-        verbose: bool = False        
+        verbose: bool = False,
+        warmStartPressure: Optional[torch.Tensor] = None,
 ):
         minIters = schemeConfig.solverConfig.pressureSolver.minIterations
         maxIters = schemeConfig.solverConfig.pressureSolver.maxIterations
@@ -197,7 +198,17 @@ def _solveIncompressibleImpl(
                 if surface is not None and bool((surface > 0.5).any()):
                         gauge = ShiftPressureGauge.nonNegativeClamp
 
-        pressureA = particles.pressures.clone() * 0.
+        # Warm start. Historically this solve starts cold every step
+        # (`* 0.`), which is fine for the position-shift application -- the
+        # shift is a one-shot displacement -- but wrong for a velocity-coupled
+        # application (`ShiftApplication.inStepVelocity`): a standing pressure
+        # field (a hydrostatic column) then has to be rebuilt from zero every
+        # step and the column falls before it is supported. When the caller
+        # passes the previous step's constant-density pressure, start from it.
+        if warmStartPressure is not None:
+                pressureA = warmStartPressure.clone()
+        else:
+                pressureA = particles.pressures.clone() * 0.
         pressureA = torch.where(fluidMask, pressureA, boundaryPressure)
         pressureB = pressureA.clone()
 
@@ -309,9 +320,15 @@ def solveIncompressible(
         dvdt: torch.Tensor,
         dt: float,
         verbose: bool = False,
+        warmStartPressure: Optional[torch.Tensor] = None,
 ):
         """Thin wrapper that puts `kind != 0` rows into the boundary state the
         active `BoundaryPressureMode` calls for, then runs the solve.
+
+        `warmStartPressure` (optional): a per-particle field to seed the
+        relaxed-Jacobi iterate with instead of the historical cold `0` start --
+        see `_solveIncompressibleImpl`. The caller owns carrying it across
+        steps.
 
         Only `BoundaryPressureMode.consistent` changes anything: it enters the
         solve with boundary densities pinned at `rho0` (Bender/Westhofen/Jeske
@@ -324,4 +341,5 @@ def solveIncompressible(
                        BoundaryPressureMode.mdbcDensity)
         with applyConsistentCoupling(particles, config, schemeConfig, adjacency, mode):
                 return _solveIncompressibleImpl(
-                        particles, config, schemeConfig, adjacency, dvdt, dt, verbose)
+                        particles, config, schemeConfig, adjacency, dvdt, dt, verbose,
+                        warmStartPressure=warmStartPressure)

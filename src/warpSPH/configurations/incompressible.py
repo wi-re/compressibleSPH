@@ -169,7 +169,9 @@ def incompressibleConfigToDict(config: IncompressibleSPHConfig) -> Dict[str, Any
             'boundaryPressureMode': config.solverConfig.boundaryPressureMode.name,
             'mdbcPressureRelaxation': config.solverConfig.mdbcPressureRelaxation,
             'mdbcNoPenetrationShift': config.solverConfig.mdbcNoPenetrationShift,
+            'warmStartConstantDensity': config.solverConfig.warmStartConstantDensity,
             'akinciBoundaryVolume': config.solverConfig.akinciBoundaryVolume,
+            'akinciBoundaryVolumeScale': config.solverConfig.akinciBoundaryVolumeScale,
             'shiftPressureGauge': config.solverConfig.shiftPressureGauge.name,
             'shiftApplication': config.solverConfig.shiftApplication.name,
         }
@@ -303,8 +305,12 @@ def dictToIncompressibleSPHConfig(configDict: Dict[str, Any]) -> IncompressibleS
             'mdbcPressureRelaxation', buildDefaultIncompressibleSolverConfig().mdbcPressureRelaxation),
         mdbcNoPenetrationShift=solverConfigDict.get(
             'mdbcNoPenetrationShift', buildDefaultIncompressibleSolverConfig().mdbcNoPenetrationShift),
+        warmStartConstantDensity=solverConfigDict.get(
+            'warmStartConstantDensity', buildDefaultIncompressibleSolverConfig().warmStartConstantDensity),
         akinciBoundaryVolume=solverConfigDict.get(
             'akinciBoundaryVolume', buildDefaultIncompressibleSolverConfig().akinciBoundaryVolume),
+        akinciBoundaryVolumeScale=solverConfigDict.get(
+            'akinciBoundaryVolumeScale', buildDefaultIncompressibleSolverConfig().akinciBoundaryVolumeScale),
         shiftPressureGauge=_shiftPressureGauge(solverConfigDict),
         shiftApplication=_shiftApplication(solverConfigDict),
     )

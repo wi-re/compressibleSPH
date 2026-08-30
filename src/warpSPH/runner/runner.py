@@ -310,8 +310,12 @@ def _run(case: Case, spec: CaseSpec, startedAt: float) -> RunResult:
         # scheme's is `v` (tagged `'velocity'` so it rides the same
         # position/velocity integrator machinery under a different name).
         velocities = get_tagged_attr(runningState.state, tag='velocity')
-        if torch.any(torch.isnan(velocities)):
-            print(f'NaN detected in velocities at step {i}; stopping.')
+        # `isfinite` (not `isnan`): the dfsphReference late-time failure can
+        # collapse into a degenerate uniform-density state with inf velocities
+        # (DFSPH_IMPROVEMENT_PLAN.md Part 29) where no NaN ever appears and
+        # the run would otherwise report `diverged=False`.
+        if torch.any(~torch.isfinite(velocities)):
+            print(f'non-finite velocities detected at step {i}; stopping.')
             result.diverged = True
             break
 

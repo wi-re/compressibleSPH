@@ -53,7 +53,7 @@ __all__ = ['applyConsistentCoupling', 'akinciBoundaryMass']
 
 
 def akinciBoundaryMass(particles: Any, config: Any, adjacency: Any,
-                       rho0: float) -> torch.Tensor:
+                       rho0: float, scale: float = 1.0) -> torch.Tensor:
     """Akinci et al.'s boundary mass `m~_k = rho0 / sum_l W_kl`, `l` over the
     *boundary* neighbours of `k` (the paper's Section 3.3).
 
@@ -65,7 +65,11 @@ def akinciBoundaryMass(particles: Any, config: Any, adjacency: Any,
     This codebase samples a five-layer band, so the layers behind the
     interface already supply that volume and the correction inflates the
     interface layer instead -- which is why it is a separate, default-off
-    flag rather than part of the mode.
+    flag rather than part of the mode. On that band `sum_l W_kl` comes out
+    large enough that `m~_k` is numerically indistinguishable from the nominal
+    particle volume (`DFSPH_IMPROVEMENT_PLAN.md` Part 25), so the correction is
+    effectively inert; `scale` is an explicit multiplier for callers that need
+    the boundary term carried at a different weight (`dfsphReference` uses 2.0).
     """
     inv = particles.densities / particles.masses
     kernelSum = warpOperation(
@@ -83,24 +87,26 @@ def akinciBoundaryMass(particles: Any, config: Any, adjacency: Any,
     # not be a landmine, so anything without a real boundary neighbourhood
     # falls back to its nominal mass.
     usable = kernelSum > (0.1 * particles.densities / particles.masses.clamp(min=1e-30))
-    return torch.where(usable, rho0 / kernelSum.clamp(min=1e-12), particles.masses)
+    return scale * torch.where(usable, rho0 / kernelSum.clamp(min=1e-12), particles.masses)
 
 
 @contextmanager
 def applyConsistentCoupling(particles: Any, config: Any, schemeConfig: Any,
                             adjacency: Any, mode: BoundaryPressureMode):
-    """Put `kind != 0` rows into the paper's boundary state for the duration of
-    a pressure solve, and restore them on the way out.
+    """Put `kind == 1` (Boundary) rows into the paper's boundary state for the
+    duration of a pressure solve, and restore them on the way out. `kind == 2`
+    (Ghost) rows are left alone -- they are mDBC evaluation points, not
+    interacting particles.
 
     A no-op unless `mode is BoundaryPressureMode.consistent`, and a no-op in
-    any case when there are no static particles.
+    any case when there are no boundary particles.
     """
     if mode is not BoundaryPressureMode.consistent:
         yield
         return
 
-    fluid = particles.kinds == 0
-    if bool(fluid.all()):
+    boundary = particles.kinds == 1
+    if not bool(boundary.any()):
         yield
         return
 
@@ -110,14 +116,28 @@ def applyConsistentCoupling(particles: Any, config: Any, schemeConfig: Any,
     try:
         # "we assume that they have the same rest density rho0 as the fluid
         # since we treat these particles as static fluid particles" (Sec. 3.3).
+        # `kind == 1` only -- NOT `kind != 0`: `kind == 2` ghost particles are
+        # mDBC evaluation points, not interacting particles (they are excluded
+        # from every neighbour sum by `OperationDirection.AllToAll`), and the
+        # paper has no notion of them. Overwriting their density is inert today
+        # but wrong in principle, and a landmine for any future kernel that
+        # does read ghost rows.
         particles.densities = torch.where(
-            fluid, savedDensities, torch.full_like(savedDensities, rho0))
+            boundary, torch.full_like(savedDensities, rho0), savedDensities)
+        volScale = float(getattr(schemeConfig.solverConfig,
+                                 'akinciBoundaryVolumeScale', 1.0))
         if getattr(schemeConfig.solverConfig, 'akinciBoundaryVolume', False):
-            psi = akinciBoundaryMass(particles, config, adjacency, rho0)
+            psi = akinciBoundaryMass(particles, config, adjacency, rho0, scale=volScale)
             # `kind == 1` only: ghost particles are an mDBC construct with no
             # counterpart in the paper, and they have no boundary neighbourhood
             # to compute a volume correction from.
             particles.masses = torch.where(particles.kinds == 1, psi, savedMasses)
+        elif volScale != 1.0:
+            # No Akinci substitution, but the caller still wants the boundary
+            # apparent volume the solve sees reweighted -- scale the nominal
+            # mass directly (`kind == 1` only). Strict no-op at the default 1.0.
+            particles.masses = torch.where(
+                particles.kinds == 1, savedMasses * volScale, savedMasses)
         yield
     finally:
         particles.densities = savedDensities

@@ -203,6 +203,21 @@ def dfsph_step(
     # dissipation it shows on `tgv`. See `ShiftApplication`'s docstring.
     dvdt_inStep = None
     if schemeConfig.solverConfig.shiftApplication is ShiftApplication.inStepVelocity:
+        # `warmStartConstantDensity`: seed this solve from the previous step's
+        # constant-density pressure (carried on the unused `soundspeeds`) rather
+        # than the cold zero start. MEASURED NEGATIVE (Part 24): on
+        # `hydrostaticColumn` a warm start on `solveIncompressible` *as it
+        # stands* -- two-sided source, 0.9 rhoStar clamp, linear operator,
+        # nonNegativeClamp gauge -- NaNs by step 13 (the linear operator's wall
+        # truncation inflates kappa, and the warm start feeds it). It only helps
+        # paired with the one-sided / per-iteration-resummed inner loop the
+        # `dfsphReference` scheme uses. Kept as an off-by-default hook.
+        _cdWarm = None
+        _cdWS = getattr(schemeConfig.solverConfig, 'warmStartConstantDensity', False)
+        if _cdWS:
+            _s = getattr(currentState, 'soundspeeds', None)
+            if _s is not None and _s.shape == currentState.densities.shape:
+                _cdWarm = _s
         dvdt_inStep, _p_incomp, _e_incomp, _ps_incomp = solveIncompressible(
             particles = currentState,
             config = config,
@@ -210,7 +225,10 @@ def dfsph_step(
             adjacency = adjacency,
             dvdt = dvdt + dvdt_diss + dvdt_pressure,
             dt = dt,
+            warmStartPressure = _cdWarm,
         )
+        if _cdWS:
+            currentState.soundspeeds = _p_incomp.detach()
 
     # To resolve the issues with particle disorder and clustering, we can also solve for the incompressible pressure using the Incompressible SPH solver
     # This effectively acts as a particle shifting term that helps to maintain particle order and prevent clustering
