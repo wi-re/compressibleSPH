@@ -2197,6 +2197,119 @@ next instrument (an `nx` convergence of the cycle's net on this same case).
 Landed: `scripts/probe_dambreakEnergyBudget.py` (the per-step / per-window /
 per-bin budget above). No config or default changed.
 
+### Part 23, the baseline cases — the scheme holds free space and the collision, but cannot hold a quiescent hydrostatic column
+
+Item 2 from "What is left, in order": the three baseline correctness cases
+for `divergenceFree`, required before the dam-break mechanism question (item
+1) is worth compute. All three are new for the scheme (the existing
+`hydrostatic` case is the compressible density-jump test, not this). They are
+run to their full `tLimit = 1.0` at `nx = 64` by
+`scripts/run_baseline_cases.py`.
+
+**A setup finding first: the constant-density pre-relaxation cannot be run on
+a free-surface state.** `tgv` and `shearWave` settle their ICs with
+`relaxLattice` before the run. On a state with a free surface that
+pre-relaxation is actively harmful: it drives the surface layer toward the
+constant-density solve's `0.9` clamp floor, i.e. it compacts the surface.
+Measured directly (the `relaxLattice` loop stepped on a `staticBlob` state):
+step 0 shifts the surface particles `0.11` — 11% of the `L = 1.0` domain,
+`|a|max = 1.1e5`; step 1 the shift explodes to `1.24e12` and the positions
+stay at `1.2e12`. The free-surface density deficit (`~0.45-0.62`) is below
+the `0.9` clamp floor, so the solve sees a permanent compaction source at the
+surface and there is no equilibrium to relax to. The two free-space baselines
+(`staticBlob`, and the `hydrostaticColumn` IC) therefore use jitter-only ICs
+(`shuffleParticles`, `shiftIters = 0`, no `relaxLattice`), and `relaxLattice`
+now raises `ValueError` if the post-relaxation `minDensity < 0.9 * rho0` so a
+caller cannot silently repeat this (see the `caseUtils/incompressible.py`
+docstring).
+
+**Case 1 — `staticBlob`: PASS.** A square blob in periodic free space, no
+gravity, no forcing, jittered lattice. Over `tLimit = 1.0` (101 steps): max
+velocity is exactly `0` at every step (the DF projection of a zero-source,
+zero-divergence state is the zero field), centroid drift is numerically zero
+(`~1e-9` to `1e-10`), and the max displacement is `9.25e-4` — the jitter
+scale, i.e. the particles stay where the jitter put them. The density band
+(`min 0.467` at the blob's sharp corners, `max 1.029`) is the free-surface +
+corner kernel deficit, steady over the whole run. Nothing moves. The scheme
+holds a quiescent free-space state.
+
+**Case 2 — `impact`: PASS (IC reproduces the WC outcome).** The
+weakly-compressible `impact` case (two blobs, initial gap `0.5625`, closing
+velocity `0.5`) ported to `divergenceFree` via `configureScheme` (physical
+viscosity, no artificial viscosity) and `impactTimestep` (Bender & Koschier's
+advective CFL, active only under `divergenceFree`). IC run
+(`semiImplicitEuler`, 101 steps): the gap closes monotonically
+`0.5625 -> 0.322 -> 0.0615 -> 0.0223 -> 0.0006` (at `t = 0.99`), the blobs
+merge, max velocity peaks at `1.413` and relaxes to `0.86`, the density band
+stays `0.957-1.017`, and the COM drift is `~1.8e-7`. The WC reference
+(`deltaSPH`, fixed `dt`, 2001 steps): the gap closes to `0.0023` at
+`t = 0.525` (contact), then the blobs oscillate and rebound, the gap
+oscillating `0 -> 0.02`, final `0.014`, max velocity `1.611`. The IC run
+reaches contact earlier and more completely (it merges; the WC run rebounds
+off the compressive spike) — the expected difference, incompressible has no
+compressive rebound — but both are stable and reproduce the collision-and-
+merge physics. The scheme handles a dynamic free-surface impact.
+
+**Case 3 — `hydrostaticColumn`: FAIL (the scheme diverges).** A wall-bounded
+column at rest under gravity (`fillRatio = 0.5`, `g = 9.81`), IC the exact
+at-rest state (fluid *and* wall pressure the analytic hydrostatic profile in
+the DF gauge, so the run grades whether the scheme *maintains* the balance).
+It does not: the column falls and flies apart. At `nx = 64` (adaptive `dt`)
+the run does not reach NaN/Inf by `t = 1`, but it is grossly unphysical by
+step ~25 — max velocity `14` (peaking at `73`), displacements up to `1.35` in
+a `1.0` domain, the fitted pressure slope reaching `280x` the hydrostatic
+value, and the pressure field departing from a straight line by `638x` the
+column's own pressure drop. At `nx = 32` (fixed `dt = 1e-2`) it hits NaN/Inf
+within ~5-8 steps. This is the limitation the case exists to expose.
+
+**Why the scheme fails it.** Two coupled mechanisms, both specific to the
+quiescent, wall-bounded, free-surface-under-gravity state (per-step
+`scripts/probe_hydrostaticColumn.py`, `nx = 32`):
+
+1. **The DF projection cannot balance a uniform body force.** Its source is
+   `-div(v*)`, and the mDBC operator's divergence of the gravity-driven
+   `v* = dt*g` is *exactly* `0` — the `freeSlip` wall projects the normal
+   component out, so it is velocity-transparent to uniform normal motion, and
+   a uniform field is divergence-free. The solver's logged source term is `0`
+   and a direct `|div v*|` measurement confirms it. So the DF solve's correct
+   solution for this source is a flat pressure field (step-0 output slope
+   `+0.14`, i.e. flat) — it enforces `div v = 0` and, for a uniform `v*`, has
+   no source to act on, so it cannot produce the hydrostatic pressure that
+   would oppose gravity. The column's support must come from the
+   constant-density solve's fall-and-push-back cycle instead.
+2. **That cycle is unstable here.** (a) The DF Jacobi carries a
+   boundary-layer mode the mean-residual convergence test cannot see: the
+   per-iteration mean residual decays toward the tolerance while the
+   wall/surface-adjacent pressure amplitude grows monotonically (step 0:
+   residual `0.125 -> 0.010` across the full 32-iteration budget, while
+   pressure `min -2.3 -> -7.8`, `max 3.9 -> 6.1`), and the `0.75x` warm start
+   of the large hydrostatic gradient feeds it every step — so each step's
+   early exit is clean on the mean and locally divergent. (b) The
+   constant-density solve's pressure drifts under the `nonNegativeClamp`
+   gauge — the free-surface guard downgrades `minShift` to the clamp, which
+   does not pin the constant null mode — compounding the free-surface
+   compaction. `|div v'| / |div v*|` is `4.3` at step 1 (amplification, not
+   damping) and `|a_p|max` grows `35 -> 35 -> 49 -> 79 -> 2549` over the
+   first five steps.
+
+**A/B: it is not a config or IC choice.** A zero initial pressure
+(`--zeroIC`) diverges more slowly but still diverges (vMax
+`0.01 -> 0.12 -> 0.35 -> 0.59 -> 0.82 -> 1.05 -> 1.25`); `inStepVelocity`
+diverges *faster* (vMax `225` at step 4, NaN at step 5); `forceGauge`
+(keeping `minShift` on the free surface) diverges (vMax `0.04 -> 8.6`, NaN at
+step 8). The failure is a fundamental scheme limitation on this state, not an
+artifact of the defaults or the initialisation. Contrast: `staticBlob` (no
+walls, no gravity, quiescent) and the dynamic `impact` and dam break all
+hold — it is specifically the quiescent + gravity + wall + free-surface
+combination that fails.
+
+Landed: `scripts/run_baseline_cases.py` (the three cases to `tLimit` with the
+stability summary), `scripts/probe_hydrostaticColumn.py` (the per-step
+divergence-free / constant-density / boundary-shift diagnostics), the three
+cases `staticBlob`, `impact` (port), and `hydrostaticColumn` (kept as the
+failing baseline), and the `relaxLattice` free-surface guard in
+`caseUtils/incompressible.py`. No scheme config or default changed.
+
 ### What is left, in order
 
 1. **Explain the dam break's dissipation** (Part 19). **The channel is
@@ -2213,46 +2326,49 @@ per-bin budget above). No config or default changed.
    constraint is open. An `nx` convergence of the cycle's net on this same case
    is the natural next instrument — but the case's default `nx = 128` diverges
    mid free-fall (§2), so the resolution-dependence is a stability problem as
-   much as a dissipation question, and item 2 comes first.
-2. **Baseline test cases for `divergenceFree`** — required before the
-   dam-break mechanism question is worth compute: the default-`nx` divergence
-   (§2) and the free-surface/boundary clustering at `nx = 64` mean the scheme's
-   basic correctness is not yet established. Three cases, all new for
-   `divergenceFree` (the existing `hydrostatic` is the compressible
-   density-jump test, not this):
-   1. **Square blob in free space** — no gravity, no forcing, no initial
-      velocity. Nothing should happen: the blob stays put, no spurious
-      velocities or drift. Figure of merit: max velocity stays ~0, shape
-      unchanged.
-   2. **Two-blob impact** — port the weakly-compressible `impact` case (two
-      spheres / two boxes colliding) to `divergenceFree`. The collision should
-      reproduce the WC case's outcome, not pair or explode.
-   3. **Hydrostatic pressure** — a fluid with gravity in a container. Nothing
-      much should happen: velocities stay ~0 and the pressure is the sensible
-      hydrostatic profile, not the spurious free-surface pressure noise.
-3. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
+   much as a dissipation question; with the baselines in (item 2, Part 23),
+   this is now the immediate next step.
+2. ~~**Baseline test cases for `divergenceFree`**~~ **Done (Part 23)** — the
+   three cases landed (`staticBlob`, `impact`, `hydrostaticColumn`) and were
+   run to `tLimit = 1.0` at `nx = 64`. `staticBlob` (free space) and `impact`
+   (collision, reproducing the WC outcome) **pass**; `hydrostaticColumn`
+   (quiescent column under gravity) **fails** — the scheme diverges (Part 23),
+   which surfaces item 3.
+3. **The quiescent hydrostatic column diverges** (Part 23, new). The
+   `divergenceFree` scheme cannot hold a quiescent, wall-bounded,
+   free-surface-under-gravity state: the DF projection's source is exactly `0`
+   for the uniform gravity velocity, so it cannot balance a body force, and the
+   constant-density support cycle that must carry the load is unstable there
+   (a DF Jacobi boundary-layer mode invisible to the mean residual, plus
+   `nonNegativeClamp` gauge drift and free-surface compaction). The
+   `inStepVelocity` / `forceGauge` / zero-IC A/Bs confirm it is a scheme
+   limitation, not a config or IC artifact. Open: whether any configuration of
+   the two-solve structure holds this state, or whether the scheme needs a
+   change before a quiescent hydrostatic case is a usable baseline.
+4. ~~Give `dambreak` an incompressible `timestep` hook.~~ **Done (Part 20)** —
    landed as `dambreakTimestep`, active only under `--scheme divergenceFree`.
    Worth ~1.7x fewer steps at the case's own safe `cflFactor = 0.2`, not the
    ~5x guessed, and not free (`rho_max` 1.105 against the fixed-`dt`
    baseline's 1.004) — see Part 20 for why the published 0.4 diverges here.
-4. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
+5. **Grade `shearWave` against [C]'s Fig. 3 and Fig. 4** (§4 item 8's
    remainder). Blocked on the paper — `literature/MANIFEST.md`.
-5. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
+6. **Warm-start the divergence-free solve** (§4 item 9, split by Part 15).
    Unblocked; do **not** warm-start the constant-density solve.
-6. **Re-measure the divergence-free half-state's contraction** under `minShift`
+7. **Re-measure the divergence-free half-state's contraction** under `minShift`
    (§4 item 3) — still the one mechanism observed and never explained.
-7. **Then** the rename and the scheme split.
+8. **Then** the rename and the scheme split.
 
 ### What is next, concretely
 
-Item 1's channel is named (Part 22) — the incompressibility cycle, at the
-impact. But the dam break diverges at its default `nx = 128` (§2) and even
-`nx = 64` shows clustering and distortion at the free surface and boundary, so
-the immediate next step is **item 2: the baseline test cases** — a free-space
-square blob that should not move, a two-blob impact that should reproduce the
-WC `impact` outcome, and a hydrostatic column whose pressure should be
-sensible. Before those pass (or their failures are understood), a
-full-resolution incompressible dam break is not worth compute, and item 1's
-`nx` convergence — now also a stability study, since the default resolution
-diverges — waits. Items 4-6 stand as ranked; the rename and the scheme split
-(7) stay last.
+Item 2 is done (Part 23): `staticBlob` and `impact` pass, and
+`hydrostaticColumn` fails — the scheme cannot hold a quiescent wall-bounded
+column under gravity (the DF projection can't balance a body force and the
+constant-density support cycle is unstable there). That failure is the new
+item 3, a scheme-limitation question in its own right. With the baselines in,
+the immediate next step is **item 1: the dam-break dissipation mechanism** —
+the `nx` convergence of the incompressibility-cycle net on the dam break, now
+also a stability study since the default `nx = 128` diverges and Part 23 shows
+the scheme is resolution-sensitive on quiescent states too. Item 3 (the
+quiescent-column divergence) is independent of the dam break and is the
+clearer, smaller question, so it can be pursued in parallel. Items 5-7 stand
+as ranked; the rename and the scheme split (8) stay last.

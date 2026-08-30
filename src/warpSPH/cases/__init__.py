@@ -46,6 +46,8 @@ CASE_MODULES = (
     'kolmogorovIncompressible',
     'randomFlowIncompressible',
     'shearWave',
+    'staticBlob',
+    'hydrostaticColumn',
     # non-fluid demo -- see WAVE_EQUATION_PLAN.md
     'waveEquation',
 )

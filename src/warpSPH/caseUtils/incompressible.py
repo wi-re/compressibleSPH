@@ -38,6 +38,14 @@ def relaxLattice(ctx, system, steps: int, dt: float, jitter: float) -> None:
     velocities zeroed, displacing positions by `dt**2 * a_p` each time, then
     copies the relaxed positions back onto `system.state`. A no-op when
     `steps` is 0.
+
+    Not for free-surface states: the solve's source is `rho0 - rhoStar` with
+    `rhoStar` clamped at `0.9`, so a surface layer (which legitimately reads
+    ~0.5) is driven toward that floor every step. On a surface state the
+    shifts are O(10%) of the domain per step and the blob collapses within a
+    few steps (`DFSPH_IMPROVEMENT_PLAN.md` Part 23) -- the guard below fails
+    loudly instead. Jitter only (`shuffleParticles` with `shiftIters=0`) is
+    the safe setup for those.
     """
     if not steps:
         return
@@ -47,11 +55,30 @@ def relaxLattice(ctx, system, steps: int, dt: float, jitter: float) -> None:
     from ..modules import computeDensities, shuffleParticles, solveIncompressible
 
     state = system.initializeNewState()
+    # `dfsph_step` allocates the pressure array on the first step it runs
+    # (see `schemes/dfsph.py`); a region-built system has not stepped yet, so
+    # give its scratch state one the same way, otherwise the `pressures[:] = 0.0`
+    # below has nothing to write into.
+    if state.state.pressures is None:
+        state.state.pressures = torch.zeros_like(state.state.densities)
     state.state.positions = shuffleParticles(state.state, ctx.config, ctx.schemeConfig, 0,
                                              jitterAmount=jitter)
     state.state.velocities = torch.zeros_like(state.state.velocities)
 
-    adjacency = None
+    adjacency = buildVerletList(state.state, ctx.config.domain, verletScale=1.4,
+                                supportMode=SupportScheme.SuperSymmetric,
+                                priorNeighborhood=None, verbose=False)
+    state.state.densities = computeDensities(state.state, ctx.config, ctx.schemeConfig,
+                                             adjacency)
+    rho0 = ctx.schemeConfig.fluid.restDensity
+    minDensity = state.state.densities.min().item()
+    if minDensity < 0.9 * rho0:
+        raise ValueError(
+            f'relaxLattice: the jittered state has a free surface '
+            f'(min density {minDensity:.4g} < 0.9 * rho0 = {0.9 * rho0:.4g}); the '
+            f'constant-density solve would compact it toward the clamp floor. '
+            f'Jitter only instead (shuffleParticles with shiftIters=0).')
+
     # `progress` is tri-state (None = auto), so resolve it the same way the
     # runner's own loop does rather than treating None as false.
     showProgress = ctx.spec.progress

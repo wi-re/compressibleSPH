@@ -26,6 +26,32 @@ their velocities as a mirrored pair (or an N-fold symmetric ring) -- so the
 collision stays in the middle of the box, and what the run shows is the
 free-surface deformation rather than a drifting blob.
 
+Running it under the incompressible scheme
+------------------------------------------
+
+`--scheme divergenceFree` is supported, as baseline case 2 of
+`DFSPH_IMPROVEMENT_PLAN.md`'s "what is left" item 2: the collision should
+reproduce the weakly-compressible outcome -- the bodies meet in the middle and
+merge into one central blob -- not pass through each other or explode. Two
+things the `deltaSPH` path does not need:
+
+- **Pass `--integrationScheme semiImplicitEuler`.** This case defaults to
+  `rungeKutta2`, and the pressure-projection derivation is specific to
+  semi-implicit Euler: a multi-stage integrator solves each stage as if it were
+  final and then blends, so the blended velocity is not divergence-free.
+  Nothing in the code enforces this yet (same as `dambreak`).
+- **`impactTimestep` gives `--scheme divergenceFree` Bender & Koschier's
+  advective CFL** instead of inheriting the weakly-compressible acoustic `dt`
+  that `setupTimestep` fixes once at setup (DFSPH has no acoustic term).
+  `deltaSPH` runs are untouched -- the hook returns `config.dt` unchanged for
+  every other scheme, the same pattern `dambreakTimestep` uses.
+
+The collision itself is scheme-agnostic: `gap` (nearest particle-to-particle
+distance between the two bodies, by `materials`) and `comDrift` (the fluid
+centre of mass away from its initial value) are reported by `diagnostics`
+under both schemes, which is what makes the WC-vs-incompressible comparison
+the same two columns in two runs.
+
 Parameters, in the order they are applied:
 
 ===================  ======================================================
@@ -54,7 +80,9 @@ from typing import Any, Dict, List
 
 import torch
 
+from ..enumTypes import IncompressibleSPHScheme
 from ..runner import Case, RunContext, caseMain, registerCase
+from .kolmogorovIncompressible import kolmogorovIncompressibleTimestep
 from .plotting import Field, particlePlot
 from .weaklyCompressible import (WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  WEAKLY_COMPRESSIBLE_PARAMS, buildRegionSystem,
@@ -62,7 +90,7 @@ from .weaklyCompressible import (WEAKLY_COMPRESSIBLE_DEFAULTS,
                                  paramExtraData, setupTimestep, shapeArgs,
                                  weaklyCompressibleDiagnostics)
 
-__all__ = ['impactCase', 'IMPACT_FIELDS', 'bodySpecs']
+__all__ = ['impactCase', 'IMPACT_FIELDS', 'bodySpecs', 'impactTimestep']
 
 #: The two panels both impact notebooks plotted. `flare` rather than
 #: `VELOCITY_DENSITY_FIELDS`' `RdBu`, which is what they had.
@@ -175,6 +203,22 @@ def _velocityField(velocity, spin: float):
     return field
 
 
+def configureScheme(ctx: RunContext) -> None:
+    configureWeaklyCompressible(ctx)
+    if ctx.scheme is not IncompressibleSPHScheme.divergenceFree:
+        return
+    # `configureWeaklyCompressible` wires the shared `inviscid`/`alpha`
+    # (artificial-viscosity) knobs `deltaSPH` uses; DFSPH has no such term
+    # (see `kolmogorovIncompressible`), so with the WC default `inviscid=True`
+    # the Monaghan-style term would run scaled by the WC sound speed
+    # `setupTimestep` derives -- a dissipation this scheme was not given.
+    # Same override `randomFlowIncompressible` makes.
+    schemeConfig = ctx.schemeConfig
+    schemeConfig.diffusionParams.inviscid = False
+    schemeConfig.diffusionParams.viscidNu = ctx.param('nu')
+    schemeConfig.bandwith = ctx.spec.L / ctx.param('bandWidth') / ctx.config.dx
+
+
 def buildSystem(ctx: RunContext):
     bodies = bodySpecs(ctx)
     domain = ctx.config.domain
@@ -232,25 +276,77 @@ def initialConditions(ctx: RunContext, system) -> None:
     """
     setupTimestep(ctx, system)
 
+    # The `comDrift` figure of merit is measured from the centre of mass the
+    # mirrored placement actually produces (exactly zero up to one stray
+    # particle's worth of sampling error), not from the nominal origin.
+    particles = system.state
+    fluid = particles.kinds == 0
+    ctx.scratch['initialCenterOfMass'] = (
+        particles.positions[fluid] * particles.masses[fluid, None]).sum(dim=0) \
+        / particles.masses[fluid].sum()
+
+
+def impactTimestep(ctx: RunContext, state) -> float:
+    """Bender & Koschier's advective CFL, but only under `--scheme
+    divergenceFree`.
+
+    `deltaSPH`'s own dt is fixed once, at setup, by `setupTimestep` in
+    `initialConditions` above -- nothing in the run loop revisits `config.dt`
+    for a case without a `timestep` hook, so returning it unchanged here
+    reproduces that path exactly. `divergenceFree` has no acoustic term and
+    needs a real advective dt instead, which is
+    `kolmogorovIncompressibleTimestep`'s formula, reused as-is the same way
+    `dambreakTimestep` reuses it.
+    """
+    if ctx.scheme is not IncompressibleSPHScheme.divergenceFree:
+        return ctx.config.dt
+    return kolmogorovIncompressibleTimestep(ctx, state)
+
 
 setupPlot, updatePlot = particlePlot(IMPACT_FIELDS)
 
 
 def diagnostics(ctx: RunContext, state) -> Dict[str, float]:
-    return weaklyCompressibleDiagnostics(ctx, state)
+    d = weaklyCompressibleDiagnostics(ctx, state)
+    particles = state.state
+    fluid = particles.kinds == 0
+    if fluid.sum() == 0:
+        return d
+
+    # `materials` is the region's index in its type's list, assigned by
+    # `initializeState` -- so for the `pair` arrangement (two fluid regions)
+    # it labels the bodies. The `gap` is the nearest particle-to-particle
+    # distance between them: it starts at the surface gap, closes to ~`dx` at
+    # contact, and hovers there afterwards once the bodies have merged, which
+    # is exactly the collision signature the case exists to grade.
+    materials = particles.materials[fluid]
+    if materials.unique().numel() == 2:
+        posA = particles.positions[fluid & (particles.materials == 0)]
+        posB = particles.positions[fluid & (particles.materials == 1)]
+        d['gap'] = torch.cdist(posA, posB).min().detach().cpu().item()
+
+    com0 = ctx.scratch.get('initialCenterOfMass')
+    if com0 is not None:
+        com = (particles.positions[fluid]
+               * particles.masses[fluid, None]).sum(dim=0) \
+            / particles.masses[fluid].sum()
+        d['comDrift'] = torch.linalg.norm(com - com0).detach().cpu().item()
+    return d
 
 
 impactCase = registerCase(Case(
     name='impact',
     scheme='deltaSPH',
-    description='Impact of two or more fluid bodies (2D), weakly compressible deltaSPH.',
+    description='Impact of two or more fluid bodies (2D), weakly compressible deltaSPH '
+                '(also runnable under `--scheme divergenceFree`).',
     buildSystem=buildSystem,
-    configureScheme=configureWeaklyCompressible,
+    configureScheme=configureScheme,
     initialConditions=initialConditions,
     diagnostics=diagnostics,
     setupPlot=setupPlot,
     updatePlot=updatePlot,
     extraData=paramExtraData,
+    timestep=impactTimestep,
     defaults=dict(
         WEAKLY_COMPRESSIBLE_DEFAULTS,
         caseName='01-impact',
@@ -286,6 +382,10 @@ impactCase = registerCase(Case(
         impactVelocity=0.5,
         impactAngle=0.0,
         spin=0.0,
+
+        # Surface-detection bandwidth in particle spacings; read only under
+        # `--scheme divergenceFree` (the WC path leaves the scheme default).
+        bandWidth=16.0,
 
         # -- or: the bodies spelled out, one dict each ------------------------
         # Keys are `defaultBody`'s, plus an optional `args` overriding the
